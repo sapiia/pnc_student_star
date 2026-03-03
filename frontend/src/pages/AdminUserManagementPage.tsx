@@ -1,12 +1,8 @@
-import { 
-  Users, 
-  Search, 
-  Bell, 
-  Plus, 
-  Edit2, 
+import {
+  Search,
+  Edit2,
   Trash2,
   Filter,
-  MoreVertical,
   Download,
   UserPlus,
   X,
@@ -17,53 +13,132 @@ import AdminSidebar from '../components/AdminSidebar';
 import { cn } from '../lib/utils';
 import React, { useState } from 'react';
 
-const INITIAL_USERS = [
-  { id: 1, name: 'John Doe', email: 'john.doe@pnc.edu', role: 'Student', group: 'Class A - Senior', status: 'Active', initials: 'JD', color: 'bg-blue-100 text-blue-700' },
-  { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Science Dept', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
-  { id: 3, name: 'Robert Brown', email: 'r.brown@pnc.edu', role: 'Admin', group: 'Central Office', status: 'Active', initials: 'RB', color: 'bg-orange-100 text-orange-700' },
-  { id: 4, name: 'Lucy Liu', email: 'l.liu@pnc.edu', role: 'Student', group: 'Class B - Junior', status: 'Inactive', initials: 'LL', color: 'bg-slate-100 text-slate-700' },
-  // Gen 2027 - Class A
-  { id: 101, name: 'Amin Pisal', email: 'amin.pisal@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'AP', color: 'bg-blue-100 text-blue-700' },
-  { id: 102, name: 'Chan Setha', email: 'chan.setha@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'CS', color: 'bg-blue-100 text-blue-700' },
-  { id: 103, name: 'Chan Koemsour', email: 'chan.koemsour@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'CK', color: 'bg-blue-100 text-blue-700' },
-  // Gen 2027 - Class B
-  { id: 127, name: 'Ang Thyda', email: 'ang.thyda@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'AT', color: 'bg-indigo-100 text-indigo-700' },
-  { id: 128, name: 'Bis Chantrea', email: 'bis.chantrea@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'BC', color: 'bg-indigo-100 text-indigo-700' },
-  // Gen 2027 - Class C
-  { id: 152, name: 'Chhoun Sakraech', email: 'chhoun.sakraech@pnc.edu', role: 'Student', group: 'Gen 2027 - Class C', status: 'Active', initials: 'CS', color: 'bg-emerald-100 text-emerald-700' },
-  { id: 153, name: 'Chouon Soran', email: 'chouon.soran@pnc.edu', role: 'Student', group: 'Gen 2027 - Class C', status: 'Active', initials: 'CS', color: 'bg-emerald-100 text-emerald-700' },
-  // Gen 2027 - Class D
-  { id: 177, name: 'Chouch Soyan', email: 'chouch.soyan@pnc.edu', role: 'Student', group: 'Gen 2027 - Class D', status: 'Active', initials: 'CS', color: 'bg-amber-100 text-amber-700' },
-  { id: 178, name: 'Ea Orn', email: 'ea.orn@pnc.edu', role: 'Student', group: 'Gen 2027 - Class D', status: 'Active', initials: 'EO', color: 'bg-amber-100 text-amber-700' },
+type UserRole = 'Student' | 'Teacher' | 'Admin';
+type UserStatus = 'Active' | 'Inactive' | 'Invited';
+type StudentGeneration = '2026' | '2027';
+type Gender = 'male' | 'female';
+
+type UserRecord = {
+  id: number;
+  name: string;
+  nickname?: string;
+  email: string;
+  role: UserRole;
+  group: string;
+  status: UserStatus;
+  initials: string;
+  color: string;
+  studentId?: string;
+  generation?: StudentGeneration;
+  className?: string;
+  gender?: Gender;
+};
+
+type InvitePreview = {
+  to: string;
+  subject: string;
+  text: string;
+  inviteLink: string;
+  loginLink?: string;
+  roleDashboardPath?: string;
+};
+
+const INITIAL_USERS: UserRecord[] = [
+  { id: 1, name: 'John Doe', email: 'john.doe@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'JD', color: 'bg-blue-100 text-blue-700', generation: '2027', className: 'A', studentId: '2027-001' },
+  { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Teaching Staff', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
+  { id: 3, name: 'Robert Brown', email: 'r.brown@pnc.edu', role: 'Admin', group: 'Administration', status: 'Active', initials: 'RB', color: 'bg-orange-100 text-orange-700' },
+  { id: 4, name: 'Lucy Liu', email: 'l.liu@pnc.edu', role: 'Student', group: 'Gen 2026 - Class B', status: 'Inactive', initials: 'LL', color: 'bg-slate-100 text-slate-700', generation: '2026', className: 'B', studentId: '2026-014' },
 ];
+
+const defaultNewUser = {
+  name: '',
+  nickname: '',
+  email: '',
+  role: 'Student' as UserRole,
+  generation: '2026' as StudentGeneration,
+  className: '',
+  studentId: '',
+  gender: 'male' as Gender,
+  status: 'Active' as UserStatus
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+const toDisplayNameFromEmail = (email: string) => {
+  const username = email.split('@')[0] || 'User';
+  return username
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 export default function AdminUserManagementPage() {
   const [users, setUsers] = useState(INITIAL_USERS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
-
-  const [newUser, setNewUser] = useState({
-    name: '',
-    nickname: '',
-    email: '',
-    role: 'Student',
-    adminRole: 'Moderator',
-    group: '',
-    status: 'Active'
-  });
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null);
+  const [newUser, setNewUser] = useState(defaultNewUser);
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === 'All Roles' || user.role + 's' === roleFilter || (user.role === 'Admin' && roleFilter === 'Admins');
+    const normalizedQuery = searchQuery.toLowerCase();
+    const matchesSearch =
+      user.name.toLowerCase().includes(normalizedQuery) ||
+      user.email.toLowerCase().includes(normalizedQuery) ||
+      (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
+    const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
     return matchesSearch && matchesRole;
   });
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const initials = newUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    setFormError('');
+
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedName = newUser.name.trim();
+    const trimmedNickname = newUser.nickname.trim();
+    const trimmedClass = newUser.className.trim().toUpperCase();
+    const trimmedStudentId = newUser.studentId.trim();
+
+    if (!trimmedEmail) {
+      setFormError('Email is required.');
+      return;
+    }
+    if (!trimmedName) {
+      setFormError('Full name is required.');
+      return;
+    }
+
+    if (newUser.role === 'Student') {
+      const studentIdPattern = /^(2026|2027)-\d{3}$/;
+      if (trimmedStudentId && !studentIdPattern.test(trimmedStudentId)) {
+        setFormError('Student ID must match format YYYY-XXX (example: 2026-001).');
+        return;
+      }
+      if (trimmedStudentId && !trimmedStudentId.startsWith(`${newUser.generation}-`)) {
+        setFormError('Student ID year must match selected generation.');
+        return;
+      }
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail)) {
+      setFormError('Email already exists.');
+      return;
+    }
+    setIsSubmitting(true);
+
+    const resolvedName = trimmedName || toDisplayNameFromEmail(trimmedEmail);
+    const initials = resolvedName
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
     const colors = [
       'bg-blue-100 text-blue-700',
       'bg-purple-100 text-purple-700',
@@ -72,20 +147,65 @@ export default function AdminUserManagementPage() {
       'bg-indigo-100 text-indigo-700'
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const group =
+      newUser.role === 'Student'
+        ? trimmedClass
+          ? `Gen ${newUser.generation} - Class ${trimmedClass}`
+          : 'Pending Class Assignment'
+        : newUser.role === 'Teacher'
+          ? 'Teaching Staff'
+          : 'Administration';
 
-    const userToAdd = {
-      ...newUser,
-      id: Date.now(),
-      initials,
-      color: randomColor,
-      role: newUser.role === 'Admin' ? `Admin (${newUser.adminRole})` : newUser.role
-    };
+    try {
+      const roleValue = newUser.role.toLowerCase();
+      const response = await fetch(`${API_BASE_URL}/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: resolvedName,
+          gender: newUser.gender,
+          email: trimmedEmail,
+          role: roleValue,
+          generation: roleValue === 'student' ? newUser.generation : undefined,
+          className: roleValue === 'student' && trimmedClass ? trimmedClass : undefined,
+          studentId: roleValue === 'student' && trimmedStudentId ? trimmedStudentId : undefined
+        })
+      });
 
-    setUsers([userToAdd, ...users]);
-    setIsModalOpen(false);
-    setNewUser({ name: '', nickname: '', email: '', role: 'Student', adminRole: 'Moderator', group: '', status: 'Active' });
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || 'Failed to send invitation email.');
+        return;
+      }
+      setInvitePreview(data.preview || null);
+
+      const invitedUser: UserRecord = {
+        id: Date.now(),
+        name: resolvedName,
+        nickname: trimmedNickname,
+        email: trimmedEmail,
+        role: newUser.role,
+        gender: newUser.gender,
+        group,
+        status: 'Invited',
+        initials,
+        color: randomColor,
+        generation: newUser.role === 'Student' ? newUser.generation : undefined,
+        className: newUser.role === 'Student' && trimmedClass ? trimmedClass : undefined,
+        studentId: newUser.role === 'Student' && trimmedStudentId ? trimmedStudentId : undefined
+      };
+
+      setUsers([invitedUser, ...users]);
+      setIsModalOpen(false);
+      setNewUser(defaultNewUser);
+      setSuccessMessage(data.message || 'Invitation email sent successfully.');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      setFormError('Failed to send invitation email.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const deleteUser = (id: number) => {
@@ -107,7 +227,7 @@ export default function AdminUserManagementPage() {
               className="fixed top-0 left-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold"
             >
               <CheckCircle2 className="w-5 h-5" />
-              User added successfully!
+              {successMessage}
             </motion.div>
           )}
         </AnimatePresence>
@@ -206,11 +326,18 @@ export default function AdminUserManagementPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-xs font-bold text-slate-600">{user.group}</span>
+                        {user.studentId && (
+                          <p className="text-[10px] font-bold text-slate-400 mt-1">ID: {user.studentId}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                          user.status === 'Active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                          user.status === 'Active'
+                            ? "bg-emerald-50 text-emerald-600"
+                            : user.status === 'Invited'
+                              ? "bg-amber-50 text-amber-600"
+                              : "bg-slate-100 text-slate-400"
                         )}>
                           {user.status}
                         </span>
@@ -265,8 +392,8 @@ export default function AdminUserManagementPage() {
               <div className="p-8">
                 <div className="flex items-center justify-between mb-8">
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Add New User</h3>
-                    <p className="text-slate-500 text-sm">Create a new account for the system.</p>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Invite New User</h3>
+                    <p className="text-slate-500 text-sm">Send an email invite with registration link.</p>
                   </div>
                   <button 
                     onClick={() => setIsModalOpen(false)}
@@ -311,14 +438,26 @@ export default function AdminUserManagementPage() {
                       onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                     />
+                    <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Base Role</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
+                      <select
+                        value={newUser.gender}
+                        onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      >
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role</label>
                       <select 
                         value={newUser.role}
-                        onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                        onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       >
                         <option value="Student">Student</option>
@@ -326,41 +465,72 @@ export default function AdminUserManagementPage() {
                         <option value="Admin">Admin</option>
                       </select>
                     </div>
-                    {newUser.role === 'Admin' ? (
+                    {newUser.role === 'Student' ? (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Admin Specific Role</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Generation</label>
                         <select 
-                          value={newUser.adminRole}
-                          onChange={(e) => setNewUser({...newUser, adminRole: e.target.value})}
+                          value={newUser.generation}
+                          onChange={(e) => setNewUser({...newUser, generation: e.target.value as StudentGeneration})}
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         >
-                          <option value="Super Admin">Super Admin</option>
-                          <option value="Moderator">Moderator</option>
-                          <option value="Evaluator">Evaluator</option>
-                          <option value="Support">Support</option>
+                          <option value="2026">2026</option>
+                          <option value="2027">2027</option>
                         </select>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class / Department</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role Details</label>
                         <input 
-                          required
+                          disabled
                           type="text" 
-                          placeholder="e.g. Gen 2027 - Class A"
-                          value={newUser.group}
-                          onChange={(e) => setNewUser({...newUser, group: e.target.value})}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          value={newUser.role === 'Teacher' ? 'Teaching Staff' : 'Administration'}
+                          className="w-full px-4 py-3 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
                         />
                       </div>
                     )}
                   </div>
 
+                  {newUser.role === 'Student' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. A"
+                          value={newUser.className}
+                          onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Optional. Add later if not ready.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
+                        <input
+                          type="text"
+                          placeholder={`${newUser.generation}-001`}
+                          value={newUser.studentId}
+                          onChange={(e) => setNewUser({ ...newUser, studentId: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Format: YYYY-XXX (example: 2026-001)</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {formError && (
+                    <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                      {formError}
+                    </div>
+                  )}
+
                   <div className="pt-4">
                     <button 
                       type="submit"
+                      disabled={isSubmitting}
                       className="w-full py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
                     >
-                      Create User Account
+                      {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
                     </button>
                   </div>
                 </form>
@@ -369,6 +539,52 @@ export default function AdminUserManagementPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {invitePreview && (
+        <div className="fixed bottom-4 right-4 z-[80] w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Invite Email Preview</p>
+            <button
+              onClick={() => setInvitePreview(null)}
+              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Close email preview"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="space-y-2 px-4 py-3 text-xs">
+            <p><span className="font-black text-slate-500">To:</span> <span className="font-semibold text-slate-800">{invitePreview.to}</span></p>
+            <p><span className="font-black text-slate-500">Subject:</span> <span className="font-semibold text-slate-800">{invitePreview.subject}</span></p>
+            <p className="font-black text-slate-500">Text:</p>
+            <pre className="max-h-40 overflow-auto rounded-xl bg-slate-50 p-3 text-[11px] font-medium text-slate-700 whitespace-pre-wrap break-words">{invitePreview.text}</pre>
+            <p className="font-black text-slate-500">Link:</p>
+            <a
+              href={invitePreview.inviteLink}
+              target="_blank"
+              rel="noreferrer"
+              className="block break-all rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              {invitePreview.inviteLink}
+            </a>
+            {invitePreview.loginLink && (
+              <>
+                <p className="font-black text-slate-500">Login Link:</p>
+                <a
+                  href={invitePreview.loginLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block break-all rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                >
+                  {invitePreview.loginLink}
+                </a>
+              </>
+            )}
+            {invitePreview.roleDashboardPath && (
+              <p><span className="font-black text-slate-500">Dashboard After Login:</span> <span className="font-semibold text-slate-800">{invitePreview.roleDashboardPath}</span></p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

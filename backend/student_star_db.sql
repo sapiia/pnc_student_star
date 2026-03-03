@@ -226,8 +226,12 @@ INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `class`, `create
 (8, 'David Martinez', 'david.martinez@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
 (9, 'Jennifer Lee', 'jennifer.lee@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
 (10, 'Robert Taylor', 'robert.taylor@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
-(11, 'John Doe', 'john@example.com', 'password123', '', 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
-(12, 'idk', 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', '2026-02-25 04:08:43', '2026-02-25 04:08:43');
+(11, 'John Doe', 'john@example.com', 'password123', 'student', 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
+(12, 'idk', 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
+(13, 'Sophy', 'sophy@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(14, 'Him', 'him@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'teacher', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(15, 'San', 'san@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'student', '10-A', '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(16, 'Moeurn Sophy', 'moeurnsophy55@gmail.com', '$2b$10$MzRf935pyipNIqTeGNV8xu.I8Tz41NAZNjHwbfY055b.ONHxXcKVO', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00');
 
 --
 -- Indexes for dumped tables
@@ -326,7 +330,7 @@ ALTER TABLE `settings`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- Constraints for dumped tables

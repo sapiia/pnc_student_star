@@ -1,8 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { 
   Star, 
-  School, 
-  Shield, 
   X, 
   Send, 
   MessageCircle, 
@@ -18,6 +16,12 @@ export default function LandingPage() {
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
   const handleSupportSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -31,6 +35,39 @@ export default function LandingPage() {
         setIsSubmitted(false);
       }, 2000);
     }, 1500);
+  };
+
+  const handleLoginSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setLoginError(data.error || 'Login failed.');
+        return;
+      }
+
+      if (data.user) {
+        localStorage.setItem('auth_user', JSON.stringify(data.user));
+      }
+
+      navigate(data.redirectPath || '/dashboard');
+    } catch (_error) {
+      setLoginError('Unable to connect to server.');
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   return (
@@ -112,13 +149,15 @@ export default function LandingPage() {
                 <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>
                 <p className="text-slate-500 text-sm mt-1">Please enter your details to access your dashboard.</p>
               </div>
-              <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); navigate('/dashboard'); }}>
+              <form className="space-y-5" onSubmit={handleLoginSubmit}>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
                   <input 
                     className="w-full px-4 py-3.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-400" 
                     placeholder="name@student.pnc.edu" 
                     type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                   />
                 </div>
@@ -137,35 +176,22 @@ export default function LandingPage() {
                     className="w-full px-4 py-3.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" 
                     placeholder="••••••••" 
                     type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     required
                   />
                 </div>
+                {loginError && (
+                  <div className="rounded-lg border border-rose-100 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
+                    {loginError}
+                  </div>
+                )}
                 <button 
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
+                  disabled={isLoggingIn}
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70"
                 >
-                  Login to Account
-                </button>
-                <div className="relative my-8">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-medium">Alternative access</span></div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => navigate('/teacher/dashboard')}
-                  className="w-full border border-slate-200 flex items-center justify-center gap-3 py-3.5 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-all mb-3"
-                >
-                  <School className="w-5 h-5 text-primary" />
-                  Login as teacher
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => navigate('/admin/dashboard')}
-                  className="w-full border border-slate-200 flex items-center justify-center gap-3 py-3.5 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-all"
-                >
-                  <Shield className="w-5 h-5 text-primary" />
-                  Login as admin
+                  {isLoggingIn ? 'Logging in...' : 'Login to Account'}
                 </button>
               </form>
             </div>
