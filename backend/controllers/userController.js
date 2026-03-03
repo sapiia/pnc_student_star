@@ -7,6 +7,7 @@ const saltRounds = 10;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
+const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
 
@@ -77,6 +78,55 @@ const insertUserFlexible = async ({
   const sql = `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`;
   const [result] = await db.query(sql, insertValues);
   return result;
+};
+
+const updateUserFlexibleById = async ({
+  userId,
+  fullName,
+  hashedPassword,
+  role,
+  classValue,
+  gender
+}) => {
+  const columns = await getUsersTableColumns();
+  const updates = [];
+  const values = [];
+
+  if (columns.has('name')) {
+    updates.push('name = ?');
+    values.push(fullName);
+  } else {
+    const { firstName, lastName } = splitFullName(fullName);
+    if (columns.has('first_name')) {
+      updates.push('first_name = ?');
+      values.push(firstName);
+    }
+    if (columns.has('last_name')) {
+      updates.push('last_name = ?');
+      values.push(lastName);
+    }
+  }
+
+  if (columns.has('gender') && ['male', 'female'].includes((gender || '').toString().toLowerCase())) {
+    updates.push('gender = ?');
+    values.push(gender.toString().toLowerCase());
+  }
+
+  updates.push('password = ?', 'role = ?');
+  values.push(hashedPassword, role);
+
+  if (columns.has('class')) {
+    updates.push('class = ?');
+    values.push(classValue || null);
+  }
+
+  if (updates.length === 0) {
+    return;
+  }
+
+  const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+  values.push(userId);
+  await db.query(sql, values);
 };
 
 const createInviteToken = (payload) => {
@@ -232,8 +282,10 @@ const updateUser = async (req, res) => {
 
 // Send invite to user email
 const inviteUser = async (req, res) => {
-  const { name, gender, email, role, generation, className, studentId } = req.body;
-  const normalizedName = (name || '').toString().trim();
+  const { firstName, lastName, name, gender, email, role, generation, className, studentId } = req.body;
+  const normalizedFirstName = (firstName || '').toString().trim();
+  const normalizedLastName = (lastName || '').toString().trim();
+  const normalizedName = (name || `${normalizedFirstName} ${normalizedLastName}` || '').toString().trim();
   const normalizedGender = (gender || '').toString().trim().toLowerCase();
   const normalizedEmail = (email || '').toString().trim().toLowerCase();
   const normalizedRole = normalizeRole(role);
@@ -244,8 +296,8 @@ const inviteUser = async (req, res) => {
   if (!normalizedEmail) {
     return res.status(400).json({ error: "Email is required." });
   }
-  if (!normalizedName) {
-    return res.status(400).json({ error: "Name is required." });
+  if (!normalizedFirstName) {
+    return res.status(400).json({ error: "First name is required." });
   }
   if (!['male', 'female'].includes(normalizedGender)) {
     return res.status(400).json({ error: "Gender must be male or female." });
@@ -279,6 +331,8 @@ const inviteUser = async (req, res) => {
     }
 
     const payload = {
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName || null,
       name: normalizedName,
       gender: normalizedGender,
       email: normalizedEmail,
@@ -288,6 +342,21 @@ const inviteUser = async (req, res) => {
       studentId: normalizedRole === 'student' && studentIdValue ? studentIdValue : null,
       exp: Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000
     };
+
+    const tempPassword = crypto.randomBytes(18).toString('base64url');
+    const hashedTempPassword = await bcrypt.hash(tempPassword, saltRounds);
+    const classForUser = normalizedRole === 'student' && generationValue && classValue
+      ? `Gen ${generationValue} - Class ${classValue}`
+      : null;
+
+    await insertUserFlexible({
+      fullName: normalizedName,
+      email: normalizedEmail,
+      hashedPassword: hashedTempPassword,
+      role: normalizedRole,
+      classValue: classForUser,
+      gender: normalizedGender
+    });
 
     const token = createInviteToken(payload);
     const inviteLink = `${FRONTEND_URL}/register?invite=${encodeURIComponent(token)}`;
@@ -325,7 +394,8 @@ const inviteUser = async (req, res) => {
 
     if (isConfigured && transporter) {
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+        replyTo: ADMIN_INVITER_EMAIL,
         to: normalizedEmail,
         subject: 'PNC Student Star Invitation',
         text,
@@ -339,6 +409,7 @@ const inviteUser = async (req, res) => {
         : "SMTP is not configured. Invitation preview generated; no email was sent.",
       preview: {
         to: normalizedEmail,
+        from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
         subject: "PNC Student Star Invitation",
         text,
         inviteLink,
@@ -364,6 +435,8 @@ const validateInvite = async (req, res) => {
   }
 
   return res.json({
+    firstName: payload.firstName,
+    lastName: payload.lastName,
     name: payload.name,
     gender: payload.gender,
     email: payload.email,
@@ -393,24 +466,36 @@ const completeInviteRegistration = async (req, res) => {
 
   try {
     const [existingUsers] = await db.query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ error: "This invite has already been used." });
-    }
 
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     const classValue = role === 'student' && payload.generation && payload.className
       ? `Gen ${payload.generation} - Class ${payload.className}`
       : null;
-    const resolvedName = (name || '').toString().trim() || payload.name || email.split('@')[0];
+    const invitedFullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
+    const resolvedName = (name || '').toString().trim() || invitedFullName || payload.name || email.split('@')[0];
+    let userId;
 
-    const result = await insertUserFlexible({
-      fullName: resolvedName,
-      email,
-      hashedPassword,
-      role,
-      classValue,
-      gender: payload.gender
-    });
+    if (existingUsers.length > 0) {
+      userId = existingUsers[0].id;
+      await updateUserFlexibleById({
+        userId,
+        fullName: resolvedName,
+        hashedPassword,
+        role,
+        classValue,
+        gender: payload.gender
+      });
+    } else {
+      const result = await insertUserFlexible({
+        fullName: resolvedName,
+        email,
+        hashedPassword,
+        role,
+        classValue,
+        gender: payload.gender
+      });
+      userId = result.insertId;
+    }
 
     const redirectPath = role === 'admin'
       ? '/admin/dashboard'
@@ -420,7 +505,7 @@ const completeInviteRegistration = async (req, res) => {
 
     return res.status(201).json({
       message: "Registration completed successfully.",
-      userId: result.insertId,
+      userId,
       redirectPath
     });
   } catch (err) {

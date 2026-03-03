@@ -21,7 +21,6 @@ type Gender = 'male' | 'female';
 type UserRecord = {
   id: number;
   name: string;
-  nickname?: string;
   email: string;
   role: UserRole;
   group: string;
@@ -34,15 +33,6 @@ type UserRecord = {
   gender?: Gender;
 };
 
-type InvitePreview = {
-  to: string;
-  subject: string;
-  text: string;
-  inviteLink: string;
-  loginLink?: string;
-  roleDashboardPath?: string;
-};
-
 const INITIAL_USERS: UserRecord[] = [
   { id: 1, name: 'John Doe', email: 'john.doe@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'JD', color: 'bg-blue-100 text-blue-700', generation: '2027', className: 'A', studentId: '2027-001' },
   { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Teaching Staff', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
@@ -51,8 +41,8 @@ const INITIAL_USERS: UserRecord[] = [
 ];
 
 const defaultNewUser = {
-  name: '',
-  nickname: '',
+  firstName: '',
+  lastName: '',
   email: '',
   role: 'Student' as UserRole,
   generation: '2026' as StudentGeneration,
@@ -78,11 +68,11 @@ export default function AdminUserManagementPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [invitePreview, setInvitePreview] = useState<InvitePreview | null>(null);
   const [newUser, setNewUser] = useState(defaultNewUser);
 
   const filteredUsers = users.filter(user => {
@@ -100,8 +90,8 @@ export default function AdminUserManagementPage() {
     setFormError('');
 
     const trimmedEmail = newUser.email.trim().toLowerCase();
-    const trimmedName = newUser.name.trim();
-    const trimmedNickname = newUser.nickname.trim();
+    const trimmedFirstName = newUser.firstName.trim();
+    const trimmedLastName = newUser.lastName.trim();
     const trimmedClass = newUser.className.trim().toUpperCase();
     const trimmedStudentId = newUser.studentId.trim();
 
@@ -109,8 +99,8 @@ export default function AdminUserManagementPage() {
       setFormError('Email is required.');
       return;
     }
-    if (!trimmedName) {
-      setFormError('Full name is required.');
+    if (!trimmedFirstName) {
+      setFormError('First name is required.');
       return;
     }
 
@@ -132,7 +122,7 @@ export default function AdminUserManagementPage() {
     }
     setIsSubmitting(true);
 
-    const resolvedName = trimmedName || toDisplayNameFromEmail(trimmedEmail);
+    const resolvedName = `${trimmedFirstName} ${trimmedLastName}`.trim() || toDisplayNameFromEmail(trimmedEmail);
     const initials = resolvedName
       .split(' ')
       .map((n) => n[0])
@@ -162,6 +152,8 @@ export default function AdminUserManagementPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName || undefined,
           name: resolvedName,
           gender: newUser.gender,
           email: trimmedEmail,
@@ -177,12 +169,9 @@ export default function AdminUserManagementPage() {
         setFormError(data.error || 'Failed to send invitation email.');
         return;
       }
-      setInvitePreview(data.preview || null);
-
       const invitedUser: UserRecord = {
         id: Date.now(),
         name: resolvedName,
-        nickname: trimmedNickname,
         email: trimmedEmail,
         role: newUser.role,
         gender: newUser.gender,
@@ -199,6 +188,7 @@ export default function AdminUserManagementPage() {
       setIsModalOpen(false);
       setNewUser(defaultNewUser);
       setSuccessMessage(data.message || 'Invitation email sent successfully.');
+      setToastType(data.smtpConfigured === false ? 'warning' : 'success');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
@@ -224,7 +214,10 @@ export default function AdminUserManagementPage() {
               initial={{ opacity: 0, y: -20, x: '-50%' }}
               animate={{ opacity: 1, y: 20, x: '-50%' }}
               exit={{ opacity: 0, y: -20, x: '-50%' }}
-              className="fixed top-0 left-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold"
+              className={cn(
+                "fixed top-0 left-1/2 z-[100] text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold",
+                toastType === 'success' ? 'bg-emerald-600' : 'bg-amber-600'
+              )}
             >
               <CheckCircle2 className="w-5 h-5" />
               {successMessage}
@@ -308,8 +301,7 @@ export default function AdminUserManagementPage() {
                           </div>
                           <div>
                             <p className="text-sm font-black text-slate-900">
-                              {user.name} 
-                              {user.nickname && <span className="text-xs font-bold text-primary ml-2">({user.nickname})</span>}
+                              {user.name}
                             </p>
                             <p className="text-[10px] font-bold text-slate-400">{user.email}</p>
                           </div>
@@ -406,23 +398,23 @@ export default function AdminUserManagementPage() {
                 <form onSubmit={handleAddUser} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
                       <input 
                         required
                         type="text" 
-                        placeholder="e.g. Sokha Mean"
-                        value={newUser.name}
-                        onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                        placeholder="e.g. Sokha"
+                        value={newUser.firstName}
+                        onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nickname (Optional)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
                       <input 
                         type="text" 
-                        placeholder="e.g. Sokha"
-                        value={newUser.nickname}
-                        onChange={(e) => setNewUser({...newUser, nickname: e.target.value})}
+                        placeholder="e.g. Mean"
+                        value={newUser.lastName}
+                        onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
@@ -540,51 +532,6 @@ export default function AdminUserManagementPage() {
         )}
       </AnimatePresence>
 
-      {invitePreview && (
-        <div className="fixed bottom-4 right-4 z-[80] w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Invite Email Preview</p>
-            <button
-              onClick={() => setInvitePreview(null)}
-              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              aria-label="Close email preview"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="space-y-2 px-4 py-3 text-xs">
-            <p><span className="font-black text-slate-500">To:</span> <span className="font-semibold text-slate-800">{invitePreview.to}</span></p>
-            <p><span className="font-black text-slate-500">Subject:</span> <span className="font-semibold text-slate-800">{invitePreview.subject}</span></p>
-            <p className="font-black text-slate-500">Text:</p>
-            <pre className="max-h-40 overflow-auto rounded-xl bg-slate-50 p-3 text-[11px] font-medium text-slate-700 whitespace-pre-wrap break-words">{invitePreview.text}</pre>
-            <p className="font-black text-slate-500">Link:</p>
-            <a
-              href={invitePreview.inviteLink}
-              target="_blank"
-              rel="noreferrer"
-              className="block break-all rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-            >
-              {invitePreview.inviteLink}
-            </a>
-            {invitePreview.loginLink && (
-              <>
-                <p className="font-black text-slate-500">Login Link:</p>
-                <a
-                  href={invitePreview.loginLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block break-all rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
-                >
-                  {invitePreview.loginLink}
-                </a>
-              </>
-            )}
-            {invitePreview.roleDashboardPath && (
-              <p><span className="font-black text-slate-500">Dashboard After Login:</span> <span className="font-semibold text-slate-800">{invitePreview.roleDashboardPath}</span></p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
