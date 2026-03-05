@@ -204,7 +204,8 @@ INSERT INTO `settings` (`id`, `key`, `value`, `created_at`, `updated_at`) VALUES
 
 CREATE TABLE `users` (
   `id` int(10) UNSIGNED NOT NULL,
-  `name` varchar(150) NOT NULL,
+  `first_name` varchar(100) NOT NULL,
+  `last_name` varchar(100) DEFAULT NULL,
   `email` varchar(191) NOT NULL,
   `password` varchar(255) NOT NULL,
   `role` enum('student','teacher','admin') NOT NULL DEFAULT 'student',
@@ -217,21 +218,75 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `class`, `created_at`, `updated_at`) VALUES
-(3, 'Sarah Johnson', 'sarah.johnson@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:00:00', '2026-01-15 02:00:00'),
-(4, 'Michael Brown', 'michael.brown@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:30:00', '2026-01-15 02:30:00'),
-(5, 'Emily Davis', 'emily.davis@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:00:00', '2026-01-20 03:00:00'),
-(6, 'James Wilson', 'james.wilson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:15:00', '2026-01-20 03:15:00'),
-(7, 'Lisa Anderson', 'lisa.anderson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:30:00', '2026-01-20 03:30:00'),
-(8, 'David Martinez', 'david.martinez@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
-(9, 'Jennifer Lee', 'jennifer.lee@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
-(10, 'Robert Taylor', 'robert.taylor@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
-(11, 'John Doe', 'john@example.com', 'password123', 'student', 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
-(12, 'idk', 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
-(13, 'Sophy', 'sophy@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(14, 'Him', 'him@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'teacher', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(15, 'San', 'san@gmail.com', '$2b$10$FdS7cYA22C/9VpPGdffClOYrLOfDPWvgFe3rX09B4nZ7QF1F17aH6', 'student', '10-A', '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(16, 'Moeurn Sophy', 'moeurnsophy55@gmail.com', '$2b$10$MzRf935pyipNIqTeGNV8xu.I8Tz41NAZNjHwbfY055b.ONHxXcKVO', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00');
+INSERT INTO `users` (`id`, `first_name`, `last_name`, `email`, `password`, `role`, `class`, `created_at`, `updated_at`) VALUES
+(3, 'Sarah', 'Johnson', 'sarah.johnson@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:00:00', '2026-01-15 02:00:00'),
+(4, 'Michael', 'Brown', 'michael.brown@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:30:00', '2026-01-15 02:30:00'),
+(5, 'Emily', 'Davis', 'emily.davis@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:00:00', '2026-01-20 03:00:00'),
+(6, 'James', 'Wilson', 'james.wilson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:15:00', '2026-01-20 03:15:00'),
+(7, 'Lisa', 'Anderson', 'lisa.anderson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:30:00', '2026-01-20 03:30:00'),
+(8, 'David', 'Martinez', 'david.martinez@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
+(9, 'Jennifer', 'Lee', 'jennifer.lee@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
+(10, 'Robert', 'Taylor', 'robert.taylor@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
+(11, 'John', 'Doe', 'john@example.com', 'password123', 'student', 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
+(12, 'idk', NULL, 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
+(13, 'Sophy', NULL, 'sophy@gmail.com', 'password', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(14, 'Him', NULL, 'him@gmail.com', 'password', 'teacher', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(15, 'San', NULL, 'san@gmail.com', 'password', 'student', '10-A', '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(16, 'Moeurn', 'Sophy', 'moeurnsophy55@gmail.com', 'password', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(17, 'Moeurn', 'Sophy', 'moeurnsophy92@gmail.com', 'password', 'admin', NULL, '2026-03-04 00:00:00', '2026-03-04 00:00:00');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `teachers`
+--
+
+CREATE TABLE `teachers` (
+  `user_id` int(10) UNSIGNED NOT NULL,
+  `employee_no` varchar(50) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `teachers`
+--
+
+INSERT INTO `teachers` (`user_id`, `employee_no`, `department`, `created_at`, `updated_at`) VALUES
+(3, 'T-0003', 'General', '2026-01-15 02:00:00', '2026-01-15 02:00:00'),
+(4, 'T-0004', 'General', '2026-01-15 02:30:00', '2026-01-15 02:30:00'),
+(12, 'T-0012', 'Web', '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
+(14, 'T-0014', 'General', '2026-03-03 00:00:00', '2026-03-03 00:00:00');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `students`
+--
+
+CREATE TABLE `students` (
+  `user_id` int(10) UNSIGNED NOT NULL,
+  `student_no` varchar(50) DEFAULT NULL,
+  `grade_level` varchar(20) DEFAULT NULL,
+  `section` varchar(20) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `students`
+--
+
+INSERT INTO `students` (`user_id`, `student_no`, `grade_level`, `section`, `created_at`, `updated_at`) VALUES
+(5, 'S-0005', '10', 'A', '2026-01-20 03:00:00', '2026-01-20 03:00:00'),
+(6, 'S-0006', '10', 'A', '2026-01-20 03:15:00', '2026-01-20 03:15:00'),
+(7, 'S-0007', '10', 'B', '2026-01-20 03:30:00', '2026-01-20 03:30:00'),
+(8, 'S-0008', '10', 'B', '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
+(9, 'S-0009', '11', 'A', '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
+(10, 'S-0010', '11', 'A', '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
+(11, 'S-0011', NULL, 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
+(15, 'S-0015', '10', 'A', '2026-03-03 00:00:00', '2026-03-03 00:00:00');
 
 --
 -- Indexes for dumped tables
@@ -278,6 +333,20 @@ ALTER TABLE `question`
 ALTER TABLE `settings`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `key` (`key`);
+
+--
+-- Indexes for table `students`
+--
+ALTER TABLE `students`
+  ADD PRIMARY KEY (`user_id`),
+  ADD UNIQUE KEY `student_no` (`student_no`);
+
+--
+-- Indexes for table `teachers`
+--
+ALTER TABLE `teachers`
+  ADD PRIMARY KEY (`user_id`),
+  ADD UNIQUE KEY `employee_no` (`employee_no`);
 
 --
 -- Indexes for table `users`
@@ -330,7 +399,7 @@ ALTER TABLE `settings`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- Constraints for dumped tables
@@ -340,21 +409,33 @@ ALTER TABLE `users`
 -- Constraints for table `evaluations`
 --
 ALTER TABLE `evaluations`
-  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `students` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `feedbacks`
 --
 ALTER TABLE `feedbacks`
   ADD CONSTRAINT `fk_feedbacks_evaluation` FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_feedbacks_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_feedbacks_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_feedbacks_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_feedbacks_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `notifications`
 --
 ALTER TABLE `notifications`
   ADD CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `students`
+--
+ALTER TABLE `students`
+  ADD CONSTRAINT `fk_students_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `teachers`
+--
+ALTER TABLE `teachers`
+  ADD CONSTRAINT `fk_teachers_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

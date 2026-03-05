@@ -282,7 +282,7 @@ const updateUser = async (req, res) => {
 
 // Send invite to user email
 const inviteUser = async (req, res) => {
-  const { firstName, lastName, name, gender, email, role, generation, className, studentId } = req.body;
+  const { firstName, lastName, name, gender, email, role, generation, className, studentId, inviterName, inviterEmail } = req.body;
   const normalizedFirstName = (firstName || '').toString().trim();
   const normalizedLastName = (lastName || '').toString().trim();
   const normalizedName = (name || `${normalizedFirstName} ${normalizedLastName}` || '').toString().trim();
@@ -292,6 +292,8 @@ const inviteUser = async (req, res) => {
   const generationValue = (generation || '').toString().trim();
   const classValue = (className || '').toString().trim();
   const studentIdValue = (studentId || '').toString().trim();
+  const inviterNameValue = (inviterName || '').toString().trim();
+  const inviterEmailValue = (inviterEmail || '').toString().trim().toLowerCase();
 
   if (!normalizedEmail) {
     return res.status(400).json({ error: "Email is required." });
@@ -362,6 +364,11 @@ const inviteUser = async (req, res) => {
     const inviteLink = `${FRONTEND_URL}/register?invite=${encodeURIComponent(token)}`;
     const loginLink = `${FRONTEND_URL}/`;
     const roleLabel = normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1);
+    const inviterIdentity = inviterNameValue
+      ? inviterEmailValue
+        ? `${inviterNameValue} (${inviterEmailValue})`
+        : inviterNameValue
+      : inviterEmailValue || ADMIN_INVITER_EMAIL;
     const roleDashboardPath = normalizedRole === 'admin'
       ? '/admin/dashboard'
       : normalizedRole === 'teacher'
@@ -370,9 +377,15 @@ const inviteUser = async (req, res) => {
 
     const text = [
       `You are invited to join PNC Student Star as ${roleLabel}.`,
+      `Invited by: ${inviterIdentity}`,
+      '',
+      'Temporary password (for first login):',
+      tempPassword,
       '',
       'Please complete your registration using this link:',
       inviteLink,
+      '',
+      'After registration, use this email and temporary password to log in (you can change it later).',
       '',
       'After completing registration, login here:',
       loginLink,
@@ -384,8 +397,11 @@ const inviteUser = async (req, res) => {
 
     const html = `
       <p>You are invited to join <strong>PNC Student Star</strong> as <strong>${roleLabel}</strong>.</p>
+      <p><strong>Invited by:</strong> ${inviterIdentity}</p>
+      <p><strong>Temporary password (for first login):</strong> <code>${tempPassword}</code></p>
       <p>Please complete your registration using the link below:</p>
       <p><a href="${inviteLink}">${inviteLink}</a></p>
+      <p>After registration, use this email and temporary password to log in (you can change it later).</p>
       <p>After completing registration, login here:</p>
       <p><a href="${loginLink}">${loginLink}</a></p>
       <p>After login, you will be redirected to: <strong>${roleDashboardPath}</strong>.</p>
@@ -414,6 +430,8 @@ const inviteUser = async (req, res) => {
         text,
         inviteLink,
         loginLink,
+        temporaryPassword: tempPassword,
+        invitedBy: inviterIdentity,
         roleDashboardPath,
         smtpConfigured: isConfigured
       },
@@ -549,7 +567,7 @@ const loginUser = async (req, res) => {
         : '/dashboard';
 
     const fallbackName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
-    const resolvedName = user.name || fallbackName || user.email;
+    const resolvedName = fallbackName || user.email;
 
     return res.json({
       message: "Login successful.",
