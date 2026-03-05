@@ -5,6 +5,7 @@ import {
   Filter,
   Download,
   UserPlus,
+  Upload,
   X,
   CheckCircle2
 } from 'lucide-react';
@@ -31,6 +32,32 @@ type UserRecord = {
   generation?: StudentGeneration;
   className?: string;
   gender?: Gender;
+};
+
+type BulkInvitedUser = {
+  row?: number;
+  name: string;
+  email: string;
+  role: string;
+  gender?: string;
+  group?: string;
+  generation?: string | null;
+  className?: string | null;
+  studentId?: string | null;
+};
+
+type BulkValidatedRow = {
+  row: number;
+  payload: {
+    firstName: string;
+    lastName?: string;
+    email: string;
+    gender: string;
+    role: string;
+    generation?: string | null;
+    className?: string | null;
+    studentId?: string | null;
+  };
 };
 
 const INITIAL_USERS: UserRecord[] = [
@@ -73,7 +100,12 @@ export default function AdminUserManagementPage() {
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [isBulkCommitting, setIsBulkCommitting] = useState(false);
+  const [bulkValidatedRows, setBulkValidatedRows] = useState<BulkValidatedRow[]>([]);
+  const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
   const [newUser, setNewUser] = useState(defaultNewUser);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -200,6 +232,153 @@ export default function AdminUserManagementPage() {
 
   const deleteUser = (id: number) => {
     setUsers(users.filter(u => u.id !== id));
+  };
+
+  const toUserRecordFromBulkInvite = (invited: BulkInvitedUser): UserRecord => {
+    const roleLower = (invited.role || '').toLowerCase();
+    const mappedRole: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
+    const resolvedName = invited.name?.trim() || toDisplayNameFromEmail(invited.email);
+    const initials = resolvedName
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+    const colors = [
+      'bg-blue-100 text-blue-700',
+      'bg-purple-100 text-purple-700',
+      'bg-orange-100 text-orange-700',
+      'bg-emerald-100 text-emerald-700',
+      'bg-indigo-100 text-indigo-700'
+    ];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const generation = invited.generation === '2026' || invited.generation === '2027' ? invited.generation : undefined;
+    const className = invited.className || undefined;
+    const group =
+      invited.group ||
+      (mappedRole === 'Student'
+        ? generation && className
+          ? `Gen ${generation} - Class ${className}`
+          : 'Pending Class Assignment'
+        : mappedRole === 'Teacher'
+          ? 'Teaching Staff'
+          : 'Administration');
+    const normalizedGender = (invited.gender || '').toLowerCase();
+
+    return {
+      id: Date.now() + Math.floor(Math.random() * 10000),
+      name: resolvedName,
+      email: invited.email,
+      role: mappedRole,
+      group,
+      status: 'Invited',
+      initials,
+      color: randomColor,
+      generation,
+      className,
+      studentId: invited.studentId || undefined,
+      gender: normalizedGender === 'male' || normalizedGender === 'female' ? normalizedGender : undefined
+    };
+  };
+
+  const handleBulkImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setFormError('');
+    setIsBulkImporting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_BASE_URL}/users/invite/bulk/validate`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || 'Failed to import Excel file.');
+        return;
+      }
+
+      const failedCount = Number(data?.summary?.failedCount || 0);
+      const validatedRows = Array.isArray(data?.validRows) ? data.validRows : [];
+
+      setBulkValidationErrorCount(failedCount);
+      if (failedCount > 0) {
+        setBulkValidatedRows([]);
+      } else {
+        setBulkValidatedRows(validatedRows);
+      }
+
+      setSuccessMessage(data.message || `Validated ${validatedRows.length} users.`);
+      setToastType(failedCount > 0 ? 'warning' : 'success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 4000);
+
+      if (failedCount > 0) {
+        const firstError = data?.errors?.[0]?.error;
+        setFormError(`Some rows failed (${failedCount}). ${firstError ? `First error: ${firstError}` : ''}`);
+      }
+    } catch {
+      setFormError('Failed to import Excel file.');
+    } finally {
+      setIsBulkImporting(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const handleBulkCommit = async () => {
+    if (!bulkValidatedRows.length || bulkValidationErrorCount > 0) {
+      setFormError('Please import a valid Excel file with zero errors before sending invites.');
+      return;
+    }
+
+    setIsBulkCommitting(true);
+    setFormError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/invite/bulk/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: bulkValidatedRows.map((row) => ({
+            row: row.row,
+            payload: row.payload
+          }))
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || data.message || 'Failed to send bulk invite emails.');
+        return;
+      }
+
+      const invitedRows = Array.isArray(data.invited) ? data.invited : [];
+      const importedUsers = invitedRows.map((item: BulkInvitedUser) => toUserRecordFromBulkInvite(item));
+
+      setUsers((prev) => {
+        const existingEmails = new Set(prev.map((u) => u.email.toLowerCase()));
+        const next = importedUsers.filter((u) => !existingEmails.has(u.email.toLowerCase()));
+        return [...next, ...prev];
+      });
+
+      setSuccessMessage(data.message || `Invited ${importedUsers.length} users.`);
+      setToastType(Number(data?.summary?.emailFailedCount || 0) > 0 ? 'warning' : 'success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 4000);
+      setBulkValidatedRows([]);
+      setBulkValidationErrorCount(0);
+    } catch {
+      setFormError('Failed to send bulk invite emails.');
+    } finally {
+      setIsBulkCommitting(false);
+    }
   };
 
   return (
@@ -387,15 +566,49 @@ export default function AdminUserManagementPage() {
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight">Invite New User</h3>
                     <p className="text-slate-500 text-sm">Send an email invite with registration link.</p>
                   </div>
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                  >
-                    <X className="w-6 h-6 text-slate-400" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleBulkImport}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isBulkImporting || isSubmitting || isBulkCommitting}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isBulkImporting ? 'Importing...' : 'Import Excel'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkCommit}
+                      disabled={isBulkImporting || isSubmitting || isBulkCommitting || !bulkValidatedRows.length || bulkValidationErrorCount > 0}
+                      className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60"
+                    >
+                      {isBulkCommitting ? 'Sending...' : 'Send Invite Email'}
+                    </button>
+                    <button 
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                    >
+                      <X className="w-6 h-6 text-slate-400" />
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleAddUser} className="space-y-6">
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation, Class, Student ID.
+                  </p>
+                  {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
+                    <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                      Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to insert users and send invites.
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
