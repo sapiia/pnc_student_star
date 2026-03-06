@@ -14,17 +14,17 @@ import {
   Brain,
   CreditCard,
   Wrench,
-  ClipboardList,
-  FileText
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CRITERIA } from '../constants';
 import StarRating from '../components/StarRating';
 import { cn } from '../lib/utils';
+import BrandLogo from '../components/BrandLogo';
 
 export default function EvaluationFormPage() {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(-1); // -1 for Welcome step
+  const [currentStep, setCurrentStep] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [reflections, setReflections] = useState<Record<string, string>>({});
 
@@ -39,10 +39,6 @@ export default function EvaluationFormPage() {
     }
   };
 
-  const handleStart = () => {
-    setCurrentStep(0);
-  };
-
   const handleFinish = () => {
     setShowConfirm(true);
   };
@@ -51,6 +47,18 @@ export default function EvaluationFormPage() {
     setIsSubmitting(true);
     // Simulate API call
     setTimeout(() => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (raw) {
+          const authUser = JSON.parse(raw);
+          const userId = Number(authUser?.id);
+          if (Number.isInteger(userId) && userId > 0) {
+            localStorage.setItem(`last_evaluation_submitted_at_${userId}`, new Date().toISOString());
+          }
+        }
+      } catch {
+        // keep navigation flow even if local cache fails
+      }
       navigate('/results', { state: { scores, reflections } });
     }, 1500);
   };
@@ -82,12 +90,7 @@ export default function EvaluationFormPage() {
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-primary p-1.5 rounded-lg text-white">
-              <Star className="w-5 h-5 fill-white" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-primary">PNC Student Star</h1>
-          </div>
+          <BrandLogo titleClassName="text-xl font-bold tracking-tight text-primary" markClassName="size-8" />
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/dashboard')}
@@ -145,62 +148,7 @@ export default function EvaluationFormPage() {
 
         {/* Evaluation Form Content */}
         <AnimatePresence mode="wait">
-          {currentStep === -1 ? (
-            <motion.div 
-              key="welcome"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-white border border-primary/10 rounded-3xl shadow-xl overflow-hidden"
-            >
-              <div className="p-12 text-center space-y-8">
-                <div className="size-24 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto">
-                  <Star className="w-12 h-12 fill-primary" />
-                </div>
-                <div className="max-w-xl mx-auto space-y-4">
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">Start Your Q1 2024 Evaluation</h2>
-                  <p className="text-slate-500 font-bold leading-relaxed">
-                    Welcome to your quarterly self-evaluation. This is a space for honest reflection on your growth, challenges, and achievements across 8 key development areas.
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="size-8 bg-white rounded-lg flex items-center justify-center text-primary shadow-sm mb-3">
-                      <Star className="w-4 h-4" />
-                    </div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-1">Rate Yourself</p>
-                    <p className="text-[10px] text-slate-500 font-bold">Score each area from 1 to 5 stars.</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="size-8 bg-white rounded-lg flex items-center justify-center text-primary shadow-sm mb-3">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-1">Reflect</p>
-                    <p className="text-[10px] text-slate-500 font-bold">Write at least 50 characters of detail.</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="size-8 bg-white rounded-lg flex items-center justify-center text-primary shadow-sm mb-3">
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-1">Get Feedback</p>
-                    <p className="text-[10px] text-slate-500 font-bold">Mentors will review and guide you.</p>
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <button 
-                    onClick={handleStart}
-                    className="bg-primary hover:bg-primary/90 text-white px-12 py-5 rounded-2xl font-black shadow-xl shadow-primary/30 transition-all flex items-center gap-3 mx-auto uppercase tracking-widest text-sm"
-                  >
-                    Begin Evaluation
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                  <p className="mt-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estimated time: 10-15 minutes</p>
-                </div>
-              </div>
-            </motion.div>
-          ) : criterion ? (
+          {criterion ? (
             <motion.div 
               key={criterion.key}
               initial={{ opacity: 0, x: 20 }}

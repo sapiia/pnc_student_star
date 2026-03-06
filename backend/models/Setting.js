@@ -55,8 +55,15 @@ class Setting {
 
   static async updateByKey(key, value) {
     try {
-      const [result] = await db.query("UPDATE settings SET `value` = ? WHERE `key` = ?", [value, key]);
-      return result.affectedRows > 0;
+      const [result] = await db.query(
+        `
+          INSERT INTO settings (\`key\`, \`value\`)
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+        `,
+        [key, value]
+      );
+      return result.affectedRows > 0 || result.insertId > 0;
     } catch (error) {
       throw error;
     }

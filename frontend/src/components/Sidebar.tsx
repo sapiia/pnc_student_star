@@ -1,6 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Star, 
   LayoutDashboard, 
   FileText, 
   MessageSquare, 
@@ -19,6 +18,7 @@ import {
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import BrandLogo, { PNLogoMark } from './BrandLogo';
 
 interface SidebarProps {
   className?: string;
@@ -121,7 +121,6 @@ export default function Sidebar({ className }: SidebarProps) {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: Star, label: 'Start Evaluation', path: '/evaluate', isAction: true },
     { icon: FileText, label: 'My Evaluations', path: '/history' },
     { icon: MessageSquare, label: 'Feedback', path: '/feedback' },
     { icon: Calendar, label: 'Meeting', path: '/meeting', hasNotification: true },
@@ -136,6 +135,7 @@ export default function Sidebar({ className }: SidebarProps) {
   return (
     <motion.aside 
       animate={{ width: isCollapsed ? 80 : 256 }}
+      transition={{ duration: 0.34, ease: 'easeInOut' }}
       className={cn(
         "bg-white border-r border-slate-200 flex flex-col shrink-0 hidden md:flex transition-all duration-300 ease-in-out relative z-50",
         className
@@ -152,22 +152,26 @@ export default function Sidebar({ className }: SidebarProps) {
       {/* Logo Section */}
       <div 
         className={cn(
-          "p-6 flex items-center gap-3 cursor-pointer overflow-hidden",
+          "p-6 flex items-center gap-3 cursor-pointer overflow-hidden transition-all duration-300 ease-in-out origin-left",
           isCollapsed ? "justify-center" : ""
         )} 
         onClick={() => navigate('/dashboard')}
       >
-        <div className="bg-primary size-10 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 shrink-0">
-          <Star className="w-6 h-6 fill-white" />
-        </div>
-        {!isCollapsed && (
-          <motion.div 
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="min-w-0"
+        {isCollapsed ? (
+          <motion.div
+            animate={{ scale: isCollapsed ? 0.96 : 1 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
           >
-            <h1 className="text-sm font-black leading-tight text-slate-900 truncate">PNC Student Star</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Student Portal</p>
+            <PNLogoMark className="size-10 shrink-0" />
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0, scale: isCollapsed ? 0.96 : 1 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+            className="min-w-0 origin-left"
+          >
+            <BrandLogo title="PNC Student Star" subtitle="Student Portal" />
           </motion.div>
         )}
       </div>
@@ -185,7 +189,7 @@ export default function Sidebar({ className }: SidebarProps) {
               key={item.path}
               onClick={() => navigate(item.path)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all relative group",
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ease-in-out relative group origin-left",
                 isActive 
                   ? "bg-primary text-white shadow-lg shadow-primary/20" 
                   : item.isAction 
@@ -193,6 +197,7 @@ export default function Sidebar({ className }: SidebarProps) {
                     : "text-slate-600 hover:bg-slate-50",
                 isCollapsed ? "justify-center px-0" : ""
               )}
+              style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
             >
               <item.icon className={cn(
                 "w-5 h-5 shrink-0", 
@@ -231,10 +236,11 @@ export default function Sidebar({ className }: SidebarProps) {
               }
             }}
             className={cn(
-              "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all group",
+              "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300 ease-in-out group origin-left",
               isSettingsExpanded && !isCollapsed ? "text-primary bg-primary/5" : "text-slate-600 hover:bg-slate-50",
               isCollapsed ? "justify-center px-0" : ""
             )}
+            style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
           >
             <div className="flex items-center gap-3">
               <Settings className={cn("w-5 h-5 shrink-0", isSettingsExpanded && !isCollapsed ? "text-primary" : "group-hover:text-primary")} />
@@ -295,9 +301,10 @@ export default function Sidebar({ className }: SidebarProps) {
         )}>
           <div 
             className={cn(
-              "flex items-center gap-3 bg-slate-50 p-3 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all group relative",
+              "flex items-center gap-3 bg-slate-50 p-3 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all duration-300 ease-in-out group relative origin-left",
               isCollapsed ? "justify-center p-2" : ""
             )} 
+            style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
             onClick={() => navigate('/profile')}
           >
             <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
@@ -319,9 +326,10 @@ export default function Sidebar({ className }: SidebarProps) {
           <button 
             onClick={() => setShowLogoutConfirm(true)}
             className={cn(
-              "w-full flex items-center justify-center gap-2 py-2 text-slate-400 hover:text-rose-500 transition-all text-[10px] font-black uppercase tracking-widest group relative",
+              "w-full flex items-center justify-center gap-2 py-2 text-slate-400 hover:text-rose-500 transition-all duration-300 ease-in-out text-[10px] font-black uppercase tracking-widest group relative origin-left",
               isCollapsed ? "px-0" : ""
             )}
+            style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
           >
             <LogOut className="w-4 h-4 shrink-0" />
             {!isCollapsed && <span>Sign Out</span>}

@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Star, Mail, User, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Mail, User, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
+import BrandLogo from '../components/BrandLogo';
 
 type InvitePayload = {
   email: string;
@@ -139,11 +140,8 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="flex items-center justify-between border-b border-primary/10 px-6 py-4 lg:px-10 bg-white">
-        <div className="flex items-center gap-3 text-primary cursor-pointer" onClick={() => navigate('/')}>
-          <div className="size-8 flex items-center justify-center bg-primary/10 rounded-lg">
-            <Star className="w-5 h-5 fill-primary text-primary" />
-          </div>
-          <h2 className="text-slate-900 text-lg font-bold tracking-tight">PNC Student Star</h2>
+        <div className="cursor-pointer" onClick={() => navigate('/')}>
+          <BrandLogo titleClassName="text-lg font-bold tracking-tight" markClassName="size-8" />
         </div>
         <button
           onClick={() => navigate('/')}

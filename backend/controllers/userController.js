@@ -291,6 +291,7 @@ const normalizeInviteInput = (inviteInput = {}) => {
     email,
     role,
     generation,
+    major,
     className,
     studentId,
     inviterName,
@@ -304,6 +305,7 @@ const normalizeInviteInput = (inviteInput = {}) => {
   const normalizedEmail = (email || '').toString().trim().toLowerCase();
   const normalizedRole = normalizeRole(role);
   const generationValue = (generation || '').toString().trim();
+  const majorValue = (major || '').toString().trim().toUpperCase();
   const classValue = (className || '').toString().trim();
   const studentIdValue = (studentId || '').toString().trim();
   const inviterNameValue = (inviterName || '').toString().trim();
@@ -326,12 +328,15 @@ const normalizeInviteInput = (inviteInput = {}) => {
     if (!studentIdValue) {
       throw createHttpError(400, 'Student ID is required when role is student.');
     }
-    if (generationValue && !['2026', '2027'].includes(generationValue)) {
-      throw createHttpError(400, 'Generation must be 2026 or 2027 when provided.');
+    if (!/^\d{4}$/.test(generationValue)) {
+      throw createHttpError(400, 'Generation must be a 4-digit year when role is student.');
+    }
+    if (!majorValue) {
+      throw createHttpError(400, 'Major is required when role is student.');
     }
 
     if (studentIdValue) {
-      if (!/^(2026|2027)-\d{3}$/.test(studentIdValue)) {
+      if (!/^\d{4}-\d{3}$/.test(studentIdValue)) {
         throw createHttpError(400, 'Student ID must match YYYY-XXX (example: 2026-001).');
       }
       if (generationValue && !studentIdValue.startsWith(`${generationValue}-`)) {
@@ -348,6 +353,7 @@ const normalizeInviteInput = (inviteInput = {}) => {
     email: normalizedEmail,
     role: normalizedRole,
     generation: generationValue,
+    major: majorValue,
     className: classValue,
     studentId: studentIdValue,
     inviterName: inviterNameValue,
@@ -357,8 +363,8 @@ const normalizeInviteInput = (inviteInput = {}) => {
 
 const buildInvitedUserSummary = (normalizedInvite) => {
   const userGroup = normalizedInvite.role === 'student'
-    ? normalizedInvite.generation && normalizedInvite.className
-      ? `Gen ${normalizedInvite.generation} - Class ${normalizedInvite.className}`
+    ? normalizedInvite.generation
+      ? `Gen ${normalizedInvite.generation}${normalizedInvite.major ? ` - ${normalizedInvite.major}` : ''}${normalizedInvite.className ? ` - Class ${normalizedInvite.className}` : ''}`
       : 'Pending Class Assignment'
     : normalizedInvite.role === 'teacher'
       ? 'Teaching Staff'
@@ -372,6 +378,7 @@ const buildInvitedUserSummary = (normalizedInvite) => {
     role: normalizedInvite.role,
     gender: normalizedInvite.gender,
     generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
+    major: normalizedInvite.role === 'student' ? normalizedInvite.major || null : null,
     className: normalizedInvite.role === 'student' ? normalizedInvite.className || null : null,
     studentId: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
     group: userGroup
@@ -387,6 +394,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
     email,
     role,
     generation,
+    major,
     className,
     studentId,
     inviterName,
@@ -401,6 +409,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
     email,
     role,
     generation: role === 'student' && generation ? generation : null,
+    major: role === 'student' && major ? major : null,
     className: role === 'student' && className ? className : null,
     studentId: role === 'student' && studentId ? studentId : null,
     exp: Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000
@@ -408,8 +417,8 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
 
   const tempPassword = options.tempPassword || crypto.randomBytes(18).toString('base64url');
   const hashedTempPassword = await bcrypt.hash(tempPassword, saltRounds);
-  const classForUser = role === 'student' && generation && className
-    ? `Gen ${generation} - Class ${className}`
+  const classForUser = role === 'student' && generation
+    ? `Gen ${generation}${major ? ` - ${major}` : ''}${className ? ` - Class ${className}` : ''}`
     : null;
 
   const token = createInviteToken(payload);
@@ -588,6 +597,7 @@ const parseBulkInviteRowsFromBuffer = (buffer) => {
       gender: pickValueByAliases(row, ['Gender (Male/Female/Other)', 'Gender']),
       role: pickValueByAliases(row, ['Role (Student/Teacher/Admin)', 'Role']),
       generation: pickValueByAliases(row, ['Generation (e.g., 2026)', 'Generation']),
+      major: pickValueByAliases(row, ['Major (SNA/WEB DEV)', 'Major']),
       className: pickValueByAliases(row, ['Class (e.g., A)', 'Class']),
       studentId: pickValueByAliases(row, ['Student ID (Format: YYYY-XXX)', 'Student ID', 'StudentId'])
     }

@@ -57,17 +57,11 @@ const RADAR_KEYS = [
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  
-  // Mocking the next evaluation date (3 months cycle)
-  const [daysLeft, setDaysLeft] = useState(82); 
+  const [daysLeft, setDaysLeft] = useState(0);
+  const [cycleDays, setCycleDays] = useState(90);
   const [showUrgentNotification, setShowUrgentNotification] = useState(false);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
-
-  // For demo purposes, let's allow toggling the urgent state
-  const toggleUrgent = () => {
-    setDaysLeft(prev => prev === 82 ? 3 : 82);
-  };
 
   useEffect(() => {
     if (daysLeft <= 3) {
@@ -92,9 +86,15 @@ export default function DashboardPage() {
         if (localName) setStudentName(localName);
         if (localStudentId) setStudentId(localStudentId);
 
-        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
-        const data = await response.json();
-        if (!response.ok) return;
+        const [response, intervalResponse, evaluationsResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/users/${userId}`),
+          fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+          fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
+        ]);
+
+        const data = await response.json().catch(() => ({}));
+        const intervalData = await intervalResponse.json().catch(() => ({}));
+        const evaluations = await evaluationsResponse.json().catch(() => []);
 
         const resolvedName =
           String(data?.name || '').trim() ||
@@ -105,8 +105,34 @@ export default function DashboardPage() {
 
         setStudentName(resolvedName);
         setStudentId(resolvedStudentId);
+
+        const resolvedCycleDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
+        setCycleDays(resolvedCycleDays);
+
+        const localEvaluationKey = `last_evaluation_submitted_at_${userId}`;
+        const latestEvaluationDateRaw =
+          String(Array.isArray(evaluations) ? evaluations[0]?.created_at || '' : '').trim() ||
+          String(localStorage.getItem(localEvaluationKey) || '').trim();
+
+        if (!latestEvaluationDateRaw) {
+          setDaysLeft(0);
+          return;
+        }
+
+        const latestEvaluationDate = new Date(latestEvaluationDateRaw);
+        if (Number.isNaN(latestEvaluationDate.getTime())) {
+          setDaysLeft(0);
+          return;
+        }
+
+        const nextEvaluationDate = new Date(latestEvaluationDate);
+        nextEvaluationDate.setDate(nextEvaluationDate.getDate() + resolvedCycleDays);
+
+        const remainingMilliseconds = nextEvaluationDate.getTime() - Date.now();
+        setDaysLeft(Math.max(0, Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24))));
       } catch {
-        // no-op fallback
+        setCycleDays(90);
+        setDaysLeft(0);
       }
     };
     loadIdentity();
@@ -142,13 +168,6 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <button 
-              onClick={toggleUrgent}
-              title="Toggle urgent notification demo"
-              className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors"
-            >
-              Demo: Toggle Urgent
-            </button>
-            <button 
               title="Notifications"
               className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600"
             >
@@ -168,7 +187,7 @@ export default function DashboardPage() {
         <div className="p-8 max-w-7xl mx-auto space-y-8">
           {/* Urgent Notification */}
           <AnimatePresence>
-            {daysLeft <= 3 && (
+            {showUrgentNotification && (
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -179,8 +198,12 @@ export default function DashboardPage() {
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-sm">Action Required: Evaluation Window Opening Soon!</p>
-                  <p className="text-xs opacity-80">Your next self-evaluation is scheduled in {daysLeft} days. Please prepare your self-reflection.</p>
+                  <p className="font-bold text-sm">{daysLeft === 0 ? 'Action Required: Evaluation Is Due Now' : 'Action Required: Evaluation Window Opening Soon!'}</p>
+                  <p className="text-xs opacity-80">
+                    {daysLeft === 0
+                      ? 'Your self-evaluation is due now. Please complete it as soon as possible.'
+                      : `Your next self-evaluation is scheduled in ${daysLeft} days. Please prepare your self-reflection.`}
+                  </p>
                 </div>
                 <button 
                   onClick={() => navigate('/evaluate')}
@@ -244,13 +267,13 @@ export default function DashboardPage() {
                   <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${(daysLeft / 90) * 100}%` }}
+                      animate={{ width: `${Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100))}%` }}
                       className="h-full bg-primary"
                     />
                   </div>
                   <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                    <span>Cycle: 3 Months</span>
-                    <span>{Math.round((daysLeft / 90) * 100)}% Remaining</span>
+                    <span>Cycle: {cycleDays} Days</span>
+                    <span>{Math.round(Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100)))}% Remaining</span>
                   </div>
                 </div>
               </div>

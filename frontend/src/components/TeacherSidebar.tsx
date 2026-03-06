@@ -1,6 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Star, 
   LayoutDashboard, 
   Users, 
   BarChart3, 
@@ -9,11 +8,13 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Bell
+  Bell,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import BrandLogo, { PNLogoMark } from './BrandLogo';
 
 interface TeacherSidebarProps {
   className?: string;
@@ -23,6 +24,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Teacher');
   const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/sarah/100/100');
 
@@ -106,6 +108,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   return (
     <motion.aside 
       animate={{ width: isCollapsed ? 80 : 256 }}
+      transition={{ duration: 0.34, ease: 'easeInOut' }}
       className={cn(
         "bg-white border-r border-slate-200 flex flex-col shrink-0 hidden md:flex transition-all duration-300 ease-in-out relative z-50",
         className
@@ -122,22 +125,26 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
       {/* Logo Section */}
       <div 
         className={cn(
-          "p-6 flex items-center gap-3 cursor-pointer overflow-hidden",
+          "p-6 flex items-center gap-3 cursor-pointer overflow-hidden transition-all duration-300 ease-in-out origin-left",
           isCollapsed ? "justify-center" : ""
         )} 
         onClick={() => navigate('/teacher/dashboard')}
       >
-        <div className="bg-primary size-10 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20 shrink-0">
-          <Star className="w-6 h-6 fill-white" />
-        </div>
-        {!isCollapsed && (
-          <motion.div 
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="min-w-0"
+        {isCollapsed ? (
+          <motion.div
+            animate={{ scale: isCollapsed ? 0.96 : 1 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
           >
-            <h1 className="text-sm font-black leading-tight text-slate-900 truncate">PNC Student Star</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Teacher Portal</p>
+            <PNLogoMark className="size-10 shrink-0" />
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0, scale: isCollapsed ? 0.96 : 1 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+            className="min-w-0 origin-left"
+          >
+            <BrandLogo title="PNC Student Star" subtitle="Teacher Portal" />
           </motion.div>
         )}
       </div>
@@ -155,12 +162,13 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
               key={item.path}
               onClick={() => navigate(item.path)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all relative group",
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ease-in-out relative group origin-left",
                 isActive 
                   ? "bg-primary text-white shadow-lg shadow-primary/20" 
                   : "text-slate-600 hover:bg-slate-50",
                 isCollapsed ? "justify-center px-0" : ""
               )}
+              style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
             >
               <item.icon className={cn("w-5 h-5 shrink-0", isActive ? "text-white" : "group-hover:text-primary")} />
               {!isCollapsed && (
@@ -184,9 +192,10 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
         )}>
           <div 
             className={cn(
-              "flex items-center gap-3 bg-slate-50 p-3 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all group relative",
+              "flex items-center gap-3 bg-slate-50 p-3 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all duration-300 ease-in-out group relative origin-left",
               isCollapsed ? "justify-center p-2" : ""
             )} 
+            style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
             onClick={() => navigate('/teacher/settings')}
           >
             <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
@@ -206,11 +215,12 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
           </div>
           
           <button 
-            onClick={() => navigate('/')}
+            onClick={() => setShowLogoutConfirm(true)}
             className={cn(
-              "w-full flex items-center justify-center gap-2 py-2 text-slate-400 hover:text-rose-500 transition-all text-[10px] font-black uppercase tracking-widest group relative",
+              "w-full flex items-center justify-center gap-2 py-2 text-slate-400 hover:text-rose-500 transition-all duration-300 ease-in-out text-[10px] font-black uppercase tracking-widest group relative origin-left",
               isCollapsed ? "px-0" : ""
             )}
+            style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }}
           >
             <LogOut className="w-4 h-4 shrink-0" />
             {!isCollapsed && <span>Sign Out</span>}
@@ -222,6 +232,51 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
           </button>
         </div>
       </div>
+      
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLogoutConfirm(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[32px] p-8 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-rose-500" />
+              <div className="flex flex-col items-center text-center">
+                <div className="size-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mb-2">Sign Out?</h3>
+                <p className="text-slate-500 text-sm mb-8">
+                  Are you sure you want to log out of your teacher account?
+                </p>
+                <div className="flex flex-col w-full gap-3">
+                  <button
+                    onClick={() => navigate('/')}
+                    className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black text-sm shadow-lg shadow-rose-200 hover:bg-rose-600 transition-all"
+                  >
+                    YES, SIGN OUT
+                  </button>
+                  <button
+                    onClick={() => setShowLogoutConfirm(false)}
+                    className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.aside>
   );
 }
