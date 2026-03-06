@@ -2,6 +2,7 @@ const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const XLSX = require('xlsx');
 const saltRounds = 10;
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -34,7 +35,9 @@ const insertUserFlexible = async ({
   hashedPassword,
   role,
   classValue,
-  gender
+  studentIdValue,
+  gender,
+  queryExecutor = db
 }) => {
   const columns = await getUsersTableColumns();
   const insertColumns = [];
@@ -75,8 +78,14 @@ const insertUserFlexible = async ({
     placeholders.push('?');
   }
 
+  if (columns.has('student_id')) {
+    insertColumns.push('student_id');
+    insertValues.push(studentIdValue || null);
+    placeholders.push('?');
+  }
+
   const sql = `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`;
-  const [result] = await db.query(sql, insertValues);
+  const [result] = await queryExecutor.query(sql, insertValues);
   return result;
 };
 
@@ -86,6 +95,7 @@ const updateUserFlexibleById = async ({
   hashedPassword,
   role,
   classValue,
+  studentIdValue,
   gender
 }) => {
   const columns = await getUsersTableColumns();
@@ -118,6 +128,11 @@ const updateUserFlexibleById = async ({
   if (columns.has('class')) {
     updates.push('class = ?');
     values.push(classValue || null);
+  }
+
+  if (columns.has('student_id')) {
+    updates.push('student_id = ?');
+    values.push(studentIdValue || null);
   }
 
   if (updates.length === 0) {
@@ -198,11 +213,380 @@ const createEmailTransporter = () => {
   };
 };
 
+const createHttpError = (status, message) => {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+};
+
+const normalizeGender = (gender = '') => gender.toString().trim().toLowerCase();
+
+const normalizeInviteInput = (inviteInput = {}) => {
+  const {
+    firstName,
+    lastName,
+    name,
+    gender,
+    email,
+    role,
+    generation,
+    className,
+    studentId,
+    inviterName,
+    inviterEmail
+  } = inviteInput;
+
+  const normalizedFirstName = (firstName || '').toString().trim();
+  const normalizedLastName = (lastName || '').toString().trim();
+  const normalizedName = (name || `${normalizedFirstName} ${normalizedLastName}` || '').toString().trim();
+  const normalizedGender = normalizeGender(gender);
+  const normalizedEmail = (email || '').toString().trim().toLowerCase();
+  const normalizedRole = normalizeRole(role);
+  const generationValue = (generation || '').toString().trim();
+  const classValue = (className || '').toString().trim();
+  const studentIdValue = (studentId || '').toString().trim();
+  const inviterNameValue = (inviterName || '').toString().trim();
+  const inviterEmailValue = (inviterEmail || '').toString().trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    throw createHttpError(400, 'Email is required.');
+  }
+  if (!normalizedFirstName) {
+    throw createHttpError(400, 'First name is required.');
+  }
+  if (!['male', 'female', 'other'].includes(normalizedGender)) {
+    throw createHttpError(400, 'Gender must be male, female, or other.');
+  }
+  if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
+    throw createHttpError(400, 'Invalid role. Use admin, teacher, or student.');
+  }
+
+  if (normalizedRole === 'student') {
+    if (!studentIdValue) {
+      throw createHttpError(400, 'Student ID is required when role is student.');
+    }
+    if (generationValue && !['2026', '2027'].includes(generationValue)) {
+      throw createHttpError(400, 'Generation must be 2026 or 2027 when provided.');
+    }
+
+    if (studentIdValue) {
+      if (!/^(2026|2027)-\d{3}$/.test(studentIdValue)) {
+        throw createHttpError(400, 'Student ID must match YYYY-XXX (example: 2026-001).');
+      }
+      if (generationValue && !studentIdValue.startsWith(`${generationValue}-`)) {
+        throw createHttpError(400, 'Student ID year must match generation.');
+      }
+    }
+  }
+
+  return {
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
+    name: normalizedName,
+    gender: normalizedGender,
+    email: normalizedEmail,
+    role: normalizedRole,
+    generation: generationValue,
+    className: classValue,
+    studentId: studentIdValue,
+    inviterName: inviterNameValue,
+    inviterEmail: inviterEmailValue
+  };
+};
+
+const buildInvitedUserSummary = (normalizedInvite) => {
+  const userGroup = normalizedInvite.role === 'student'
+    ? normalizedInvite.generation && normalizedInvite.className
+      ? `Gen ${normalizedInvite.generation} - Class ${normalizedInvite.className}`
+      : 'Pending Class Assignment'
+    : normalizedInvite.role === 'teacher'
+      ? 'Teaching Staff'
+      : 'Administration';
+
+  return {
+    name: normalizedInvite.name,
+    firstName: normalizedInvite.firstName,
+    lastName: normalizedInvite.lastName,
+    email: normalizedInvite.email,
+    role: normalizedInvite.role,
+    gender: normalizedInvite.gender,
+    generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
+    className: normalizedInvite.role === 'student' ? normalizedInvite.className || null : null,
+    studentId: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+    group: userGroup
+  };
+};
+
+const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
+  const {
+    firstName,
+    lastName,
+    name,
+    gender,
+    email,
+    role,
+    generation,
+    className,
+    studentId,
+    inviterName,
+    inviterEmail
+  } = normalizedInvite;
+
+  const payload = {
+    firstName,
+    lastName: lastName || null,
+    name,
+    gender,
+    email,
+    role,
+    generation: role === 'student' && generation ? generation : null,
+    className: role === 'student' && className ? className : null,
+    studentId: role === 'student' && studentId ? studentId : null,
+    exp: Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000
+  };
+
+  const tempPassword = options.tempPassword || crypto.randomBytes(18).toString('base64url');
+  const hashedTempPassword = await bcrypt.hash(tempPassword, saltRounds);
+  const classForUser = role === 'student' && generation && className
+    ? `Gen ${generation} - Class ${className}`
+    : null;
+
+  const token = createInviteToken(payload);
+  const inviteLink = `${FRONTEND_URL}/register?invite=${encodeURIComponent(token)}`;
+  const loginLink = `${FRONTEND_URL}/`;
+  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+  const inviterIdentity = inviterName
+    ? inviterEmail
+      ? `${inviterName} (${inviterEmail})`
+      : inviterName
+    : inviterEmail || ADMIN_INVITER_EMAIL;
+  const roleDashboardPath = role === 'admin'
+    ? '/admin/dashboard'
+    : role === 'teacher'
+      ? '/teacher/dashboard'
+      : '/dashboard';
+
+  const text = [
+    `You are invited to join PNC Student Star as ${roleLabel}.`,
+    `Invited by: ${inviterIdentity}`,
+    '',
+    'Temporary password (for first login):',
+    tempPassword,
+    '',
+    'Please complete your registration using this link:',
+    inviteLink,
+    '',
+    'After registration, use this email and temporary password to log in (you can change it later).',
+    '',
+    'After completing registration, login here:',
+    loginLink,
+    '',
+    `After login, you will be redirected to: ${roleDashboardPath}`,
+    '',
+    `This link expires in ${INVITE_EXPIRES_HOURS} hours.`
+  ].join('\n');
+
+  const html = `
+    <p>You are invited to join <strong>PNC Student Star</strong> as <strong>${roleLabel}</strong>.</p>
+    <p><strong>Invited by:</strong> ${inviterIdentity}</p>
+    <p><strong>Temporary password (for first login):</strong> <code>${tempPassword}</code></p>
+    <p>Please complete your registration using the link below:</p>
+    <p><a href="${inviteLink}">${inviteLink}</a></p>
+    <p>After registration, use this email and temporary password to log in (you can change it later).</p>
+    <p>After completing registration, login here:</p>
+    <p><a href="${loginLink}">${loginLink}</a></p>
+    <p>After login, you will be redirected to: <strong>${roleDashboardPath}</strong>.</p>
+    <p>This link expires in ${INVITE_EXPIRES_HOURS} hours.</p>
+  `;
+
+  return {
+    classForUser,
+    hashedTempPassword,
+    emailMessage: {
+      to: email,
+      subject: 'PNC Student Star Invitation',
+      text,
+      html
+    },
+    roleDashboardPath,
+    temporaryPassword: tempPassword,
+    preview: {
+      to: email,
+      from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+      subject: 'PNC Student Star Invitation',
+      text,
+      inviteLink,
+      loginLink,
+      temporaryPassword: tempPassword,
+      invitedBy: inviterIdentity,
+      roleDashboardPath,
+      smtpConfigured: false
+    },
+    invitedUser: buildInvitedUserSummary(normalizedInvite)
+  };
+};
+
+const sendInviteForUser = async (inviteInput, options = {}) => {
+  const normalizedInvite = normalizeInviteInput(inviteInput || {});
+  const queryExecutor = options.queryExecutor || db;
+  const [existingUsers] = await queryExecutor.query("SELECT id FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
+  if (existingUsers.length > 0) {
+    throw createHttpError(409, 'A user with this email already exists.');
+  }
+
+  if (options.validateOnly) {
+    return {
+      validatedRow: {
+        firstName: normalizedInvite.firstName,
+        lastName: normalizedInvite.lastName,
+        email: normalizedInvite.email,
+        gender: normalizedInvite.gender,
+        role: normalizedInvite.role,
+        generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
+        className: normalizedInvite.role === 'student' ? normalizedInvite.className || null : null,
+        studentId: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+        inviterName: normalizedInvite.inviterName || undefined,
+        inviterEmail: normalizedInvite.inviterEmail || undefined
+      },
+      invitedUser: buildInvitedUserSummary(normalizedInvite)
+    };
+  }
+
+  const transportInfo = options.transportInfo || createEmailTransporter();
+  const { transporter, isConfigured } = transportInfo;
+  const artifacts = await buildInviteArtifacts(normalizedInvite);
+
+  await insertUserFlexible({
+    fullName: normalizedInvite.name,
+    email: normalizedInvite.email,
+    hashedPassword: artifacts.hashedTempPassword,
+    role: normalizedInvite.role,
+    classValue: artifacts.classForUser,
+    studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+    gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
+    queryExecutor
+  });
+
+  if (isConfigured && transporter && !options.skipSendEmail) {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+      replyTo: ADMIN_INVITER_EMAIL,
+      to: artifacts.emailMessage.to,
+      subject: artifacts.emailMessage.subject,
+      text: artifacts.emailMessage.text,
+      html: artifacts.emailMessage.html
+    });
+  }
+
+  return {
+    message: isConfigured
+      ? 'Invitation email sent successfully.'
+      : 'SMTP is not configured. Invitation preview generated; no email was sent.',
+    preview: {
+      ...artifacts.preview,
+      smtpConfigured: isConfigured
+    },
+    smtpConfigured: isConfigured,
+    invitedUser: artifacts.invitedUser
+  };
+};
+
+const normalizeHeaderKey = (value = '') =>
+  value.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const pickValueByAliases = (row, aliases) => {
+  const normalized = new Map(
+    Object.entries(row || {}).map(([key, val]) => [normalizeHeaderKey(key), val])
+  );
+  for (const alias of aliases) {
+    const match = normalized.get(normalizeHeaderKey(alias));
+    if (match !== undefined && match !== null) {
+      return match.toString().trim();
+    }
+  }
+  return '';
+};
+
+const parseBulkInviteRowsFromBuffer = (buffer) => {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) {
+    return [];
+  }
+
+  const worksheet = workbook.Sheets[firstSheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
+
+  return rows.map((row, index) => ({
+    rowNumber: index + 2,
+    payload: {
+      firstName: pickValueByAliases(row, ['First Name', 'FirstName']),
+      lastName: pickValueByAliases(row, ['Last Name', 'LastName']),
+      email: pickValueByAliases(row, ['Email Address', 'Email']),
+      gender: pickValueByAliases(row, ['Gender (Male/Female/Other)', 'Gender']),
+      role: pickValueByAliases(row, ['Role (Student/Teacher/Admin)', 'Role']),
+      generation: pickValueByAliases(row, ['Generation (e.g., 2026)', 'Generation']),
+      className: pickValueByAliases(row, ['Class (e.g., A)', 'Class']),
+      studentId: pickValueByAliases(row, ['Student ID (Format: YYYY-XXX)', 'Student ID', 'StudentId'])
+    }
+  }));
+};
+
+const validateBulkInviteRows = async (rows, options = {}) => {
+  const queryExecutor = options.queryExecutor || db;
+  const seenEmailsInFile = new Set();
+  const validRows = [];
+  const errors = [];
+
+  for (const row of rows) {
+    const rowEmail = (row.payload.email || '').toString().trim().toLowerCase();
+    if (!rowEmail) {
+      errors.push({ row: row.rowNumber, email: '', error: 'Email is required.' });
+      continue;
+    }
+    if (seenEmailsInFile.has(rowEmail)) {
+      errors.push({ row: row.rowNumber, email: rowEmail, error: 'Duplicate email in uploaded file.' });
+      continue;
+    }
+    seenEmailsInFile.add(rowEmail);
+
+    try {
+      const result = await sendInviteForUser(row.payload, { validateOnly: true, queryExecutor });
+      validRows.push({
+        row: row.rowNumber,
+        payload: result.validatedRow,
+        invitedUser: result.invitedUser
+      });
+    } catch (err) {
+      errors.push({
+        row: row.rowNumber,
+        email: rowEmail,
+        error: err.message || 'Failed to validate this row.'
+      });
+    }
+  }
+
+  return { validRows, errors };
+};
+
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM users");
-    res.json(rows);
+    try {
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        ORDER BY u.created_at DESC
+      `);
+      return res.json(rows);
+    } catch (_err) {
+      // Backward-compatible fallback when migrations/tables are not yet applied.
+      const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
+      return res.json(rows);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database Error" });
@@ -212,11 +596,26 @@ const getAllUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+    try {
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        WHERE u.id = ?
+      `, [req.params.id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      return res.json(rows[0]);
+    } catch (_err) {
+      const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      return res.json(rows[0]);
     }
-    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -225,13 +624,17 @@ const getUserById = async (req, res) => {
 
 // Create new user
 const createUser = async (req, res) => {
-  const { name, gender, email, password, role, class_name } = req.body;
+  const { name, gender, email, password, role, class_name, student_id } = req.body;
 
   try {
     const normalizedRole = normalizeRole(role);
+    const normalizedStudentId = (student_id || '').toString().trim();
 
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
+    }
+    if (normalizedRole === 'student' && !normalizedStudentId) {
+      return res.status(400).json({ error: "student_id is required when role is student." });
     }
 
     // Hash password before storing
@@ -248,6 +651,7 @@ const createUser = async (req, res) => {
       hashedPassword,
       role: normalizedRole,
       classValue: class_name || null,
+      studentIdValue: normalizedStudentId || null,
       gender
     });
 
@@ -263,16 +667,20 @@ const createUser = async (req, res) => {
 
 // Update user
 const updateUser = async (req, res) => {
-  const { name, email, role, class_name } = req.body;
+  const { name, email, role, class_name, student_id } = req.body;
   
   try {
     const normalizedRole = normalizeRole(role);
+    const normalizedStudentId = (student_id || '').toString().trim();
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
     }
+    if (normalizedRole === 'student' && !normalizedStudentId) {
+      return res.status(400).json({ error: "student_id is required when role is student." });
+    }
 
-    const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ? WHERE id = ?";
-    await db.query(sql, [name, email, normalizedRole, class_name || null, req.params.id]);
+    const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ?, student_id = ? WHERE id = ?";
+    await db.query(sql, [name, email, normalizedRole, class_name || null, normalizedStudentId || null, req.params.id]);
     res.json({ message: "User updated successfully" });
   } catch (err) {
     console.error(err);
@@ -282,164 +690,245 @@ const updateUser = async (req, res) => {
 
 // Send invite to user email
 const inviteUser = async (req, res) => {
-  const { firstName, lastName, name, gender, email, role, generation, className, studentId, inviterName, inviterEmail } = req.body;
-  const normalizedFirstName = (firstName || '').toString().trim();
-  const normalizedLastName = (lastName || '').toString().trim();
-  const normalizedName = (name || `${normalizedFirstName} ${normalizedLastName}` || '').toString().trim();
-  const normalizedGender = (gender || '').toString().trim().toLowerCase();
-  const normalizedEmail = (email || '').toString().trim().toLowerCase();
-  const normalizedRole = normalizeRole(role);
-  const generationValue = (generation || '').toString().trim();
-  const classValue = (className || '').toString().trim();
-  const studentIdValue = (studentId || '').toString().trim();
-  const inviterNameValue = (inviterName || '').toString().trim();
-  const inviterEmailValue = (inviterEmail || '').toString().trim().toLowerCase();
+  try {
+    const result = await sendInviteForUser(req.body || {});
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error(err);
+    return res.status(err.status || 500).json({ error: err.message || 'Failed to send invite email.' });
+  }
+};
 
-  if (!normalizedEmail) {
-    return res.status(400).json({ error: "Email is required." });
-  }
-  if (!normalizedFirstName) {
-    return res.status(400).json({ error: "First name is required." });
-  }
-  if (!['male', 'female'].includes(normalizedGender)) {
-    return res.status(400).json({ error: "Gender must be male or female." });
+const commitBulkInviteRows = async (rows) => {
+  if (!rows.length) {
+    return {
+      message: 'No rows to process.',
+      summary: { totalRows: 0, invitedCount: 0, failedCount: 0, smtpConfigured: false },
+      invited: [],
+      errors: []
+    };
   }
 
-  if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
-    return res.status(400).json({ error: "Invalid role. Use admin, teacher, or student." });
-  }
+  const connection = await db.getConnection();
+  const transportInfo = createEmailTransporter();
+  const invited = [];
+  const errors = [];
 
-  if (normalizedRole === 'student') {
-    if (generationValue && !['2026', '2027'].includes(generationValue)) {
-      return res.status(400).json({ error: "Generation must be 2026 or 2027 when provided." });
+  try {
+    await connection.beginTransaction();
+
+    const seenEmailsInPayload = new Set();
+    const normalizedRows = [];
+
+    for (let idx = 0; idx < rows.length; idx += 1) {
+      const sourceRow = rows[idx] || {};
+      const rowNumber = Number(sourceRow.row || idx + 2);
+      const payload = sourceRow.payload || sourceRow;
+      const normalizedEmail = (payload.email || '').toString().trim().toLowerCase();
+
+      if (!normalizedEmail) {
+        errors.push({ row: rowNumber, email: '', error: 'Email is required.' });
+        continue;
+      }
+      if (seenEmailsInPayload.has(normalizedEmail)) {
+        errors.push({ row: rowNumber, email: normalizedEmail, error: 'Duplicate email in request payload.' });
+        continue;
+      }
+      seenEmailsInPayload.add(normalizedEmail);
+
+      try {
+        const validated = await sendInviteForUser(payload, { validateOnly: true, queryExecutor: connection });
+        normalizedRows.push({ row: rowNumber, payload: validated.validatedRow });
+      } catch (err) {
+        errors.push({ row: rowNumber, email: normalizedEmail, error: err.message || 'Row validation failed.' });
+      }
     }
 
-    if (studentIdValue) {
-      if (!/^(2026|2027)-\d{3}$/.test(studentIdValue)) {
-        return res.status(400).json({ error: "Student ID must match YYYY-XXX (example: 2026-001)." });
-      }
-      if (generationValue && !studentIdValue.startsWith(`${generationValue}-`)) {
-        return res.status(400).json({ error: "Student ID year must match generation." });
+    if (errors.length > 0) {
+      await connection.rollback();
+      return {
+        message: `Validation failed: ${errors.length} row(s) have errors. No users were inserted.`,
+        summary: {
+          totalRows: rows.length,
+          invitedCount: 0,
+          failedCount: errors.length,
+          smtpConfigured: transportInfo.isConfigured
+        },
+        invited: [],
+        errors
+      };
+    }
+
+    for (const row of normalizedRows) {
+      try {
+        const result = await sendInviteForUser(row.payload, {
+          queryExecutor: connection,
+          transportInfo,
+          skipSendEmail: true
+        });
+        invited.push({
+          row: row.row,
+          ...result.invitedUser,
+          emailEnvelope: result.preview
+        });
+      } catch (err) {
+        errors.push({
+          row: row.row,
+          email: row.payload.email,
+          error: err.message || 'Failed to prepare invite.'
+        });
       }
     }
+
+    if (errors.length > 0) {
+      await connection.rollback();
+      return {
+        message: `Invite preparation failed: ${errors.length} row(s) failed. No users were inserted.`,
+        summary: {
+          totalRows: rows.length,
+          invitedCount: 0,
+          failedCount: errors.length,
+          smtpConfigured: transportInfo.isConfigured
+        },
+        invited: [],
+        errors
+      };
+    }
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+
+  const emailErrors = [];
+  if (transportInfo.isConfigured && transportInfo.transporter) {
+    for (const row of invited) {
+      try {
+        await transportInfo.transporter.sendMail({
+          from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+          replyTo: ADMIN_INVITER_EMAIL,
+          to: row.emailEnvelope.to,
+          subject: row.emailEnvelope.subject,
+          text: row.emailEnvelope.text,
+          html: row.emailEnvelope.html
+        });
+      } catch (err) {
+        emailErrors.push({
+          row: row.row,
+          email: row.email,
+          error: err.message || 'Failed to send email.'
+        });
+      }
+    }
+  }
+
+  const invitedUsers = invited.map((row) => {
+    const clean = { ...row };
+    delete clean.emailEnvelope;
+    return clean;
+  });
+
+  return {
+    message: emailErrors.length > 0
+      ? `Users inserted (${invitedUsers.length}) but ${emailErrors.length} email(s) failed to send.`
+      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, 0 failed.`,
+    summary: {
+      totalRows: rows.length,
+      invitedCount: invitedUsers.length,
+      failedCount: 0,
+      smtpConfigured: transportInfo.isConfigured,
+      emailFailedCount: emailErrors.length
+    },
+    invited: invitedUsers,
+    errors: emailErrors
+  };
+};
+
+// Validate uploaded Excel file for bulk invite (no insert)
+const validateUsersBulkInvite = async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ error: 'Please upload an Excel file (.xlsx or .xls).' });
+  }
+
+  let rows = [];
+  try {
+    rows = parseBulkInviteRowsFromBuffer(req.file.buffer);
+  } catch (_err) {
+    return res.status(400).json({ error: 'Invalid Excel file or unreadable sheet.' });
+  }
+
+  if (!rows.length) {
+    return res.status(400).json({ error: 'No data rows found in the uploaded file.' });
+  }
+  if (rows.length > 500) {
+    return res.status(400).json({ error: 'Maximum 500 rows per import.' });
+  }
+
+  const { validRows, errors } = await validateBulkInviteRows(rows);
+  return res.status(200).json({
+    message: errors.length > 0
+      ? `Validation failed: ${errors.length} row(s) have errors.`
+      : `Validation successful for ${validRows.length} rows.`,
+    summary: {
+      totalRows: rows.length,
+      validCount: validRows.length,
+      failedCount: errors.length
+    },
+    validRows,
+    errors
+  });
+};
+
+// Commit validated bulk rows: insert users + send invite emails
+const commitUsersBulkInvite = async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (!rows.length) {
+    return res.status(400).json({ error: 'Rows are required for bulk commit.' });
+  }
+  if (rows.length > 500) {
+    return res.status(400).json({ error: 'Maximum 500 rows per import.' });
   }
 
   try {
-    const { transporter, isConfigured } = createEmailTransporter();
-
-    const [existingUsers] = await db.query("SELECT id FROM users WHERE email = ? LIMIT 1", [normalizedEmail]);
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ error: "A user with this email already exists." });
-    }
-
-    const payload = {
-      firstName: normalizedFirstName,
-      lastName: normalizedLastName || null,
-      name: normalizedName,
-      gender: normalizedGender,
-      email: normalizedEmail,
-      role: normalizedRole,
-      generation: normalizedRole === 'student' && generationValue ? generationValue : null,
-      className: normalizedRole === 'student' && classValue ? classValue : null,
-      studentId: normalizedRole === 'student' && studentIdValue ? studentIdValue : null,
-      exp: Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000
-    };
-
-    const tempPassword = crypto.randomBytes(18).toString('base64url');
-    const hashedTempPassword = await bcrypt.hash(tempPassword, saltRounds);
-    const classForUser = normalizedRole === 'student' && generationValue && classValue
-      ? `Gen ${generationValue} - Class ${classValue}`
-      : null;
-
-    await insertUserFlexible({
-      fullName: normalizedName,
-      email: normalizedEmail,
-      hashedPassword: hashedTempPassword,
-      role: normalizedRole,
-      classValue: classForUser,
-      gender: normalizedGender
-    });
-
-    const token = createInviteToken(payload);
-    const inviteLink = `${FRONTEND_URL}/register?invite=${encodeURIComponent(token)}`;
-    const loginLink = `${FRONTEND_URL}/`;
-    const roleLabel = normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1);
-    const inviterIdentity = inviterNameValue
-      ? inviterEmailValue
-        ? `${inviterNameValue} (${inviterEmailValue})`
-        : inviterNameValue
-      : inviterEmailValue || ADMIN_INVITER_EMAIL;
-    const roleDashboardPath = normalizedRole === 'admin'
-      ? '/admin/dashboard'
-      : normalizedRole === 'teacher'
-        ? '/teacher/dashboard'
-        : '/dashboard';
-
-    const text = [
-      `You are invited to join PNC Student Star as ${roleLabel}.`,
-      `Invited by: ${inviterIdentity}`,
-      '',
-      'Temporary password (for first login):',
-      tempPassword,
-      '',
-      'Please complete your registration using this link:',
-      inviteLink,
-      '',
-      'After registration, use this email and temporary password to log in (you can change it later).',
-      '',
-      'After completing registration, login here:',
-      loginLink,
-      '',
-      `After login, you will be redirected to: ${roleDashboardPath}`,
-      '',
-      `This link expires in ${INVITE_EXPIRES_HOURS} hours.`
-    ].join('\n');
-
-    const html = `
-      <p>You are invited to join <strong>PNC Student Star</strong> as <strong>${roleLabel}</strong>.</p>
-      <p><strong>Invited by:</strong> ${inviterIdentity}</p>
-      <p><strong>Temporary password (for first login):</strong> <code>${tempPassword}</code></p>
-      <p>Please complete your registration using the link below:</p>
-      <p><a href="${inviteLink}">${inviteLink}</a></p>
-      <p>After registration, use this email and temporary password to log in (you can change it later).</p>
-      <p>After completing registration, login here:</p>
-      <p><a href="${loginLink}">${loginLink}</a></p>
-      <p>After login, you will be redirected to: <strong>${roleDashboardPath}</strong>.</p>
-      <p>This link expires in ${INVITE_EXPIRES_HOURS} hours.</p>
-    `;
-
-    if (isConfigured && transporter) {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
-        replyTo: ADMIN_INVITER_EMAIL,
-        to: normalizedEmail,
-        subject: 'PNC Student Star Invitation',
-        text,
-        html
-      });
-    }
-
-    return res.status(200).json({
-      message: isConfigured
-        ? "Invitation email sent successfully."
-        : "SMTP is not configured. Invitation preview generated; no email was sent.",
-      preview: {
-        to: normalizedEmail,
-        from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
-        subject: "PNC Student Star Invitation",
-        text,
-        inviteLink,
-        loginLink,
-        temporaryPassword: tempPassword,
-        invitedBy: inviterIdentity,
-        roleDashboardPath,
-        smtpConfigured: isConfigured
-      },
-      smtpConfigured: isConfigured
-    });
+    const result = await commitBulkInviteRows(rows);
+    const statusCode = result.summary.failedCount > 0 ? 400 : 200;
+    return res.status(statusCode).json(result);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: err.message || "Failed to send invite email." });
+    return res.status(500).json({ error: err.message || 'Failed to commit bulk invites.' });
+  }
+};
+
+// Backward-compatible endpoint: validate + commit from uploaded Excel file
+const inviteUsersBulk = async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ error: 'Please upload an Excel file (.xlsx or .xls).' });
+  }
+
+  let rows = [];
+  try {
+    rows = parseBulkInviteRowsFromBuffer(req.file.buffer);
+  } catch (_err) {
+    return res.status(400).json({ error: 'Invalid Excel file or unreadable sheet.' });
+  }
+
+  if (!rows.length) {
+    return res.status(400).json({ error: 'No data rows found in the uploaded file.' });
+  }
+  if (rows.length > 500) {
+    return res.status(400).json({ error: 'Maximum 500 rows per import.' });
+  }
+
+  try {
+    const result = await commitBulkInviteRows(rows);
+    const statusCode = result.summary.failedCount > 0 ? 400 : 200;
+    return res.status(statusCode).json(result);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || 'Failed to process bulk invite.' });
   }
 };
 
@@ -501,6 +990,7 @@ const completeInviteRegistration = async (req, res) => {
         hashedPassword,
         role,
         classValue,
+        studentIdValue: role === 'student' ? payload.studentId || null : null,
         gender: payload.gender
       });
     } else {
@@ -510,6 +1000,7 @@ const completeInviteRegistration = async (req, res) => {
         hashedPassword,
         role,
         classValue,
+        studentIdValue: role === 'student' ? payload.studentId || null : null,
         gender: payload.gender
       });
       userId = result.insertId;
@@ -552,6 +1043,13 @@ const loginUser = async (req, res) => {
     const normalizedRole = normalizeRole(user.role);
     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
 
+    if (Number(user.is_deleted) === 1) {
+      return res.status(403).json({ error: "This account has been deleted." });
+    }
+    if (Number(user.is_active) === 0) {
+      return res.status(403).json({ error: "This account is disabled." });
+    }
+
     const passwordMatches = isBcryptHash
       ? await bcrypt.compare(password, user.password)
       : user.password === password;
@@ -577,6 +1075,7 @@ const loginUser = async (req, res) => {
         email: user.email,
         role: normalizedRole,
         class: user.class,
+        student_id: user.student_id || null,
         created_at: user.created_at,
         updated_at: user.updated_at
       },
@@ -588,14 +1087,74 @@ const loginUser = async (req, res) => {
   }
 };
 
-// Delete user
-const deleteUser = async (req, res) => {
+// Enable/disable user account
+const setUserActive = async (req, res) => {
+  const { is_active } = req.body || {};
+  if (typeof is_active === 'undefined') {
+    return res.status(400).json({ error: "is_active is required." });
+  }
+
   try {
-    await db.query("DELETE FROM users WHERE id = ?", [req.params.id]);
-    res.json({ message: "User deleted successfully" });
+    const [result] = await db.query(
+      "UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+      [is_active ? 1 : 0, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found or already deleted." });
+    }
+
+    return res.json({ message: is_active ? "User enabled successfully." : "User disabled successfully." });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message || "Failed to update user status." });
+  }
+};
+
+// Delete user
+const deleteUser = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  try {
+    const [result] = await db.query(
+      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      const [existing] = await db.query("SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1", [userId]);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      return res.status(409).json({ error: "User is already deleted." });
+    }
+
+    return res.json({ message: "User deleted (archived) successfully." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to delete user." });
+  }
+};
+
+// Delete all users (soft delete/archive)
+const deleteAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query(
+      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE is_deleted IS NULL OR is_deleted = 0"
+    );
+
+    return res.json({
+      message: result.affectedRows === 0
+        ? "No active users to delete."
+        : `${result.affectedRows} users deleted (archived) successfully.`,
+      affectedRows: result.affectedRows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to delete users." });
   }
 };
 
@@ -605,8 +1164,13 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  deleteAllUsers,
+  setUserActive,
   loginUser,
   inviteUser,
+  inviteUsersBulk,
+  validateUsersBulkInvite,
+  commitUsersBulkInvite,
   validateInvite,
   completeInviteRegistration
 };
