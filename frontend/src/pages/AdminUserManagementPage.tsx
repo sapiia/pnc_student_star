@@ -1,21 +1,21 @@
 import {
   Search,
-  Edit2,
   Trash2,
   Filter,
   Download,
   UserPlus,
   Upload,
+  Power,
   X,
   CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../components/AdminSidebar';
 import { cn } from '../lib/utils';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
-type UserStatus = 'Active' | 'Inactive' | 'Invited';
+type UserStatus = 'Active' | 'Inactive' | 'Invited' | 'Deleted';
 type StudentGeneration = '2026' | '2027';
 type Gender = 'male' | 'female';
 
@@ -60,12 +60,33 @@ type BulkValidatedRow = {
   };
 };
 
-const INITIAL_USERS: UserRecord[] = [
-  { id: 1, name: 'John Doe', email: 'john.doe@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'JD', color: 'bg-blue-100 text-blue-700', generation: '2027', className: 'A', studentId: '2027-001' },
-  { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Teaching Staff', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
-  { id: 3, name: 'Robert Brown', email: 'r.brown@pnc.edu', role: 'Admin', group: 'Administration', status: 'Active', initials: 'RB', color: 'bg-orange-100 text-orange-700' },
-  { id: 4, name: 'Lucy Liu', email: 'l.liu@pnc.edu', role: 'Student', group: 'Gen 2026 - Class B', status: 'Inactive', initials: 'LL', color: 'bg-slate-100 text-slate-700', generation: '2026', className: 'B', studentId: '2026-014' },
-];
+type ConfirmAction =
+  | {
+      kind: 'toggle-active';
+      user: UserRecord;
+      shouldEnable: boolean;
+    }
+  | {
+      kind: 'delete';
+      user: UserRecord;
+    }
+  | {
+      kind: 'delete-all';
+    };
+
+type ApiUser = {
+  id: number;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  role: string;
+  class?: string | null;
+  student_id?: string | null;
+  resolved_student_id?: string | null;
+  is_active?: number | boolean | null;
+  is_deleted?: number | boolean | null;
+};
 
 const defaultNewUser = {
   firstName: '',
@@ -90,8 +111,51 @@ const toDisplayNameFromEmail = (email: string) => {
     .join(' ');
 };
 
+const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
+  const roleLower = (apiUser.role || '').toString().toLowerCase();
+  const role: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
+  const fullName = [apiUser.first_name, apiUser.last_name].filter(Boolean).join(' ').trim();
+  const resolvedName = (apiUser.name || '').trim() || fullName || toDisplayNameFromEmail(apiUser.email);
+  const initials = resolvedName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+  const colors = [
+    'bg-blue-100 text-blue-700',
+    'bg-purple-100 text-purple-700',
+    'bg-orange-100 text-orange-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-indigo-100 text-indigo-700'
+  ];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  const isDeleted = Number(apiUser.is_deleted || 0) === 1;
+  const isActive = Number(apiUser.is_active ?? 1) === 1;
+  const status: UserStatus = isDeleted ? 'Deleted' : isActive ? 'Active' : 'Inactive';
+  const classText = (apiUser.class || '').toString().trim();
+  const group = role === 'Student'
+    ? (classText || 'Pending Class Assignment')
+    : role === 'Teacher'
+      ? 'Teaching Staff'
+      : 'Administration';
+  const studentId = ((apiUser.student_id || apiUser.resolved_student_id || '') as string).toString().trim() || undefined;
+
+  return {
+    id: apiUser.id,
+    name: resolvedName,
+    email: apiUser.email,
+    role,
+    group,
+    status,
+    initials,
+    color: randomColor,
+    studentId
+  };
+};
+
 export default function AdminUserManagementPage() {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -105,7 +169,27 @@ export default function AdminUserManagementPage() {
   const [bulkValidatedRows, setBulkValidatedRows] = useState<BulkValidatedRow[]>([]);
   const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
   const [newUser, setNewUser] = useState(defaultNewUser);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/users`);
+        const data = await response.json();
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to load users.');
+          return;
+        }
+        const mapped = Array.isArray(data) ? data.map((item: ApiUser) => mapApiUserToRecord(item)) : [];
+        setUsers(mapped);
+      } catch {
+        setFormError('Failed to load users.');
+      }
+    };
+    loadUsers();
+  }, []);
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -230,8 +314,84 @@ export default function AdminUserManagementPage() {
     }
   };
 
+  const toggleUserActive = (user: UserRecord) => {
+    if (user.status === 'Deleted') return;
+    const shouldEnable = user.status !== 'Active';
+    setConfirmAction({ kind: 'toggle-active', user, shouldEnable });
+  };
+
   const deleteUser = (id: number) => {
-    setUsers(users.filter(u => u.id !== id));
+    const target = users.find((u) => u.id === id);
+    if (!target || target.status === 'Deleted') return;
+    setConfirmAction({ kind: 'delete', user: target });
+  };
+
+  const deleteAllUsers = () => {
+    const deletableUsersCount = users.filter((u) => u.status !== 'Deleted').length;
+    if (deletableUsersCount === 0 || isActionSubmitting) return;
+    setConfirmAction({ kind: 'delete-all' });
+  };
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return;
+    setIsActionSubmitting(true);
+    setFormError('');
+
+    const getResponseData = async (response: Response) => {
+      try {
+        return await response.json();
+      } catch {
+        return {};
+      }
+    };
+
+    try {
+      if (confirmAction.kind === 'toggle-active') {
+        const { user, shouldEnable } = confirmAction;
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}/active`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: shouldEnable })
+        });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to update user status.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: shouldEnable ? 'Active' : 'Inactive' } : u)));
+        setSuccessMessage(data.message || 'User status updated.');
+        setToastType('success');
+      } else if (confirmAction.kind === 'delete') {
+        const { user } = confirmAction;
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}`, { method: 'DELETE' });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to delete user.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: 'Deleted' } : u)));
+        setSuccessMessage(data.message || 'User deleted.');
+        setToastType('warning');
+      } else {
+        const response = await fetch(`${API_BASE_URL}/users`, { method: 'DELETE' });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to delete users.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => ({ ...u, status: 'Deleted' })));
+        setSuccessMessage(data.message || 'All users deleted.');
+        setToastType('warning');
+      }
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2500);
+      setConfirmAction(null);
+    } catch {
+      setFormError('Failed to complete the action.');
+    } finally {
+      setIsActionSubmitting(false);
+    }
   };
 
   const toUserRecordFromBulkInvite = (invited: BulkInvitedUser): UserRecord => {
@@ -415,6 +575,13 @@ export default function AdminUserManagementPage() {
             <button className="p-2 text-slate-400 hover:text-primary transition-colors">
               <Download className="w-5 h-5" />
             </button>
+            <button
+              onClick={deleteAllUsers}
+              disabled={isActionSubmitting || users.every((u) => u.status === 'Deleted')}
+              className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
+            >
+              Delete All
+            </button>
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
@@ -466,6 +633,7 @@ export default function AdminUserManagementPage() {
                     <th className="px-6 py-4">User</th>
                     <th className="px-6 py-4">Role</th>
                     <th className="px-6 py-4">Class/Department</th>
+                    <th className="px-6 py-4">Student ID</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
@@ -497,15 +665,17 @@ export default function AdminUserManagementPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-xs font-bold text-slate-600">{user.group}</span>
-                        {user.studentId && (
-                          <p className="text-[10px] font-bold text-slate-400 mt-1">ID: {user.studentId}</p>
-                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-bold text-slate-600">{user.studentId || '-'}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           user.status === 'Active'
                             ? "bg-emerald-50 text-emerald-600"
+                            : user.status === 'Deleted'
+                              ? "bg-rose-50 text-rose-600"
                             : user.status === 'Invited'
                               ? "bg-amber-50 text-amber-600"
                               : "bg-slate-100 text-slate-400"
@@ -515,12 +685,18 @@ export default function AdminUserManagementPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button className="p-2 text-slate-400 hover:text-primary transition-colors">
-                            <Edit2 className="w-4 h-4" />
+                          <button
+                            onClick={() => toggleUserActive(user)}
+                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
+                            title={user.status === 'Active' ? 'Disable user' : 'Enable user'}
+                          >
+                            <Power className="w-4 h-4" />
                           </button>
                           <button 
                             onClick={() => deleteUser(user.id)}
-                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-40"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -542,6 +718,69 @@ export default function AdminUserManagementPage() {
           </div>
         </div>
       </main>
+
+      {/* Confirm Action Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isActionSubmitting && setConfirmAction(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 14 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-7"
+            >
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                {confirmAction.kind === 'delete'
+                  ? 'Delete User?'
+                  : confirmAction.kind === 'delete-all'
+                    ? 'Delete All Users?'
+                  : confirmAction.shouldEnable
+                    ? 'Enable User?'
+                    : 'Disable User?'}
+              </h3>
+              <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                {confirmAction.kind === 'delete'
+                  ? `Are you sure you want to delete "${confirmAction.user.name}"? This keeps the record for history, but disables login and marks the user as deleted.`
+                  : confirmAction.kind === 'delete-all'
+                    ? 'Are you sure you want to delete all users? This keeps records for history, but disables login and marks every account as deleted.'
+                  : confirmAction.shouldEnable
+                    ? `Are you sure you want to enable "${confirmAction.user.name}"? The user will be able to log in again.`
+                    : `Are you sure you want to disable "${confirmAction.user.name}"? The user will not be able to log in.`}
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction(null)}
+                  disabled={isActionSubmitting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={executeConfirmedAction}
+                  disabled={isActionSubmitting}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-white text-xs font-black uppercase tracking-widest disabled:opacity-60",
+                    confirmAction.kind === 'delete' || confirmAction.kind === 'delete-all'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-primary hover:bg-primary/90'
+                  )}
+                >
+                  {isActionSubmitting ? 'Processing...' : 'Confirm'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add User Modal */}
       <AnimatePresence>

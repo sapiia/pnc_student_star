@@ -35,6 +35,7 @@ const insertUserFlexible = async ({
   hashedPassword,
   role,
   classValue,
+  studentIdValue,
   gender,
   queryExecutor = db
 }) => {
@@ -77,6 +78,12 @@ const insertUserFlexible = async ({
     placeholders.push('?');
   }
 
+  if (columns.has('student_id')) {
+    insertColumns.push('student_id');
+    insertValues.push(studentIdValue || null);
+    placeholders.push('?');
+  }
+
   const sql = `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`;
   const [result] = await queryExecutor.query(sql, insertValues);
   return result;
@@ -88,6 +95,7 @@ const updateUserFlexibleById = async ({
   hashedPassword,
   role,
   classValue,
+  studentIdValue,
   gender
 }) => {
   const columns = await getUsersTableColumns();
@@ -120,6 +128,11 @@ const updateUserFlexibleById = async ({
   if (columns.has('class')) {
     updates.push('class = ?');
     values.push(classValue || null);
+  }
+
+  if (columns.has('student_id')) {
+    updates.push('student_id = ?');
+    values.push(studentIdValue || null);
   }
 
   if (updates.length === 0) {
@@ -249,6 +262,9 @@ const normalizeInviteInput = (inviteInput = {}) => {
   }
 
   if (normalizedRole === 'student') {
+    if (!studentIdValue) {
+      throw createHttpError(400, 'Student ID is required when role is student.');
+    }
     if (generationValue && !['2026', '2027'].includes(generationValue)) {
       throw createHttpError(400, 'Generation must be 2026 or 2027 when provided.');
     }
@@ -446,6 +462,7 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     hashedPassword: artifacts.hashedTempPassword,
     role: normalizedInvite.role,
     classValue: artifacts.classForUser,
+    studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
     gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
     queryExecutor
   });
@@ -555,8 +572,21 @@ const validateBulkInviteRows = async (rows, options = {}) => {
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM users");
-    res.json(rows);
+    try {
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        ORDER BY u.created_at DESC
+      `);
+      return res.json(rows);
+    } catch (_err) {
+      // Backward-compatible fallback when migrations/tables are not yet applied.
+      const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
+      return res.json(rows);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database Error" });
@@ -566,11 +596,26 @@ const getAllUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+    try {
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        WHERE u.id = ?
+      `, [req.params.id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      return res.json(rows[0]);
+    } catch (_err) {
+      const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      return res.json(rows[0]);
     }
-    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -579,13 +624,17 @@ const getUserById = async (req, res) => {
 
 // Create new user
 const createUser = async (req, res) => {
-  const { name, gender, email, password, role, class_name } = req.body;
+  const { name, gender, email, password, role, class_name, student_id } = req.body;
 
   try {
     const normalizedRole = normalizeRole(role);
+    const normalizedStudentId = (student_id || '').toString().trim();
 
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
+    }
+    if (normalizedRole === 'student' && !normalizedStudentId) {
+      return res.status(400).json({ error: "student_id is required when role is student." });
     }
 
     // Hash password before storing
@@ -602,6 +651,7 @@ const createUser = async (req, res) => {
       hashedPassword,
       role: normalizedRole,
       classValue: class_name || null,
+      studentIdValue: normalizedStudentId || null,
       gender
     });
 
@@ -617,16 +667,20 @@ const createUser = async (req, res) => {
 
 // Update user
 const updateUser = async (req, res) => {
-  const { name, email, role, class_name } = req.body;
+  const { name, email, role, class_name, student_id } = req.body;
   
   try {
     const normalizedRole = normalizeRole(role);
+    const normalizedStudentId = (student_id || '').toString().trim();
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
     }
+    if (normalizedRole === 'student' && !normalizedStudentId) {
+      return res.status(400).json({ error: "student_id is required when role is student." });
+    }
 
-    const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ? WHERE id = ?";
-    await db.query(sql, [name, email, normalizedRole, class_name || null, req.params.id]);
+    const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ?, student_id = ? WHERE id = ?";
+    await db.query(sql, [name, email, normalizedRole, class_name || null, normalizedStudentId || null, req.params.id]);
     res.json({ message: "User updated successfully" });
   } catch (err) {
     console.error(err);
@@ -936,6 +990,7 @@ const completeInviteRegistration = async (req, res) => {
         hashedPassword,
         role,
         classValue,
+        studentIdValue: role === 'student' ? payload.studentId || null : null,
         gender: payload.gender
       });
     } else {
@@ -945,6 +1000,7 @@ const completeInviteRegistration = async (req, res) => {
         hashedPassword,
         role,
         classValue,
+        studentIdValue: role === 'student' ? payload.studentId || null : null,
         gender: payload.gender
       });
       userId = result.insertId;
@@ -987,6 +1043,13 @@ const loginUser = async (req, res) => {
     const normalizedRole = normalizeRole(user.role);
     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
 
+    if (Number(user.is_deleted) === 1) {
+      return res.status(403).json({ error: "This account has been deleted." });
+    }
+    if (Number(user.is_active) === 0) {
+      return res.status(403).json({ error: "This account is disabled." });
+    }
+
     const passwordMatches = isBcryptHash
       ? await bcrypt.compare(password, user.password)
       : user.password === password;
@@ -1012,6 +1075,7 @@ const loginUser = async (req, res) => {
         email: user.email,
         role: normalizedRole,
         class: user.class,
+        student_id: user.student_id || null,
         created_at: user.created_at,
         updated_at: user.updated_at
       },
@@ -1023,14 +1087,74 @@ const loginUser = async (req, res) => {
   }
 };
 
-// Delete user
-const deleteUser = async (req, res) => {
+// Enable/disable user account
+const setUserActive = async (req, res) => {
+  const { is_active } = req.body || {};
+  if (typeof is_active === 'undefined') {
+    return res.status(400).json({ error: "is_active is required." });
+  }
+
   try {
-    await db.query("DELETE FROM users WHERE id = ?", [req.params.id]);
-    res.json({ message: "User deleted successfully" });
+    const [result] = await db.query(
+      "UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+      [is_active ? 1 : 0, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found or already deleted." });
+    }
+
+    return res.json({ message: is_active ? "User enabled successfully." : "User disabled successfully." });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message || "Failed to update user status." });
+  }
+};
+
+// Delete user
+const deleteUser = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  try {
+    const [result] = await db.query(
+      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      const [existing] = await db.query("SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1", [userId]);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: "User not found." });
+      }
+      return res.status(409).json({ error: "User is already deleted." });
+    }
+
+    return res.json({ message: "User deleted (archived) successfully." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to delete user." });
+  }
+};
+
+// Delete all users (soft delete/archive)
+const deleteAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query(
+      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE is_deleted IS NULL OR is_deleted = 0"
+    );
+
+    return res.json({
+      message: result.affectedRows === 0
+        ? "No active users to delete."
+        : `${result.affectedRows} users deleted (archived) successfully.`,
+      affectedRows: result.affectedRows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to delete users." });
   }
 };
 
@@ -1040,6 +1164,8 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  deleteAllUsers,
+  setUserActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,

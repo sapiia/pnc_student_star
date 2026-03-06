@@ -7,6 +7,8 @@ const {
   createUser,
   updateUser,
   deleteUser,
+  deleteAllUsers,
+  setUserActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,
@@ -52,6 +54,12 @@ router.post('/invite/complete', completeInviteRegistration);
 
 // PUT /api/users/:id - Update user
 router.put('/:id', updateUser);
+
+// PATCH /api/users/:id/active - Enable/disable user
+router.patch('/:id/active', setUserActive);
+
+// DELETE /api/users - Delete all users
+router.delete('/', deleteAllUsers);
 
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', deleteUser);

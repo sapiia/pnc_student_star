@@ -210,6 +210,10 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `role` enum('student','teacher','admin') NOT NULL DEFAULT 'student',
   `class` varchar(100) DEFAULT NULL,
+  `student_id` varchar(50) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `deleted_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -218,22 +222,22 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `first_name`, `last_name`, `email`, `password`, `role`, `class`, `created_at`, `updated_at`) VALUES
-(3, 'Sarah', 'Johnson', 'sarah.johnson@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:00:00', '2026-01-15 02:00:00'),
-(4, 'Michael', 'Brown', 'michael.brown@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, '2026-01-15 02:30:00', '2026-01-15 02:30:00'),
-(5, 'Emily', 'Davis', 'emily.davis@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:00:00', '2026-01-20 03:00:00'),
-(6, 'James', 'Wilson', 'james.wilson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-01-20 03:15:00', '2026-01-20 03:15:00'),
-(7, 'Lisa', 'Anderson', 'lisa.anderson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:30:00', '2026-01-20 03:30:00'),
-(8, 'David', 'Martinez', 'david.martinez@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
-(9, 'Jennifer', 'Lee', 'jennifer.lee@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
-(10, 'Robert', 'Taylor', 'robert.taylor@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
-(11, 'John', 'Doe', 'john@example.com', 'password123', 'student', 'A', '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
-(12, 'idk', NULL, 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
-(13, 'Sophy', NULL, 'sophy@gmail.com', 'password', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(14, 'Him', NULL, 'him@gmail.com', 'password', 'teacher', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(15, 'San', NULL, 'san@gmail.com', 'password', 'student', '10-A', '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(16, 'Moeurn', 'Sophy', 'moeurnsophy55@gmail.com', 'password', 'admin', NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
-(17, 'Moeurn', 'Sophy', 'moeurnsophy92@gmail.com', 'password', 'admin', NULL, '2026-03-04 00:00:00', '2026-03-04 00:00:00');
+INSERT INTO `users` (`id`, `first_name`, `last_name`, `email`, `password`, `role`, `class`, `student_id`, `is_active`, `is_deleted`, `deleted_at`, `created_at`, `updated_at`) VALUES
+(3, 'Sarah', 'Johnson', 'sarah.johnson@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, NULL, 1, 0, NULL, '2026-01-15 02:00:00', '2026-01-15 02:00:00'),
+(4, 'Michael', 'Brown', 'michael.brown@school.edu', '$2y$10$YourHashedPasswordHere', 'teacher', NULL, NULL, 1, 0, NULL, '2026-01-15 02:30:00', '2026-01-15 02:30:00'),
+(5, 'Emily', 'Davis', 'emily.davis@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-005', 1, 0, NULL, '2026-01-20 03:00:00', '2026-01-20 03:00:00'),
+(6, 'James', 'Wilson', 'james.wilson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-A', '2026-006', 1, 0, NULL, '2026-01-20 03:15:00', '2026-01-20 03:15:00'),
+(7, 'Lisa', 'Anderson', 'lisa.anderson@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-007', 1, 0, NULL, '2026-01-20 03:30:00', '2026-01-20 03:30:00'),
+(8, 'David', 'Martinez', 'david.martinez@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '10-B', '2026-008', 1, 0, NULL, '2026-01-20 03:45:00', '2026-01-20 03:45:00'),
+(9, 'Jennifer', 'Lee', 'jennifer.lee@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-009', 1, 0, NULL, '2026-01-20 04:00:00', '2026-01-20 04:00:00'),
+(10, 'Robert', 'Taylor', 'robert.taylor@student.school.edu', '$2y$10$YourHashedPasswordHere', 'student', '11-A', '2026-010', 1, 0, NULL, '2026-01-20 04:15:00', '2026-01-20 04:15:00'),
+(11, 'John', 'Doe', 'john@example.com', 'password123', 'student', 'A', '2026-011', 1, 0, NULL, '2026-02-25 03:40:17', '2026-02-25 03:40:17'),
+(12, 'idk', NULL, 'idk@example.com', '$2b$10$3jUoMglRvD1OrhsVRdd35.ohHzk2oF7tN3kpFHugc7/rq9RuXTdV2', 'teacher', 'Web A', NULL, 1, 0, NULL, '2026-02-25 04:08:43', '2026-02-25 04:08:43'),
+(13, 'Sophy', NULL, 'sophy@gmail.com', 'password', 'admin', NULL, NULL, 1, 0, NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(14, 'Him', NULL, 'him@gmail.com', 'password', 'teacher', NULL, NULL, 1, 0, NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(15, 'San', NULL, 'san@gmail.com', 'password', 'student', '10-A', '2026-015', 1, 0, NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(16, 'Moeurn', 'Sophy', 'moeurnsophy55@gmail.com', 'password', 'admin', NULL, NULL, 1, 0, NULL, '2026-03-03 00:00:00', '2026-03-03 00:00:00'),
+(17, 'Moeurn', 'Sophy', 'moeurnsophy92@gmail.com', 'password', 'admin', NULL, NULL, 1, 0, NULL, '2026-03-04 00:00:00', '2026-03-04 00:00:00');
 
 -- --------------------------------------------------------
 
@@ -353,7 +357,9 @@ ALTER TABLE `teachers`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `email` (`email`);
+  ADD UNIQUE KEY `email` (`email`),
+  ADD UNIQUE KEY `uq_users_student_id` (`student_id`),
+  ADD KEY `idx_users_active_deleted` (`is_active`,`is_deleted`);
 
 --
 -- AUTO_INCREMENT for dumped tables
