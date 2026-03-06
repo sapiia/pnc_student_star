@@ -61,6 +61,8 @@ export default function DashboardPage() {
   // Mocking the next evaluation date (3 months cycle)
   const [daysLeft, setDaysLeft] = useState(82); 
   const [showUrgentNotification, setShowUrgentNotification] = useState(false);
+  const [studentName, setStudentName] = useState('Student');
+  const [studentId, setStudentId] = useState('');
 
   // For demo purposes, let's allow toggling the urgent state
   const toggleUrgent = () => {
@@ -74,6 +76,41 @@ export default function DashboardPage() {
       setShowUrgentNotification(false);
     }
   }, [daysLeft]);
+
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadIdentity = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+
+        const localName = String(authUser?.name || '').trim();
+        const localStudentId = String(authUser?.student_id || '').trim();
+        if (localName) setStudentName(localName);
+        if (localStudentId) setStudentId(localStudentId);
+
+        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+        const data = await response.json();
+        if (!response.ok) return;
+
+        const resolvedName =
+          String(data?.name || '').trim() ||
+          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+          localName ||
+          'Student';
+        const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || localStudentId || '').trim();
+
+        setStudentName(resolvedName);
+        setStudentId(resolvedStudentId);
+      } catch {
+        // no-op fallback
+      }
+    };
+    loadIdentity();
+  }, []);
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
@@ -106,16 +143,21 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <button 
               onClick={toggleUrgent}
+              title="Toggle urgent notification demo"
               className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors"
             >
               Demo: Toggle Urgent
             </button>
-            <button className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600">
+            <button 
+              title="Notifications"
+              className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600"
+            >
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
             <button 
               onClick={() => navigate('/help')}
+              title="Help Center"
               className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-600"
             >
               <HelpCircle className="w-5 h-5" />
@@ -159,7 +201,10 @@ export default function DashboardPage() {
             >
               <div className="flex flex-col md:flex-row items-center h-full">
                 <div className="p-8 flex-1">
-                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Hello, Sokha! Ready for your Q1 2024 Evaluation?</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Hello, {studentName}! Ready for your Q1 2024 Evaluation?</h2>
+                  {studentId && (
+                    <p className="text-xs font-bold text-slate-500 mb-2">Student ID: {studentId}</p>
+                  )}
                   <p className="text-slate-600 mb-6 max-w-xl">Track your progress across 8 key areas of development. Regular self-reflection helps you stay focused on your personal and professional growth goals.</p>
                   <button 
                     onClick={() => navigate('/evaluate')}

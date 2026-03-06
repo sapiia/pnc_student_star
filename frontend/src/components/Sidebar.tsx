@@ -29,6 +29,9 @@ export default function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [profileName, setProfileName] = useState('Student');
+  const [studentId, setStudentId] = useState<string>('');
+  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(
     location.pathname === '/profile' || 
     location.pathname === '/help' || 
@@ -41,6 +44,80 @@ export default function Sidebar({ className }: SidebarProps) {
       setIsSettingsExpanded(true);
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadProfileIdentity = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+
+        if (authUser?.name) {
+          setProfileName(String(authUser.name));
+        }
+        if (authUser?.student_id) {
+          setStudentId(String(authUser.student_id));
+        }
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) {
+            setProfilePhoto(savedPhoto);
+          }
+        }
+
+        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+        const data = await response.json();
+        if (!response.ok) return;
+
+        const resolvedName =
+          String(data?.name || '').trim() ||
+          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+          String(authUser?.name || 'Student');
+        const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || authUser?.student_id || '').trim();
+        const resolvedPhoto = String(data?.profile_image || authUser?.profile_image || '').trim();
+
+        setProfileName(resolvedName);
+        setStudentId(resolvedStudentId);
+        if (resolvedPhoto) {
+          setProfilePhoto(resolvedPhoto);
+        }
+      } catch {
+        // silent fallback to local storage values
+      }
+    };
+
+    loadProfileIdentity();
+  }, []);
+
+  useEffect(() => {
+    const refreshPhoto = () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) {
+            setProfilePhoto(savedPhoto);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('profile-photo-updated', refreshPhoto);
+    return () => window.removeEventListener('profile-photo-updated', refreshPhoto);
+  }, []);
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -224,12 +301,12 @@ export default function Sidebar({ className }: SidebarProps) {
             onClick={() => navigate('/profile')}
           >
             <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
-              <img alt="Alex Johnson" src="https://picsum.photos/seed/alex/100/100" />
+              <img alt={profileName} src={profilePhoto} />
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-black text-slate-900 truncate">Alex Johnson</p>
-                <p className="text-[10px] text-slate-500 font-bold truncate">Grade 11 Student</p>
+                <p className="text-xs font-black text-slate-900 truncate">{profileName}</p>
+                <p className="text-[10px] text-slate-500 font-bold truncate">{studentId ? `Student ID: ${studentId}` : 'Student'}</p>
               </div>
             )}
             {isCollapsed && (

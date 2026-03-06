@@ -13,7 +13,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 
 interface AdminSidebarProps {
@@ -24,6 +24,8 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [profileName, setProfileName] = useState('Administrator');
+  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/admin/100/100');
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
@@ -33,6 +35,74 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];
+
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadProfileIdentity = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+
+        if (authUser?.name) setProfileName(String(authUser.name));
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) setProfilePhoto(savedPhoto);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+        const data = await response.json();
+        if (!response.ok) return;
+
+        const resolvedName =
+          String(data?.name || '').trim() ||
+          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+          String(authUser?.name || 'Administrator');
+        const resolvedPhoto = String(data?.profile_image || authUser?.profile_image || '').trim();
+
+        setProfileName(resolvedName);
+        if (resolvedPhoto) setProfilePhoto(resolvedPhoto);
+      } catch {
+        // silent fallback to local storage values
+      }
+    };
+
+    loadProfileIdentity();
+  }, []);
+
+  useEffect(() => {
+    const refreshIdentity = () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+        if (authUser?.name) {
+          setProfileName(String(authUser.name));
+        }
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) setProfilePhoto(savedPhoto);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('profile-photo-updated', refreshIdentity);
+    window.addEventListener('profile-updated', refreshIdentity);
+    return () => {
+      window.removeEventListener('profile-photo-updated', refreshIdentity);
+      window.removeEventListener('profile-updated', refreshIdentity);
+    };
+  }, []);
 
   return (
     <motion.aside 
@@ -127,11 +197,11 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
             onClick={() => navigate('/admin/settings')}
           >
             <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
-              <img alt="Alex Rivera" src="https://picsum.photos/seed/admin/100/100" />
+              <img alt={profileName} src={profilePhoto} />
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-black text-slate-900 truncate">Alex Rivera</p>
+                <p className="text-xs font-black text-slate-900 truncate">{profileName}</p>
                 <p className="text-[10px] text-slate-500 font-bold truncate">System Admin</p>
               </div>
             )}

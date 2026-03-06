@@ -24,9 +24,57 @@ const splitFullName = (fullName = '') => {
   };
 };
 
+const getDisplayNameFromUserRow = (row = {}) => {
+  const fullName = (row.name || '').toString().trim();
+  if (fullName) return fullName;
+  return [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
+};
+
 const getUsersTableColumns = async () => {
   const [rows] = await db.query("SHOW COLUMNS FROM users");
   return new Set(rows.map((row) => row.Field));
+};
+
+const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
+  const hasIsDisable = columns.has('is_disable');
+  const hasIsActive = columns.has('is_active');
+  const hasIsDeleted = columns.has('is_deleted');
+  const hasIsRegistered = columns.has('is_registered');
+
+  const isDisabled = hasIsDisable
+    ? Number(userRow.is_disable || 0) === 1
+    : hasIsActive
+      ? Number(userRow.is_active ?? 1) === 0
+      : false;
+
+  const isDeleted = hasIsDeleted ? Number(userRow.is_deleted || 0) === 1 : false;
+
+  const isRegistered = hasIsRegistered
+    ? Number(userRow.is_registered || 0) === 1
+    : (() => {
+        const createdAt = userRow.created_at ? new Date(userRow.created_at).getTime() : NaN;
+        const updatedAt = userRow.updated_at ? new Date(userRow.updated_at).getTime() : NaN;
+        if (Number.isNaN(createdAt) || Number.isNaN(updatedAt)) return true;
+        // Fallback heuristic: unchanged row after invite likely means registration not completed yet.
+        return updatedAt - createdAt > 1000;
+      })();
+
+  const accountStatus = isDeleted
+    ? 'deleted'
+    : !isRegistered
+      ? 'pending'
+      : isDisabled
+        ? 'inactive'
+        : 'active';
+
+  return {
+    ...userRow,
+    is_disable: isDisabled ? 1 : 0,
+    is_deleted: isDeleted ? 1 : 0,
+    is_registered: isRegistered ? 1 : 0,
+    account_status: accountStatus,
+    registration_status: isRegistered ? 'registered' : 'pending'
+  };
 };
 
 const insertUserFlexible = async ({
@@ -37,6 +85,7 @@ const insertUserFlexible = async ({
   classValue,
   studentIdValue,
   gender,
+  isRegistered,
   queryExecutor = db
 }) => {
   const columns = await getUsersTableColumns();
@@ -84,6 +133,12 @@ const insertUserFlexible = async ({
     placeholders.push('?');
   }
 
+  if (columns.has('is_registered') && typeof isRegistered !== 'undefined') {
+    insertColumns.push('is_registered');
+    insertValues.push(isRegistered ? 1 : 0);
+    placeholders.push('?');
+  }
+
   const sql = `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`;
   const [result] = await queryExecutor.query(sql, insertValues);
   return result;
@@ -96,7 +151,8 @@ const updateUserFlexibleById = async ({
   role,
   classValue,
   studentIdValue,
-  gender
+  gender,
+  isRegistered
 }) => {
   const columns = await getUsersTableColumns();
   const updates = [];
@@ -133,6 +189,11 @@ const updateUserFlexibleById = async ({
   if (columns.has('student_id')) {
     updates.push('student_id = ?');
     values.push(studentIdValue || null);
+  }
+
+  if (columns.has('is_registered') && typeof isRegistered !== 'undefined') {
+    updates.push('is_registered = ?');
+    values.push(isRegistered ? 1 : 0);
   }
 
   if (updates.length === 0) {
@@ -464,6 +525,7 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     classValue: artifacts.classForUser,
     studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
     gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
+    isRegistered: false,
     queryExecutor
   });
 
@@ -572,6 +634,7 @@ const validateBulkInviteRows = async (rows, options = {}) => {
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
+    const columns = await getUsersTableColumns();
     try {
       const [rows] = await db.query(`
         SELECT
@@ -581,11 +644,11 @@ const getAllUsers = async (req, res) => {
         LEFT JOIN students s ON s.user_id = u.id
         ORDER BY u.created_at DESC
       `);
-      return res.json(rows);
+      return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
     } catch (_err) {
       // Backward-compatible fallback when migrations/tables are not yet applied.
       const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
-      return res.json(rows);
+      return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
     }
   } catch (err) {
     console.error(err);
@@ -596,6 +659,7 @@ const getAllUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
+    const columns = await getUsersTableColumns();
     try {
       const [rows] = await db.query(`
         SELECT
@@ -608,13 +672,13 @@ const getUserById = async (req, res) => {
       if (rows.length === 0) {
         return res.status(404).json({ message: "User not found" });
       }
-      return res.json(rows[0]);
+      return res.json(normalizeUserStatusForResponse(rows[0], columns));
     } catch (_err) {
       const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
       if (rows.length === 0) {
         return res.status(404).json({ message: "User not found" });
       }
-      return res.json(rows[0]);
+      return res.json(normalizeUserStatusForResponse(rows[0], columns));
     }
   } catch (err) {
     console.error(err);
@@ -652,7 +716,8 @@ const createUser = async (req, res) => {
       role: normalizedRole,
       classValue: class_name || null,
       studentIdValue: normalizedStudentId || null,
-      gender
+      gender,
+      isRegistered: true
     });
 
     res.status(201).json({ 
@@ -991,7 +1056,8 @@ const completeInviteRegistration = async (req, res) => {
         role,
         classValue,
         studentIdValue: role === 'student' ? payload.studentId || null : null,
-        gender: payload.gender
+        gender: payload.gender,
+        isRegistered: true
       });
     } else {
       const result = await insertUserFlexible({
@@ -1001,7 +1067,8 @@ const completeInviteRegistration = async (req, res) => {
         role,
         classValue,
         studentIdValue: role === 'student' ? payload.studentId || null : null,
-        gender: payload.gender
+        gender: payload.gender,
+        isRegistered: true
       });
       userId = result.insertId;
     }
@@ -1023,6 +1090,297 @@ const completeInviteRegistration = async (req, res) => {
   }
 };
 
+// Get profile for a specific user
+const getUserProfile = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    const hasStudentId = columns.has('student_id');
+    const hasClass = columns.has('class');
+    const [rows] = await db.query(`
+      SELECT
+        u.*,
+        COALESCE(NULLIF(u.student_id, ''), st.student_no) AS resolved_student_id,
+        s.value AS department
+      FROM users u
+      LEFT JOIN students st ON st.user_id = u.id
+      LEFT JOIN settings s ON s.key = CONCAT('profile_department_', u.id)
+      WHERE u.id = ?
+      LIMIT 1
+    `, [userId]);
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const user = rows[0];
+    return res.json({
+      id: user.id,
+      name: getDisplayNameFromUserRow(user) || user.email,
+      first_name: (user.first_name || '').toString().trim() || null,
+      last_name: (user.last_name || '').toString().trim() || null,
+      email: user.email,
+      profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+      role: normalizeRole(user.role),
+      department: (user.department || '').toString().trim(),
+      student_id: hasStudentId ? ((user.student_id || user.resolved_student_id || '') || null) : null,
+      class: hasClass ? (user.class || null) : null,
+      is_active: Number(user.is_active ?? 1),
+      is_deleted: Number(user.is_deleted ?? 0),
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to load profile." });
+  }
+};
+
+// Update profile for a specific user
+const updateUserProfile = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  const email = (req.body.email || '').toString().trim().toLowerCase();
+  const firstNameInput = (req.body.first_name || '').toString().trim();
+  const lastNameInput = (req.body.last_name || '').toString().trim();
+  const fullNameInput = (req.body.name || '').toString().trim();
+  const fullName = fullNameInput || `${firstNameInput} ${lastNameInput}`.trim();
+  const hasProfileImageInput = typeof req.body.profile_image !== 'undefined';
+  const profileImageInput = hasProfileImageInput
+    ? (req.body.profile_image || '').toString().trim()
+    : null;
+  const department = (req.body.department || '').toString().trim();
+
+  if (!fullName) {
+    return res.status(400).json({ error: "First name is required." });
+  }
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Invalid email format." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const existingUserSql = hasIsDeleted
+      ? "SELECT id, role, is_deleted FROM users WHERE id = ? LIMIT 1"
+      : "SELECT id, role FROM users WHERE id = ? LIMIT 1";
+    const [existingUserRows] = await db.query(existingUserSql, [userId]);
+    if (!existingUserRows.length) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    if (hasIsDeleted && Number(existingUserRows[0].is_deleted) === 1) {
+      return res.status(409).json({ error: "Cannot update a deleted user." });
+    }
+
+    const [emailRows] = await db.query("SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1", [email, userId]);
+    if (emailRows.length > 0) {
+      return res.status(409).json({ error: "Email is already in use by another account." });
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (columns.has('name')) {
+      updates.push('name = ?');
+      values.push(fullName);
+    } else {
+      const fallback = splitFullName(fullName);
+      const firstName = firstNameInput || fallback.firstName;
+      const lastName = typeof req.body.last_name !== 'undefined' ? lastNameInput : fallback.lastName;
+      if (columns.has('first_name')) {
+        updates.push('first_name = ?');
+        values.push(firstName || fullName);
+      }
+      if (columns.has('last_name')) {
+        updates.push('last_name = ?');
+        values.push(lastName || null);
+      }
+    }
+
+    updates.push('email = ?', 'updated_at = CURRENT_TIMESTAMP()');
+    values.push(email);
+
+    if (columns.has('profile_image') && hasProfileImageInput) {
+      updates.push('profile_image = ?');
+      values.push(profileImageInput || null);
+    }
+
+    values.push(userId);
+
+    await db.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values);
+
+    const departmentKey = `profile_department_${userId}`;
+    if (department) {
+      await db.query(
+        "INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), updated_at = CURRENT_TIMESTAMP()",
+        [departmentKey, department]
+      );
+    } else {
+      await db.query("DELETE FROM settings WHERE `key` = ?", [departmentKey]);
+    }
+
+    const [rows] = await db.query(`
+      SELECT
+        u.*,
+        COALESCE(NULLIF(u.student_id, ''), st.student_no) AS resolved_student_id,
+        s.value AS department
+      FROM users u
+      LEFT JOIN students st ON st.user_id = u.id
+      LEFT JOIN settings s ON s.key = CONCAT('profile_department_', u.id)
+      WHERE u.id = ?
+      LIMIT 1
+    `, [userId]);
+    const user = rows[0];
+
+    return res.json({
+      message: "Profile updated successfully.",
+      user: {
+        id: user.id,
+        name: getDisplayNameFromUserRow(user) || user.email,
+        first_name: (user.first_name || '').toString().trim() || null,
+        last_name: (user.last_name || '').toString().trim() || null,
+        email: user.email,
+        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        role: normalizeRole(user.role),
+        department: (user.department || '').toString().trim(),
+        student_id: columns.has('student_id') ? ((user.student_id || user.resolved_student_id || '') || null) : null,
+        class: columns.has('class') ? (user.class || null) : null,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update profile." });
+  }
+};
+
+// Update profile image for a specific user
+const updateUserProfileImage = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: "Image file is required." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    if (!columns.has('profile_image')) {
+      return res.status(400).json({ error: "Column profile_image does not exist in users table." });
+    }
+
+    const hasIsDeleted = columns.has('is_deleted');
+    const userCheckSql = hasIsDeleted
+      ? "SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1"
+      : "SELECT id FROM users WHERE id = ? LIMIT 1";
+    const [existingRows] = await db.query(userCheckSql, [userId]);
+    if (!existingRows.length) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    if (hasIsDeleted && Number(existingRows[0].is_deleted || 0) === 1) {
+      return res.status(409).json({ error: "Cannot update profile image for a deleted user." });
+    }
+
+    const relativePath = `/uploads/profiles/${req.file.filename}`;
+    const publicUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
+
+    await db.query(
+      "UPDATE users SET profile_image = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
+      [publicUrl, userId]
+    );
+
+    const [rows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
+    const user = rows[0];
+
+    return res.json({
+      message: "Profile image updated successfully.",
+      user: {
+        id: user.id,
+        name: getDisplayNameFromUserRow(user) || user.email,
+        email: user.email,
+        role: normalizeRole(user.role),
+        profile_image: (user.profile_image || '').toString().trim() || null,
+        student_id: columns.has('student_id') ? (user.student_id || null) : null,
+        updated_at: user.updated_at
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update profile image." });
+  }
+};
+
+// Change password for a specific user
+const changeUserPassword = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  const currentPassword = (req.body.current_password || '').toString();
+  const newPassword = (req.body.new_password || '').toString();
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Current password and new password are required." });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "New password must be at least 6 characters." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const userPasswordSql = hasIsDeleted
+      ? "SELECT id, password, is_deleted FROM users WHERE id = ? LIMIT 1"
+      : "SELECT id, password FROM users WHERE id = ? LIMIT 1";
+    const [rows] = await db.query(userPasswordSql, [userId]);
+    if (!rows.length) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const user = rows[0];
+    if (hasIsDeleted && Number(user.is_deleted) === 1) {
+      return res.status(409).json({ error: "Cannot update password for a deleted user." });
+    }
+
+    const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
+    const currentMatches = isBcryptHash
+      ? await bcrypt.compare(currentPassword, user.password)
+      : user.password === currentPassword;
+
+    if (!currentMatches) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "New password must be different from current password." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    await db.query(
+      "UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
+      [hashedPassword, userId]
+    );
+
+    return res.json({ message: "Password changed successfully." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to change password." });
+  }
+};
+
 // Login user and provide role-based redirect path
 const loginUser = async (req, res) => {
   const email = (req.body.email || '').toString().trim().toLowerCase();
@@ -1033,6 +1391,10 @@ const loginUser = async (req, res) => {
   }
 
   try {
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsDisable = columns.has('is_disable');
+    const hasIsActive = columns.has('is_active');
     const [rows] = await db.query("SELECT * FROM users WHERE email = ? LIMIT 1", [email]);
 
     if (rows.length === 0) {
@@ -1043,10 +1405,15 @@ const loginUser = async (req, res) => {
     const normalizedRole = normalizeRole(user.role);
     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
 
-    if (Number(user.is_deleted) === 1) {
+    if (hasIsDeleted && Number(user.is_deleted) === 1) {
       return res.status(403).json({ error: "This account has been deleted." });
     }
-    if (Number(user.is_active) === 0) {
+    const isDisabled = hasIsDisable
+      ? Number(user.is_disable || 0) === 1
+      : hasIsActive
+        ? Number(user.is_active ?? 1) === 0
+        : false;
+    if (isDisabled) {
       return res.status(403).json({ error: "This account is disabled." });
     }
 
@@ -1073,6 +1440,7 @@ const loginUser = async (req, res) => {
         id: user.id,
         name: resolvedName,
         email: user.email,
+        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
         role: normalizedRole,
         class: user.class,
         student_id: user.student_id || null,
@@ -1095,13 +1463,34 @@ const setUserActive = async (req, res) => {
   }
 
   try {
-    const [result] = await db.query(
-      "UPDATE users SET is_active = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
-      [is_active ? 1 : 0, req.params.id]
-    );
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsDisable = columns.has('is_disable');
+    const hasIsActive = columns.has('is_active');
+    const setClauses = [];
+    const values = [];
+
+    if (hasIsActive) {
+      setClauses.push('is_active = ?');
+      values.push(is_active ? 1 : 0);
+    }
+    if (hasIsDisable) {
+      setClauses.push('is_disable = ?');
+      values.push(is_active ? 0 : 1);
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP()');
+    let sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
+    values.push(req.params.id);
+
+    if (hasIsDeleted) {
+      sql += ' AND (is_deleted IS NULL OR is_deleted = 0)';
+    }
+
+    const [result] = await db.query(sql, values);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "User not found or already deleted." });
+      return res.status(404).json({ error: hasIsDeleted ? "User not found or already deleted." : "User not found." });
     }
 
     return res.json({ message: is_active ? "User enabled successfully." : "User disabled successfully." });
@@ -1119,17 +1508,48 @@ const deleteUser = async (req, res) => {
   }
 
   try {
-    const [result] = await db.query(
-      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
-      [userId]
-    );
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsActive = columns.has('is_active');
+    const hasIsDisable = columns.has('is_disable');
+    const hasDeletedAt = columns.has('deleted_at');
+
+    const setClauses = [];
+    const values = [];
+    if (hasIsDeleted) {
+      setClauses.push('is_deleted = 1');
+    }
+    if (hasIsActive) {
+      setClauses.push('is_active = 0');
+    }
+    if (hasIsDisable) {
+      setClauses.push('is_disable = 1');
+    }
+    if (hasDeletedAt) {
+      setClauses.push('deleted_at = CURRENT_TIMESTAMP()');
+    }
+    setClauses.push('updated_at = CURRENT_TIMESTAMP()');
+
+    let sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
+    values.push(userId);
+    if (hasIsDeleted) {
+      sql += ' AND (is_deleted IS NULL OR is_deleted = 0)';
+    }
+
+    const [result] = await db.query(sql, values);
 
     if (result.affectedRows === 0) {
-      const [existing] = await db.query("SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1", [userId]);
+      const [existing] = await db.query(
+        hasIsDeleted ? "SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1" : "SELECT id FROM users WHERE id = ? LIMIT 1",
+        [userId]
+      );
       if (existing.length === 0) {
         return res.status(404).json({ error: "User not found." });
       }
-      return res.status(409).json({ error: "User is already deleted." });
+      if (hasIsDeleted) {
+        return res.status(409).json({ error: "User is already deleted." });
+      }
+      return res.status(409).json({ error: "User is already disabled." });
     }
 
     return res.json({ message: "User deleted (archived) successfully." });
@@ -1142,9 +1562,35 @@ const deleteUser = async (req, res) => {
 // Delete all users (soft delete/archive)
 const deleteAllUsers = async (req, res) => {
   try {
-    const [result] = await db.query(
-      "UPDATE users SET is_deleted = 1, is_active = 0, deleted_at = CURRENT_TIMESTAMP(), updated_at = CURRENT_TIMESTAMP() WHERE is_deleted IS NULL OR is_deleted = 0"
-    );
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsActive = columns.has('is_active');
+    const hasIsDisable = columns.has('is_disable');
+    const hasDeletedAt = columns.has('deleted_at');
+
+    const setClauses = [];
+    if (hasIsDeleted) {
+      setClauses.push('is_deleted = 1');
+    }
+    if (hasIsActive) {
+      setClauses.push('is_active = 0');
+    }
+    if (hasIsDisable) {
+      setClauses.push('is_disable = 1');
+    }
+    if (hasDeletedAt) {
+      setClauses.push('deleted_at = CURRENT_TIMESTAMP()');
+    }
+    setClauses.push('updated_at = CURRENT_TIMESTAMP()');
+
+    let sql = `UPDATE users SET ${setClauses.join(', ')}`;
+    if (hasIsDeleted) {
+      sql += ' WHERE is_deleted IS NULL OR is_deleted = 0';
+    } else if (hasIsDisable) {
+      sql += ' WHERE is_disable IS NULL OR is_disable = 0';
+    }
+
+    const [result] = await db.query(sql);
 
     return res.json({
       message: result.affectedRows === 0
@@ -1161,8 +1607,12 @@ const deleteAllUsers = async (req, res) => {
 module.exports = {
   getAllUsers,
   getUserById,
+  getUserProfile,
   createUser,
   updateUser,
+  updateUserProfile,
+  updateUserProfileImage,
+  changeUserPassword,
   deleteUser,
   deleteAllUsers,
   setUserActive,

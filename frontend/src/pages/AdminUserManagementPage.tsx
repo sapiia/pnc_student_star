@@ -15,7 +15,7 @@ import { cn } from '../lib/utils';
 import React, { useEffect, useState } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
-type UserStatus = 'Active' | 'Inactive' | 'Invited' | 'Deleted';
+type UserStatus = 'Active' | 'Inactive' | 'Pending' | 'Deleted';
 type StudentGeneration = '2026' | '2027';
 type Gender = 'male' | 'female';
 
@@ -28,6 +28,7 @@ type UserRecord = {
   status: UserStatus;
   initials: string;
   color: string;
+  profileImage?: string;
   studentId?: string;
   generation?: StudentGeneration;
   className?: string;
@@ -80,12 +81,17 @@ type ApiUser = {
   first_name?: string;
   last_name?: string;
   email: string;
+  profile_image?: string | null;
   role: string;
   class?: string | null;
   student_id?: string | null;
   resolved_student_id?: string | null;
   is_active?: number | boolean | null;
+  is_disable?: number | boolean | null;
   is_deleted?: number | boolean | null;
+  is_registered?: number | boolean | null;
+  account_status?: string;
+  registration_status?: string;
 };
 
 const defaultNewUser = {
@@ -131,8 +137,14 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
   ];
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
   const isDeleted = Number(apiUser.is_deleted || 0) === 1;
-  const isActive = Number(apiUser.is_active ?? 1) === 1;
-  const status: UserStatus = isDeleted ? 'Deleted' : isActive ? 'Active' : 'Inactive';
+  const isDisabled = typeof apiUser.is_disable !== 'undefined'
+    ? Number(apiUser.is_disable || 0) === 1
+    : Number(apiUser.is_active ?? 1) === 0;
+  const isPending = typeof apiUser.is_registered !== 'undefined'
+    ? Number(apiUser.is_registered || 0) === 0
+    : (apiUser.registration_status || '').toString().toLowerCase() === 'pending'
+      || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
+  const status: UserStatus = isDeleted ? 'Deleted' : isPending ? 'Pending' : isDisabled ? 'Inactive' : 'Active';
   const classText = (apiUser.class || '').toString().trim();
   const group = role === 'Student'
     ? (classText || 'Pending Class Assignment')
@@ -150,6 +162,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     status,
     initials,
     color: randomColor,
+    profileImage: String(apiUser.profile_image || '').trim() || undefined,
     studentId
   };
 };
@@ -292,7 +305,7 @@ export default function AdminUserManagementPage() {
         role: newUser.role,
         gender: newUser.gender,
         group,
-        status: 'Invited',
+        status: 'Pending',
         initials,
         color: randomColor,
         generation: newUser.role === 'Student' ? newUser.generation : undefined,
@@ -431,7 +444,7 @@ export default function AdminUserManagementPage() {
       email: invited.email,
       role: mappedRole,
       group,
-      status: 'Invited',
+      status: 'Pending',
       initials,
       color: randomColor,
       generation,
@@ -643,9 +656,15 @@ export default function AdminUserManagementPage() {
                     <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={cn("size-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0", user.color)}>
-                            {user.initials}
-                          </div>
+                          {user.profileImage ? (
+                            <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                              <img src={user.profileImage} alt={user.name} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={cn("size-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0", user.color)}>
+                              {user.initials}
+                            </div>
+                          )}
                           <div>
                             <p className="text-sm font-black text-slate-900">
                               {user.name}
@@ -676,7 +695,7 @@ export default function AdminUserManagementPage() {
                             ? "bg-emerald-50 text-emerald-600"
                             : user.status === 'Deleted'
                               ? "bg-rose-50 text-rose-600"
-                            : user.status === 'Invited'
+                            : user.status === 'Pending'
                               ? "bg-amber-50 text-amber-600"
                               : "bg-slate-100 text-slate-400"
                         )}>

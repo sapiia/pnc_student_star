@@ -12,7 +12,7 @@ import {
   Bell
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 
 interface TeacherSidebarProps {
@@ -23,6 +23,8 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [profileName, setProfileName] = useState('Teacher');
+  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/sarah/100/100');
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
@@ -32,6 +34,74 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
     { icon: BarChart3, label: 'Reports', path: '/teacher/reports' },
     { icon: Settings, label: 'Settings', path: '/teacher/settings' },
   ];
+
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadProfileIdentity = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+
+        if (authUser?.name) setProfileName(String(authUser.name));
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) setProfilePhoto(savedPhoto);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+        const data = await response.json();
+        if (!response.ok) return;
+
+        const resolvedName =
+          String(data?.name || '').trim() ||
+          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+          String(authUser?.name || 'Teacher');
+        const resolvedPhoto = String(data?.profile_image || authUser?.profile_image || '').trim();
+
+        setProfileName(resolvedName);
+        if (resolvedPhoto) setProfilePhoto(resolvedPhoto);
+      } catch {
+        // silent fallback to local storage values
+      }
+    };
+
+    loadProfileIdentity();
+  }, []);
+
+  useEffect(() => {
+    const refreshIdentity = () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+        if (authUser?.name) {
+          setProfileName(String(authUser.name));
+        }
+        if (authUser?.profile_image) {
+          setProfilePhoto(String(authUser.profile_image));
+        } else {
+          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
+          if (savedPhoto) setProfilePhoto(savedPhoto);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('profile-photo-updated', refreshIdentity);
+    window.addEventListener('profile-updated', refreshIdentity);
+    return () => {
+      window.removeEventListener('profile-photo-updated', refreshIdentity);
+      window.removeEventListener('profile-updated', refreshIdentity);
+    };
+  }, []);
 
   return (
     <motion.aside 
@@ -120,11 +190,11 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
             onClick={() => navigate('/teacher/settings')}
           >
             <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
-              <img alt="Ms. Sarah J." src="https://picsum.photos/seed/sarah/100/100" />
+              <img alt={profileName} src={profilePhoto} />
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-black text-slate-900 truncate">Ms. Sarah J.</p>
+                <p className="text-xs font-black text-slate-900 truncate">{profileName}</p>
                 <p className="text-[10px] text-slate-500 font-bold truncate">Lead Instructor</p>
               </div>
             )}
