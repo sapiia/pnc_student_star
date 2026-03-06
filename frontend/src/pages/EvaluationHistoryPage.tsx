@@ -1,19 +1,18 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Star, 
-  Search, 
-  Bell, 
-  ChevronDown, 
-  FileText, 
-  TrendingUp, 
-  CheckCircle2, 
-  Target, 
-  MessageSquare,
-  ArrowUpRight,
-  Settings
+import {
+  Bell,
+  CalendarDays,
+  ChevronDown,
+  FileText,
+  Search,
+  Settings,
+  Star,
+  TrendingUp,
+  Clock3
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { 
+import {
   ResponsiveContainer,
   Area,
   AreaChart,
@@ -25,37 +24,207 @@ import {
 import StarRating from '../components/StarRating';
 import Sidebar from '../components/Sidebar';
 
-const TREND_DATA = [
-  { name: 'Q2 2023', score: 3.5 },
-  { name: 'Q3 2023', score: 3.8 },
-  { name: 'Q4 2023', score: 4.0 },
-  { name: 'Q1 2024', score: 4.2 },
-];
+type EvaluationResponse = {
+  criterion_key: string;
+  criterion_name: string;
+  star_value: number;
+  reflection: string;
+};
 
-const EVALUATIONS = [
-  { id: '1', title: 'Q1 2024 Evaluation', date: 'Jan 1, 2024 - Mar 31, 2024', rating: 4.8 },
-  { id: '2', title: 'Q4 2023 Evaluation', date: 'Oct 1, 2023 - Dec 31, 2023', rating: 4.0 },
-  { id: '3', title: 'Q3 2023 Evaluation', date: 'Jul 1, 2023 - Sep 30, 2023', rating: 3.5 },
-  { id: '4', title: 'Q2 2023 Evaluation', date: 'Apr 1, 2023 - Jun 30, 2023', rating: 3.9 },
-];
+type EvaluationRecord = {
+  id: number;
+  user_id: number;
+  period: string;
+  rating_scale: number;
+  criteria_count: number;
+  average_score: number;
+  submitted_at: string;
+  created_at: string;
+  responses?: EvaluationResponse[];
+};
+
+type HistoryItem = {
+  id: number;
+  title: string;
+  period: string;
+  completedDate: string;
+  completedLabel: string;
+  nextDueDate: string;
+  nextDueLabel: string;
+  rating: number;
+  ratingScale: number;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+const formatLongDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+};
+
+const toPeriodTitle = (period: string) => {
+  const trimmed = String(period || '').trim();
+  const quarterMatch = trimmed.match(/^(\d{4})-Q([1-4])$/i);
+  if (quarterMatch) {
+    return `Q${quarterMatch[2]} ${quarterMatch[1]} Evaluation`;
+  }
+  return `${trimmed || 'Evaluation'} Evaluation`;
+};
+
+const buildNextDueDate = (submittedAt: string, cycleDays: number) => {
+  const date = new Date(submittedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setDate(date.getDate() + cycleDays);
+  return date.toISOString();
+};
 
 export default function EvaluationHistoryPage() {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'highest' | 'lowest' | 'title'>('recent');
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [cycleDays, setCycleDays] = useState(90);
+  const [isLoading, setIsLoading] = useState(true);
+  const [studentName, setStudentName] = useState('Student');
+  const [studentId, setStudentId] = useState('');
+
+  useEffect(() => {
+    const loadEvaluationHistory = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) {
+          setHistoryItems([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        const localName = String(authUser?.name || '').trim();
+        const localStudentId = String(authUser?.student_id || '').trim();
+
+        if (localName) setStudentName(localName);
+        if (localStudentId) setStudentId(localStudentId);
+
+        if (!Number.isInteger(userId) || userId <= 0) {
+          setHistoryItems([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const [userResponse, intervalResponse, evaluationsResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/users/${userId}`),
+          fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+          fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
+        ]);
+
+        const userData = await userResponse.json().catch(() => ({}));
+        const intervalData = await intervalResponse.json().catch(() => ({}));
+        const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
+
+        const resolvedName =
+          String(userData?.name || '').trim() ||
+          [userData?.first_name, userData?.last_name].filter(Boolean).join(' ').trim() ||
+          localName ||
+          'Student';
+        const resolvedStudentId = String(userData?.student_id || userData?.resolved_student_id || localStudentId || '').trim();
+        const resolvedCycleDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
+
+        setStudentName(resolvedName);
+        setStudentId(resolvedStudentId);
+        setCycleDays(resolvedCycleDays);
+
+        const normalizedHistory = (Array.isArray(evaluationsData) ? evaluationsData : [])
+          .map((evaluation: EvaluationRecord) => {
+            const completedDate = String(evaluation.submitted_at || evaluation.created_at || '').trim();
+            const nextDueDate = buildNextDueDate(completedDate, resolvedCycleDays);
+
+            return {
+              id: evaluation.id,
+              title: toPeriodTitle(evaluation.period),
+              period: String(evaluation.period || '').trim(),
+              completedDate,
+              completedLabel: formatLongDate(completedDate),
+              nextDueDate,
+              nextDueLabel: formatLongDate(nextDueDate),
+              rating: Number(evaluation.average_score || 0),
+              ratingScale: Math.max(1, Number(evaluation.rating_scale || 5)),
+            };
+          })
+          .sort((a, b) => new Date(b.completedDate).getTime() - new Date(a.completedDate).getTime());
+
+        setHistoryItems(normalizedHistory);
+      } catch {
+        setHistoryItems([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEvaluationHistory();
+  }, []);
+
+  const filteredHistoryItems = useMemo(() => {
+    const normalizedQuery = searchQuery.toLowerCase().trim();
+    const searchedItems = !normalizedQuery
+      ? historyItems
+      : historyItems.filter((item) =>
+          item.title.toLowerCase().includes(normalizedQuery) ||
+          item.period.toLowerCase().includes(normalizedQuery) ||
+          item.completedLabel.toLowerCase().includes(normalizedQuery)
+        );
+
+    const sortedItems = [...searchedItems];
+    sortedItems.sort((a, b) => {
+      if (sortBy === 'recent') {
+        return new Date(b.completedDate).getTime() - new Date(a.completedDate).getTime();
+      }
+      if (sortBy === 'oldest') {
+        return new Date(a.completedDate).getTime() - new Date(b.completedDate).getTime();
+      }
+      if (sortBy === 'highest') {
+        return b.rating - a.rating;
+      }
+      if (sortBy === 'lowest') {
+        return a.rating - b.rating;
+      }
+      return a.title.localeCompare(b.title);
+    });
+
+    return sortedItems;
+  }, [historyItems, searchQuery, sortBy]);
+
+  const trendData = useMemo(() => {
+    const items = [...historyItems].reverse();
+    return items.map((item) => ({
+      name: item.title.replace(' Evaluation', ''),
+      score: Number(item.rating.toFixed(2)),
+    }));
+  }, [historyItems]);
+
+  const highestRating = historyItems.reduce((max, item) => Math.max(max, item.rating), 0);
+  const latestEvaluation = historyItems[0];
+  const nextDueLabel = latestEvaluation?.nextDueLabel || 'No evaluation yet';
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
-      
+
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <div className="flex-1 max-w-xl relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search evaluations or feedback..." 
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search evaluation period or completed date..."
               className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-              onKeyDown={(e) => e.key === 'Enter' && navigate('/help')}
             />
           </div>
           <div className="flex items-center gap-4">
@@ -73,14 +242,19 @@ export default function EvaluationHistoryPage() {
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">My Evaluation History</h1>
-              <p className="text-slate-500 mt-2">Track your academic and behavioral performance across all quarters. Review detailed feedback to identify areas for growth.</p>
+              <p className="text-slate-500 mt-2">
+                Review each completed evaluation and its next due date based on the admin evaluation interval of {cycleDays} days.
+              </p>
+              {studentId ? (
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-3">
+                  {studentName} • Student ID: {studentId}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left Column: Trend & List */}
               <div className="lg:col-span-2 space-y-8">
-                {/* Performance Trend Card */}
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200"
@@ -88,50 +262,50 @@ export default function EvaluationHistoryPage() {
                   <div className="flex items-center justify-between mb-8">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900">Performance Trend</h3>
-                      <p className="text-xs text-slate-500 mt-1">Average star rating over the last 12 months</p>
+                      <p className="text-xs text-slate-500 mt-1">Average score across your submitted evaluations</p>
                     </div>
                     <span className="px-3 py-1 bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-widest rounded-full border border-primary/10">
-                      Academic Year 2023-24
+                      Saved History
                     </span>
                   </div>
 
                   <div className="flex items-baseline gap-4 mb-8">
-                    <span className="text-5xl font-black text-slate-900">4.2</span>
+                    <span className="text-5xl font-black text-slate-900">
+                      {latestEvaluation ? latestEvaluation.rating.toFixed(1) : '0.0'}
+                    </span>
                     <span className="text-slate-400 text-lg font-medium">/ 5.0</span>
                     <div className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold">
                       <TrendingUp className="w-3 h-3" />
-                      +5.2%
+                      {historyItems.length} Records
                     </div>
                   </div>
 
                   <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={TREND_DATA}>
+                      <AreaChart data={trendData}>
                         <defs>
                           <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.1}/>
-                            <stop offset="95%" stopColor="#5d5fef" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.12} />
+                            <stop offset="95%" stopColor="#5d5fef" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis 
-                          dataKey="name" 
-                          axisLine={false} 
-                          tickLine={false} 
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
                           tick={{ fill: '#94a3b8', fontSize: 12 }}
                           dy={10}
                         />
                         <YAxis hide domain={[0, 5]} />
-                        <Tooltip 
-                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="score" 
-                          stroke="#5d5fef" 
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                        <Area
+                          type="monotone"
+                          dataKey="score"
+                          stroke="#5d5fef"
                           strokeWidth={4}
-                          fillOpacity={1} 
-                          fill="url(#colorScore)" 
+                          fillOpacity={1}
+                          fill="url(#colorScore)"
                           dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }}
                           activeDot={{ r: 8, fill: '#5d5fef', stroke: '#fff', strokeWidth: 3 }}
                         />
@@ -140,56 +314,88 @@ export default function EvaluationHistoryPage() {
                   </div>
                 </motion.div>
 
-                {/* Evaluation List Section */}
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xl font-bold text-slate-900">Evaluation List</h3>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
-                      Sort by: Most Recent
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
+                    <div className="relative">
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                        className="appearance-none pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="recent">Most Recent</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="highest">Highest Rating</option>
+                        <option value="lowest">Lowest Rating</option>
+                        <option value="title">A to Z</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                   </div>
 
                   <div className="space-y-4">
-                    {EVALUATIONS.map((evalItem, idx) => (
-                      <motion.div 
-                        key={evalItem.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between group hover:border-primary/30 transition-all"
-                      >
-                        <div className="flex items-center gap-6">
-                          <div className="size-14 bg-primary/5 rounded-2xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                            <FileText className="w-7 h-7" />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-900">{evalItem.title}</h4>
-                            <p className="text-sm text-slate-500 mt-1">{evalItem.date}</p>
-                          </div>
+                    {isLoading ? (
+                      <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-sm font-bold text-slate-500">
+                        Loading evaluation history...
+                      </div>
+                    ) : filteredHistoryItems.length === 0 ? (
+                      <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center space-y-3">
+                        <div className="size-16 mx-auto rounded-2xl bg-primary/5 text-primary flex items-center justify-center">
+                          <FileText className="w-8 h-8" />
                         </div>
-                        <div className="flex flex-col items-end gap-3">
-                          <div className="flex items-center gap-3">
-                            <StarRating rating={evalItem.rating} starClassName="w-4 h-4" />
-                            <span className="text-lg font-bold text-slate-900">{evalItem.rating}</span>
+                        <h4 className="text-lg font-bold text-slate-900">No evaluation history yet</h4>
+                        <p className="text-sm text-slate-500">
+                          After you submit an evaluation, it will appear here with its completed date and next due date.
+                        </p>
+                      </div>
+                    ) : (
+                      filteredHistoryItems.map((evalItem, idx) => (
+                        <motion.div
+                          key={evalItem.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.06 }}
+                          className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between group hover:border-primary/30 transition-all"
+                        >
+                          <div className="flex items-center gap-6">
+                            <div className="size-14 bg-primary/5 rounded-2xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                              <FileText className="w-7 h-7" />
+                            </div>
+                            <div className="space-y-2">
+                              <h4 className="text-lg font-bold text-slate-900">{evalItem.title}</h4>
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                                <span className="inline-flex items-center gap-2">
+                                  <CalendarDays className="w-4 h-4 text-slate-400" />
+                                  Finished on {evalItem.completedLabel}
+                                </span>
+                                <span className="inline-flex items-center gap-2">
+                                  <Clock3 className="w-4 h-4 text-slate-400" />
+                                  Next due {evalItem.nextDueLabel}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <button 
-                            onClick={() => navigate('/results')}
-                            className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
-                          >
-                            View Full Report
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
+                          <div className="flex flex-col items-end gap-3">
+                            <div className="flex items-center gap-3">
+                              <StarRating rating={evalItem.rating} max={evalItem.ratingScale} starClassName="w-4 h-4" />
+                              <span className="text-lg font-bold text-slate-900">{evalItem.rating.toFixed(1)}</span>
+                            </div>
+                            <button
+                              onClick={() => navigate('/results', { state: { evaluationId: evalItem.id } })}
+                              className="px-5 py-2 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                            >
+                              View Full Report
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Right Column: Summary & Insights */}
               <div className="space-y-8">
-                {/* Quick Summary Card */}
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="bg-primary p-8 rounded-2xl shadow-xl shadow-primary/20 text-white relative overflow-hidden"
@@ -199,18 +405,18 @@ export default function EvaluationHistoryPage() {
                     <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <span className="text-primary-100 text-sm">Total Evaluations</span>
-                        <span className="text-2xl font-black">12</span>
+                        <span className="text-2xl font-black">{historyItems.length}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-primary-100 text-sm">Highest Rating</span>
-                        <span className="text-2xl font-black">4.9</span>
+                        <span className="text-2xl font-black">{highestRating.toFixed(1)}</span>
                       </div>
                     </div>
                     <div className="pt-6 border-t border-white/10">
                       <div className="flex justify-between items-center">
                         <div className="flex flex-col">
                           <span className="text-primary-100 text-xs uppercase tracking-widest font-bold">Next Evaluation</span>
-                          <span className="text-lg font-bold mt-1">JUL 15</span>
+                          <span className="text-lg font-bold mt-1">{nextDueLabel}</span>
                         </div>
                         <div className="size-12 bg-white/10 rounded-xl flex items-center justify-center">
                           <Star className="w-6 h-6 fill-white" />
@@ -218,67 +424,18 @@ export default function EvaluationHistoryPage() {
                       </div>
                     </div>
                   </div>
-                  {/* Abstract background */}
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
                   <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/5 rounded-full -ml-32 -mb-32 blur-3xl" />
                 </motion.div>
 
-                {/* Top Strengths Card */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="size-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                      <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">Top Strengths</h3>
-                  </div>
-                  <ul className="space-y-4">
-                    <li className="flex items-center gap-3 text-slate-700 font-medium">
-                      <div className="size-2 bg-emerald-500 rounded-full" />
-                      Critical Thinking
-                    </li>
-                    <li className="flex items-center gap-3 text-slate-700 font-medium">
-                      <div className="size-2 bg-emerald-500 rounded-full" />
-                      Class Participation
-                    </li>
-                    <li className="flex items-center gap-3 text-slate-700 font-medium">
-                      <div className="size-2 bg-emerald-500 rounded-full" />
-                      Collaborative Projects
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Focus Areas Card */}
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="size-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-                      <Target className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">Focus Areas</h3>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 italic text-sm text-slate-600 leading-relaxed">
-                    "Focus on time management for independent study blocks and early submission of lab reports."
-                  </div>
-                </div>
-
-                {/* Feedback Card */}
-                <div className="bg-slate-900 p-8 rounded-2xl shadow-xl text-white relative overflow-hidden group">
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="size-12 rounded-full border-2 border-white/20 overflow-hidden">
-                        <img src="https://picsum.photos/seed/teacher/100/100" alt="Mrs. Miller" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-primary">New Feedback from Mrs. Miller</p>
-                        <p className="text-sm font-bold">Excellent work on the Q1 math presentation. Your explanation of...</p>
-                      </div>
-                    </div>
-                    <button className="flex items-center gap-2 text-sm font-bold text-white hover:text-primary transition-colors group">
-                      Read Full Message
-                      <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    </button>
-                  </div>
-                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <MessageSquare className="w-20 h-20" />
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                  <h3 className="text-lg font-bold text-slate-900">Cycle Settings</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Your history and next evaluation schedule follow the admin-defined cycle length.
+                  </p>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Current Interval</p>
+                    <p className="mt-2 text-3xl font-black text-slate-900">{cycleDays} days</p>
                   </div>
                 </div>
               </div>

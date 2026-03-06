@@ -31,6 +31,10 @@ CREATE TABLE `evaluations` (
   `id` int(10) UNSIGNED NOT NULL,
   `user_id` int(10) UNSIGNED NOT NULL,
   `period` varchar(50) NOT NULL,
+  `rating_scale` int(11) NOT NULL DEFAULT 5,
+  `criteria_count` int(11) NOT NULL DEFAULT 0,
+  `average_score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `submitted_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `living_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
   `job_study_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
   `human_support_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
@@ -47,19 +51,47 @@ CREATE TABLE `evaluations` (
 -- Dumping data for table `evaluations`
 --
 
-INSERT INTO `evaluations` (`id`, `user_id`, `period`, `living_stars`, `job_study_stars`, `human_support_stars`, `health_stars`, `feeling_stars`, `choice_behavior_stars`, `money_payment_stars`, `life_skill_stars`, `created_at`, `updated_at`) VALUES
-(1, 5, '2026-Q1', 4, 5, 4, 5, 4, 5, 4, 4, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
-(2, 5, '2026-Q2', 5, 5, 5, 4, 5, 5, 5, 5, '2026-05-15 03:30:00', '2026-05-15 03:30:00'),
-(3, 6, '2026-Q1', 3, 4, 4, 3, 4, 3, 4, 3, '2026-02-16 04:00:00', '2026-02-16 04:00:00'),
-(4, 6, '2026-Q2', 4, 4, 5, 4, 4, 4, 4, 4, '2026-05-16 07:15:00', '2026-05-16 07:15:00'),
-(5, 7, '2026-Q1', 5, 5, 5, 5, 5, 5, 5, 5, '2026-02-17 02:30:00', '2026-02-17 02:30:00'),
-(6, 7, '2026-Q2', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-17 03:45:00', '2026-05-17 03:45:00'),
-(7, 8, '2026-Q1', 4, 3, 4, 4, 3, 4, 3, 4, '2026-02-18 06:00:00', '2026-02-18 06:00:00'),
-(8, 8, '2026-Q2', 4, 4, 4, 5, 4, 4, 4, 4, '2026-05-18 08:30:00', '2026-05-18 08:30:00'),
-(9, 9, '2026-Q1', 5, 5, 4, 5, 5, 4, 5, 5, '2026-02-19 04:15:00', '2026-02-19 04:15:00'),
-(10, 9, '2026-Q2', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-19 02:45:00', '2026-05-19 02:45:00'),
-(11, 10, '2026-Q1', 4, 4, 4, 4, 4, 4, 4, 4, '2026-02-20 07:00:00', '2026-02-20 07:00:00'),
-(12, 10, '2026-Q2', 5, 4, 5, 4, 5, 5, 4, 5, '2026-05-20 09:30:00', '2026-05-20 09:30:00');
+INSERT INTO `evaluations` (`id`, `user_id`, `period`, `rating_scale`, `criteria_count`, `average_score`, `submitted_at`, `living_stars`, `job_study_stars`, `human_support_stars`, `health_stars`, `feeling_stars`, `choice_behavior_stars`, `money_payment_stars`, `life_skill_stars`, `created_at`, `updated_at`) VALUES
+(1, 5, '2026-Q1', 5, 8, 4.38, '2026-02-15 02:00:00', 4, 5, 4, 5, 4, 5, 4, 4, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(2, 5, '2026-Q2', 5, 8, 4.88, '2026-05-15 03:30:00', 5, 5, 5, 4, 5, 5, 5, 5, '2026-05-15 03:30:00', '2026-05-15 03:30:00'),
+(3, 6, '2026-Q1', 5, 8, 3.50, '2026-02-16 04:00:00', 3, 4, 4, 3, 4, 3, 4, 3, '2026-02-16 04:00:00', '2026-02-16 04:00:00'),
+(4, 6, '2026-Q2', 5, 8, 4.13, '2026-05-16 07:15:00', 4, 4, 5, 4, 4, 4, 4, 4, '2026-05-16 07:15:00', '2026-05-16 07:15:00'),
+(5, 7, '2026-Q1', 5, 8, 5.00, '2026-02-17 02:30:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-02-17 02:30:00', '2026-02-17 02:30:00'),
+(6, 7, '2026-Q2', 5, 8, 5.00, '2026-05-17 03:45:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-17 03:45:00', '2026-05-17 03:45:00'),
+(7, 8, '2026-Q1', 5, 8, 3.63, '2026-02-18 06:00:00', 4, 3, 4, 4, 3, 4, 3, 4, '2026-02-18 06:00:00', '2026-02-18 06:00:00'),
+(8, 8, '2026-Q2', 5, 8, 4.13, '2026-05-18 08:30:00', 4, 4, 4, 5, 4, 4, 4, 4, '2026-05-18 08:30:00', '2026-05-18 08:30:00'),
+(9, 9, '2026-Q1', 5, 8, 4.75, '2026-02-19 04:15:00', 5, 5, 4, 5, 5, 4, 5, 5, '2026-02-19 04:15:00', '2026-02-19 04:15:00'),
+(10, 9, '2026-Q2', 5, 8, 5.00, '2026-05-19 02:45:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-19 02:45:00', '2026-05-19 02:45:00'),
+(11, 10, '2026-Q1', 5, 8, 4.00, '2026-02-20 07:00:00', 4, 4, 4, 4, 4, 4, 4, 4, '2026-02-20 07:00:00', '2026-02-20 07:00:00'),
+(12, 10, '2026-Q2', 5, 8, 4.63, '2026-05-20 09:30:00', 5, 4, 5, 4, 5, 5, 4, 5, '2026-05-20 09:30:00', '2026-05-20 09:30:00');
+
+--
+-- Table structure for table `evaluation_responses`
+--
+
+CREATE TABLE `evaluation_responses` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `evaluation_id` int(10) UNSIGNED NOT NULL,
+  `criterion_id` varchar(20) DEFAULT NULL,
+  `criterion_key` varchar(120) NOT NULL,
+  `criterion_name` varchar(120) NOT NULL,
+  `criterion_icon` varchar(120) DEFAULT NULL,
+  `star_value` int(11) NOT NULL DEFAULT 0,
+  `reflection` text DEFAULT NULL,
+  `tip_snapshot` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `evaluation_responses`
+--
+
+INSERT INTO `evaluation_responses` (`id`, `evaluation_id`, `criterion_id`, `criterion_key`, `criterion_name`, `criterion_icon`, `star_value`, `reflection`, `tip_snapshot`, `created_at`, `updated_at`) VALUES
+(1, 1, NULL, 'living', 'Living', 'Home', 4, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(2, 1, NULL, 'jobStudy', 'Job & Study', 'Briefcase', 5, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(3, 1, NULL, 'humanSupport', 'Human & Support', 'Users2', 4, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(4, 1, NULL, 'health', 'Health', 'Heart', 5, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00');
 
 -- --------------------------------------------------------
 
@@ -399,7 +431,16 @@ INSERT INTO `students` (`user_id`, `student_no`, `grade_level`, `section`, `crea
 --
 ALTER TABLE `evaluations`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_evaluations_user_period` (`user_id`,`period`);
+  ADD UNIQUE KEY `uq_evaluations_user_period` (`user_id`,`period`),
+  ADD KEY `idx_evaluations_submitted_at` (`submitted_at`);
+
+--
+-- Indexes for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_evaluation_criterion_key` (`evaluation_id`,`criterion_key`),
+  ADD KEY `idx_evaluation_responses_criterion_id` (`criterion_id`);
 
 --
 -- Indexes for table `feedbacks`
@@ -483,6 +524,12 @@ ALTER TABLE `evaluations`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
+-- AUTO_INCREMENT for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
 -- AUTO_INCREMENT for table `feedbacks`
 --
 ALTER TABLE `feedbacks`
@@ -532,7 +579,13 @@ ALTER TABLE `users`
 -- Constraints for table `evaluations`
 --
 ALTER TABLE `evaluations`
-  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `students` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  ADD CONSTRAINT `fk_evaluation_responses_evaluation` FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `feedbacks`
