@@ -1,4 +1,8 @@
 import { useNavigate } from 'react-router-dom';
+<<<<<<< HEAD
+=======
+import { useState } from 'react';
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { 
   Star, 
   TrendingUp, 
@@ -13,7 +17,11 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import TeacherSidebar from '../components/TeacherSidebar';
+<<<<<<< HEAD
 import { motion } from 'motion/react';
+=======
+import { motion, AnimatePresence } from 'motion/react';
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { cn } from '../lib/utils';
 
 const STATS = [
@@ -24,14 +32,41 @@ const STATS = [
 ];
 
 const STUDENTS = [
+<<<<<<< HEAD
   { id: '2026-012', name: 'Dany Chan', rating: 2.1, status: 'Action Needed', lastEval: 'Yesterday, 04:15 PM', avatar: 'https://picsum.photos/seed/dany/100/100' },
   { id: '2026-001', name: 'Sokha Mean', rating: 4.5, status: 'Healthy', lastEval: 'Today, 08:30 AM', avatar: 'https://picsum.photos/seed/sokha/100/100' },
   { id: '2026-045', name: 'Leakna Roeun', rating: 4.0, status: 'Healthy', lastEval: 'Today, 08:45 AM', avatar: 'https://picsum.photos/seed/leakna/100/100' },
   { id: '2026-025', name: 'Borey Van', rating: null, status: 'No Data Today', lastEval: 'Oct 23, 09:00 AM', avatar: 'https://picsum.photos/seed/borey/100/100' },
+=======
+  { id: '2026-012', name: 'Dany Chan', rating: 2.1, status: 'Action Needed', lastEval: 'Yesterday, 04:15 PM', avatar: 'https://picsum.photos/seed/dany/100/100', generation: 'Gen 2026', class: 'WEB A' },
+  { id: '2026-001', name: 'Sokha Mean', rating: 4.5, status: 'Healthy', lastEval: 'Today, 08:30 AM', avatar: 'https://picsum.photos/seed/sokha/100/100', generation: 'Gen 2026', class: 'WEB A' },
+  { id: '2026-045', name: 'Leakna Roeun', rating: 4.0, status: 'Healthy', lastEval: 'Today, 08:45 AM', avatar: 'https://picsum.photos/seed/leakna/100/100', generation: 'Gen 2026', class: 'WEB B' },
+  { id: '2026-025', name: 'Borey Van', rating: null, status: 'No Data Today', lastEval: 'Oct 23, 09:00 AM', avatar: 'https://picsum.photos/seed/borey/100/100', generation: 'Gen 2026', class: 'MOBILE A' },
+  { id: '2025-001', name: 'Vicheka Long', rating: 4.8, status: 'Healthy', lastEval: 'Today, 09:00 AM', avatar: 'https://picsum.photos/seed/vicheka/100/100', generation: 'Gen 2025', class: 'WEB A' },
+  { id: '2025-015', name: 'Piseth Keo', rating: 3.2, status: 'Healthy', lastEval: 'Yesterday, 02:00 PM', avatar: 'https://picsum.photos/seed/piseth/100/100', generation: 'Gen 2025', class: 'WEB A' },
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 ];
 
 export default function TeacherDashboardPage() {
   const navigate = useNavigate();
+<<<<<<< HEAD
+=======
+  const [selectedGen, setSelectedGen] = useState('Gen 2026');
+  const [selectedClass, setSelectedClass] = useState('WEB A');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeDropdown, setActiveDropdown] = useState<'gen' | 'class' | null>(null);
+
+  const gens = ['Gen 2026', 'Gen 2025', 'Gen 2024'];
+  const classes = ['WEB A', 'WEB B', 'MOBILE A', 'MOBILE B'];
+
+  const filteredStudents = STUDENTS.filter(student => {
+    const matchesGen = student.generation === selectedGen;
+    const matchesClass = student.class === selectedClass;
+    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         student.id.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesGen && matchesClass && matchesSearch;
+  });
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -45,6 +80,7 @@ export default function TeacherDashboardPage() {
             <p className="text-xs text-slate-500">Welcome back, monitor your student's daily well-being.</p>
           </div>
           <div className="flex items-center gap-4">
+<<<<<<< HEAD
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
               <div className="px-3 py-1.5 bg-white rounded-lg shadow-sm text-xs font-bold text-primary">GEN: Gen 2026</div>
               <div className="px-3 py-1.5 text-xs font-bold text-slate-500">CLASS: WEB A</div>
@@ -53,6 +89,79 @@ export default function TeacherDashboardPage() {
               </div>
             </div>
             <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+=======
+            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl relative">
+              {/* GEN Filter */}
+              <div className="relative">
+                <button 
+                  onClick={() => setActiveDropdown(activeDropdown === 'gen' ? null : 'gen')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg shadow-sm text-xs font-bold transition-all",
+                    activeDropdown === 'gen' ? "bg-primary text-white" : "bg-white text-primary"
+                  )}
+                >
+                  GEN: {selectedGen}
+                </button>
+                <AnimatePresence>
+                  {activeDropdown === 'gen' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                    >
+                      {gens.map(gen => (
+                        <button 
+                          key={gen}
+                          onClick={() => { setSelectedGen(gen); setActiveDropdown(null); }}
+                          className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors"
+                        >
+                          {gen}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* CLASS Filter */}
+              <div className="relative">
+                <button 
+                  onClick={() => setActiveDropdown(activeDropdown === 'class' ? null : 'class')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    activeDropdown === 'class' ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-white/50"
+                  )}
+                >
+                  CLASS: {selectedClass}
+                </button>
+                <AnimatePresence>
+                  {activeDropdown === 'class' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                    >
+                      {classes.map(cls => (
+                        <button 
+                          key={cls}
+                          onClick={() => { setSelectedClass(cls); setActiveDropdown(null); }}
+                          className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors"
+                        >
+                          {cls}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/teacher/notifications')}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+            >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
@@ -116,6 +225,11 @@ export default function TeacherDashboardPage() {
                     <input 
                       type="text" 
                       placeholder="Search students..." 
+<<<<<<< HEAD
+=======
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none w-64"
                     />
                   </div>
@@ -137,7 +251,11 @@ export default function TeacherDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
+<<<<<<< HEAD
                     {STUDENTS.map((student) => (
+=======
+                    {filteredStudents.map((student) => (
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       <tr key={student.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -176,6 +294,7 @@ export default function TeacherDashboardPage() {
                         <td className="px-6 py-4 text-xs text-slate-500">{student.lastEval}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
+<<<<<<< HEAD
                             <button className="px-4 py-1.5 text-xs font-bold text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-colors">
                               View Profile
                             </button>
@@ -183,6 +302,21 @@ export default function TeacherDashboardPage() {
                               "px-4 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all",
                               student.status === 'Action Needed' ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-800 hover:bg-slate-900"
                             )}>
+=======
+                            <button 
+                              onClick={() => navigate('/teacher/students')}
+                              className="px-4 py-1.5 text-xs font-bold text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-colors"
+                            >
+                              View Profile
+                            </button>
+                            <button 
+                              onClick={() => navigate('/teacher/messages')}
+                              className={cn(
+                                "px-4 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all",
+                                student.status === 'Action Needed' ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-800 hover:bg-slate-900"
+                              )}
+                            >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                               Intervene
                             </button>
                           </div>
@@ -194,7 +328,11 @@ export default function TeacherDashboardPage() {
               </div>
 
               <div className="p-6 border-t border-slate-50 flex items-center justify-between">
+<<<<<<< HEAD
                 <p className="text-xs text-slate-500">Showing 1-4 of 32 students</p>
+=======
+                <p className="text-xs text-slate-500">Showing {filteredStudents.length} students</p>
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                 <div className="flex items-center gap-2">
                   <button className="p-2 text-slate-400 hover:text-primary transition-colors">
                     <ChevronLeft className="w-5 h-5" />

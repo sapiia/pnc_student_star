@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useNavigate } from 'react-router-dom';
+=======
+import { useNavigate, useLocation } from 'react-router-dom';
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { 
   Star, 
   History, 
@@ -26,6 +30,7 @@ import StarRating from '../components/StarRating';
 import RadarChart from '../components/RadarChart';
 import Sidebar from '../components/Sidebar';
 
+<<<<<<< HEAD
 const RADAR_DATA = [
   { subject: 'Living', prev: 60, curr: 80 },
   { subject: 'Study', prev: 70, curr: 95 },
@@ -43,6 +48,24 @@ const RADAR_KEYS = [
 
 export default function EvaluationResultPage() {
   const navigate = useNavigate();
+=======
+export default function EvaluationResultPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { scores, reflections } = location.state || {};
+
+  // Map scores to radar data format
+  const radarData = CRITERIA.map(c => ({
+    subject: c.label,
+    prev: 70, // Mock previous data
+    curr: scores ? (scores[c.key] || 0) * 20 : 80 // Scale 1-5 to 0-100
+  }));
+
+  const radarKeys = [
+    { key: 'prev', name: 'Previous Quarter', color: '#94a3b8', fill: '#94a3b8' },
+    { key: 'curr', name: 'Current Quarter', color: '#5d5fef', fill: '#5d5fef' },
+  ];
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   const getIcon = (iconName: string, className?: string) => {
     switch (iconName) {
@@ -115,7 +138,11 @@ export default function EvaluationResultPage() {
                     </div>
                   </div>
                   
+<<<<<<< HEAD
                   <RadarChart data={RADAR_DATA} dataKeys={RADAR_KEYS} />
+=======
+                  <RadarChart data={radarData} dataKeys={radarKeys} />
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
                   <div className="mt-8 flex items-center justify-center gap-8">
                     <div className="text-center">
@@ -212,7 +239,11 @@ export default function EvaluationResultPage() {
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800">{criterion.label}</h4>
+<<<<<<< HEAD
                         <StarRating rating={idx % 2 === 0 ? 4 : 5} className="mt-1" />
+=======
+                        <StarRating rating={scores ? scores[criterion.key] : (idx % 2 === 0 ? 4 : 5)} className="mt-1" />
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       </div>
                     </motion.div>
                   );

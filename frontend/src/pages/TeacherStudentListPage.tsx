@@ -17,12 +17,31 @@ import { cn } from '../lib/utils';
 import RadarChart from '../components/RadarChart';
 
 const STUDENTS = [
+<<<<<<< HEAD
   { id: '2026-012', name: 'Sokhea Mean', score: '4.8 / 5.0', avatar: 'https://picsum.photos/seed/sokhea/100/100' },
   { id: '2026-045', name: 'Vannak Chan', score: '3.2 / 5.0', avatar: 'https://picsum.photos/seed/vannak/100/100' },
   { id: '2026-089', name: 'Rothana Seng', score: '4.2 / 5.0', avatar: 'https://picsum.photos/seed/rothana/100/100' },
   { id: '2026-112', name: 'Borey Long', score: '2.8 / 5.0', avatar: 'https://picsum.photos/seed/borey/100/100' },
 ];
 
+=======
+  { id: '2026-012', name: 'Sokhea Mean', score: '4.8 / 5.0', avatar: 'https://picsum.photos/seed/sokhea/100/100', generation: 'Gen 2026', class: 'WEB A' },
+  { id: '2026-045', name: 'Vannak Chan', score: '3.2 / 5.0', avatar: 'https://picsum.photos/seed/vannak/100/100', generation: 'Gen 2026', class: 'WEB B' },
+  { id: '2026-089', name: 'Rothana Seng', score: '4.2 / 5.0', avatar: 'https://picsum.photos/seed/rothana/100/100', generation: 'Gen 2026', class: 'WEB C' },
+  { id: '2026-112', name: 'Borey Long', score: '2.8 / 5.0', avatar: 'https://picsum.photos/seed/borey/100/100', generation: 'Gen 2026', class: 'WEB A' },
+  { id: '2027-001', name: 'Dara Som', score: '4.5 / 5.0', avatar: 'https://picsum.photos/seed/dara/100/100', generation: 'Gen 2027', class: 'WEB A' },
+  { id: '2027-002', name: 'Srey Leak', score: '3.9 / 5.0', avatar: 'https://picsum.photos/seed/leak/100/100', generation: 'Gen 2027', class: 'WEB B' },
+  { id: '2027-003', name: 'Piseth Keo', score: '4.1 / 5.0', avatar: 'https://picsum.photos/seed/piseth/100/100', generation: 'Gen 2027', class: 'WEB C' },
+  { id: '2027-004', name: 'Maly Van', score: '3.5 / 5.0', avatar: 'https://picsum.photos/seed/maly/100/100', generation: 'Gen 2027', class: 'WEB D' },
+];
+
+const GENERATIONS = ['Gen 2026', 'Gen 2027'];
+const CLASSES_BY_GEN: Record<string, string[]> = {
+  'Gen 2026': ['WEB A', 'WEB B', 'WEB C'],
+  'Gen 2027': ['WEB A', 'WEB B', 'WEB C', 'WEB D'],
+};
+
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 const RADAR_DATA = [
   { subject: 'Communication', value: 90 },
   { subject: 'Coding Logic', value: 95 },
@@ -38,7 +57,34 @@ const RADAR_KEYS = [
 export default function TeacherStudentListPage() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState('2026-012');
+<<<<<<< HEAD
   const selectedStudent = STUDENTS.find(s => s.id === selectedId);
+=======
+  const [selectedGen, setSelectedGen] = useState('Gen 2026');
+  const [selectedClass, setSelectedClass] = useState('All Classes');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredStudents = STUDENTS.filter(student => {
+    const matchesGen = student.generation === selectedGen;
+    const matchesClass = selectedClass === 'All Classes' || student.class === selectedClass;
+    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         student.id.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesGen && matchesClass && matchesSearch;
+  });
+
+  const selectedStudent = STUDENTS.find(s => s.id === selectedId) || filteredStudents[0];
+
+  const handleGenChange = (gen: string) => {
+    setSelectedGen(gen);
+    setSelectedClass('All Classes');
+  };
+
+  const clearFilters = () => {
+    setSelectedGen('Gen 2026');
+    setSelectedClass('All Classes');
+    setSearchQuery('');
+  };
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -58,10 +104,22 @@ export default function TeacherStudentListPage() {
               <input 
                 type="text" 
                 placeholder="Search ID or Name..." 
+<<<<<<< HEAD
                 className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
               />
             </div>
             <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+=======
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+            </div>
+            <button 
+              onClick={() => navigate('/teacher/notifications')}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+            >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
@@ -80,13 +138,25 @@ export default function TeacherStudentListPage() {
               <div className="flex-1 space-y-6">
                 <div className="flex items-center gap-4">
                   <div className="relative">
+<<<<<<< HEAD
                     <select className="pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-primary/10">
                       <option>Gen 2026</option>
                       <option>Gen 2025</option>
+=======
+                    <select 
+                      value={selectedGen}
+                      onChange={(e) => handleGenChange(e.target.value)}
+                      className="pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-primary/10"
+                    >
+                      {GENERATIONS.map(gen => (
+                        <option key={gen} value={gen}>{gen}</option>
+                      ))}
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
                   <div className="relative">
+<<<<<<< HEAD
                     <select className="pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-primary/10">
                       <option>WEB Class A</option>
                       <option>WEB Class B</option>
@@ -94,6 +164,26 @@ export default function TeacherStudentListPage() {
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
                   <button className="text-sm font-bold text-primary hover:underline ml-auto">Clear all filters</button>
+=======
+                    <select 
+                      value={selectedClass}
+                      onChange={(e) => setSelectedClass(e.target.value)}
+                      className="pl-4 pr-10 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 appearance-none outline-none focus:ring-2 focus:ring-primary/10"
+                    >
+                      <option value="All Classes">All Classes</option>
+                      {CLASSES_BY_GEN[selectedGen].map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  </div>
+                  <button 
+                    onClick={clearFilters}
+                    className="text-sm font-bold text-primary hover:underline ml-auto"
+                  >
+                    Clear all filters
+                  </button>
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -107,7 +197,11 @@ export default function TeacherStudentListPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
+<<<<<<< HEAD
                       {STUDENTS.map((student) => (
+=======
+                      {filteredStudents.map((student) => (
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                         <tr 
                           key={student.id} 
                           className={cn(
@@ -122,7 +216,14 @@ export default function TeacherStudentListPage() {
                               <div className="size-8 rounded-full overflow-hidden shrink-0">
                                 <img src={student.avatar} alt={student.name} />
                               </div>
+<<<<<<< HEAD
                               <span className="text-sm font-bold text-slate-900">{student.name}</span>
+=======
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold text-slate-900">{student.name}</span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{student.generation} • {student.class}</span>
+                              </div>
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                             </div>
                           </td>
                           <td className="px-6 py-5">
@@ -144,10 +245,24 @@ export default function TeacherStudentListPage() {
                           </td>
                         </tr>
                       ))}
+<<<<<<< HEAD
                     </tbody>
                   </table>
                   <div className="p-4 border-t border-slate-50 flex items-center justify-between">
                     <p className="text-[10px] text-slate-400">Showing 1-4 of 48 students</p>
+=======
+                      {filteredStudents.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-12 text-center text-slate-500 font-medium">
+                            No students found matching the selected filters.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div className="p-4 border-t border-slate-50 flex items-center justify-between">
+                    <p className="text-[10px] text-slate-400">Showing {filteredStudents.length} of {STUDENTS.length} students</p>
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     <div className="flex items-center gap-2">
                       <button className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg"><ChevronLeft className="w-4 h-4" /></button>
                       <button className="p-1.5 bg-primary text-white rounded-lg"><ChevronRight className="w-4 h-4" /></button>

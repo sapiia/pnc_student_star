@@ -1,4 +1,8 @@
 import { useNavigate } from 'react-router-dom';
+<<<<<<< HEAD
+=======
+import { useState } from 'react';
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { 
   BarChart3, 
   TrendingUp, 
@@ -56,8 +60,73 @@ const ENGAGEMENT_DATA = [
   { name: 'Overdue', value: 5, fill: '#ef4444' },
 ];
 
+<<<<<<< HEAD
 export default function TeacherReportsPage() {
   const navigate = useNavigate();
+=======
+const DATA_BY_GEN = {
+  'ALL Gen': {
+    trend: TREND_DATA,
+    criteria: CRITERIA_DATA,
+    engagement: ENGAGEMENT_DATA
+  },
+  'Gen 2027': {
+    trend: [
+      { name: 'Week 1', avg: 3.0, completion: 60 },
+      { name: 'Week 2', avg: 3.2, completion: 68 },
+      { name: 'Week 3', avg: 3.1, completion: 75 },
+      { name: 'Week 4', avg: 3.5, completion: 70 },
+      { name: 'Week 5', avg: 3.7, completion: 80 },
+      { name: 'Week 6', avg: 3.9, completion: 88 },
+    ],
+    criteria: [
+      { name: 'Living', value: 3.8, color: '#5d5fef' },
+      { name: 'Study', value: 4.0, color: '#10b981' },
+      { name: 'Human', value: 3.5, color: '#f59e0b' },
+      { name: 'Health', value: 3.7, color: '#ef4444' },
+      { name: 'Money', value: 3.2, color: '#8b5cf6' },
+      { name: 'Feeling', value: 3.6, color: '#ec4899' },
+      { name: 'Skill', value: 3.8, color: '#06b6d4' },
+    ],
+    engagement: [
+      { name: 'Completed', value: 78, fill: '#5d5fef' },
+      { name: 'Pending', value: 15, fill: '#94a3b8' },
+      { name: 'Overdue', value: 7, fill: '#ef4444' },
+    ]
+  },
+  'Gen 2026': {
+    trend: [
+      { name: 'Week 1', avg: 3.5, completion: 70 },
+      { name: 'Week 2', avg: 3.8, completion: 75 },
+      { name: 'Week 3', avg: 3.7, completion: 85 },
+      { name: 'Week 4', avg: 4.1, completion: 82 },
+      { name: 'Week 5', avg: 4.3, completion: 90 },
+      { name: 'Week 6', avg: 4.5, completion: 95 },
+    ],
+    criteria: [
+      { name: 'Living', value: 4.5, color: '#5d5fef' },
+      { name: 'Study', value: 4.8, color: '#10b981' },
+      { name: 'Human', value: 4.2, color: '#f59e0b' },
+      { name: 'Health', value: 4.3, color: '#ef4444' },
+      { name: 'Money', value: 3.8, color: '#8b5cf6' },
+      { name: 'Feeling', value: 4.2, color: '#ec4899' },
+      { name: 'Skill', value: 4.4, color: '#06b6d4' },
+    ],
+    engagement: [
+      { name: 'Completed', value: 92, fill: '#5d5fef' },
+      { name: 'Pending', value: 5, fill: '#94a3b8' },
+      { name: 'Overdue', value: 3, fill: '#ef4444' },
+    ]
+  }
+};
+
+export default function TeacherReportsPage() {
+  const navigate = useNavigate();
+  const [selectedGen, setSelectedGen] = useState('ALL Gen');
+  const [selectedClass, setSelectedClass] = useState('WEB Class A');
+
+  const currentData = DATA_BY_GEN[selectedGen as keyof typeof DATA_BY_GEN];
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -75,7 +144,14 @@ export default function TeacherReportsPage() {
               <Download className="w-4 h-4" />
               Export PDF
             </button>
+<<<<<<< HEAD
             <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+=======
+            <button 
+              onClick={() => navigate('/teacher/notifications')}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+            >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
@@ -86,6 +162,7 @@ export default function TeacherReportsPage() {
           <div className="max-w-[1400px] mx-auto space-y-8">
             {/* Filters Bar */}
             <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+<<<<<<< HEAD
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span className="text-sm font-bold text-slate-700">Last 30 Days</span>
@@ -95,6 +172,32 @@ export default function TeacherReportsPage() {
                 <Users className="w-4 h-4 text-slate-400" />
                 <span className="text-sm font-bold text-slate-700">WEB Class A</span>
                 <ChevronDown className="w-4 h-4 text-slate-400" />
+=======
+              <div className="relative">
+                <select 
+                  value={selectedGen}
+                  onChange={(e) => setSelectedGen(e.target.value)}
+                  className="appearance-none flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary/20 pr-10"
+                >
+                  <option value="ALL Gen">ALL Gen</option>
+                  <option value="Gen 2027">Gen 2027</option>
+                  <option value="Gen 2026">Gen 2026</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select 
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="appearance-none flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary/20 pr-10"
+                >
+                  <option value="WEB Class A">WEB Class A</option>
+                  <option value="WEB Class B">WEB Class B</option>
+                  <option value="WEB Class C">WEB Class C</option>
+                  <option value="WEB Class D">WEB Class D</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               </div>
               <div className="h-8 w-px bg-slate-200 mx-2" />
               <button className="flex items-center gap-2 text-sm font-bold text-primary hover:underline">
@@ -128,7 +231,11 @@ export default function TeacherReportsPage() {
               
               <div className="h-[400px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
+<<<<<<< HEAD
                   <LineChart data={TREND_DATA}>
+=======
+                  <LineChart data={currentData.trend}>
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis 
                       dataKey="name" 
@@ -181,7 +288,11 @@ export default function TeacherReportsPage() {
                 </div>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
+<<<<<<< HEAD
                     <BarChart data={CRITERIA_DATA} layout="vertical">
+=======
+                    <BarChart data={currentData.criteria} layout="vertical">
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                       <XAxis type="number" hide />
                       <YAxis 
@@ -197,7 +308,11 @@ export default function TeacherReportsPage() {
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                       />
                       <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={20}>
+<<<<<<< HEAD
                         {CRITERIA_DATA.map((entry, index) => (
+=======
+                        {currentData.criteria.map((entry, index) => (
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Bar>
@@ -224,7 +339,11 @@ export default function TeacherReportsPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
+<<<<<<< HEAD
                           data={ENGAGEMENT_DATA}
+=======
+                          data={currentData.engagement}
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
@@ -232,7 +351,11 @@ export default function TeacherReportsPage() {
                           paddingAngle={8}
                           dataKey="value"
                         >
+<<<<<<< HEAD
                           {ENGAGEMENT_DATA.map((entry, index) => (
+=======
+                          {currentData.engagement.map((entry, index) => (
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                             <Cell key={`cell-${index}`} fill={entry.fill} />
                           ))}
                         </Pie>
@@ -241,7 +364,11 @@ export default function TeacherReportsPage() {
                     </ResponsiveContainer>
                   </div>
                   <div className="w-full md:w-1/2 space-y-4">
+<<<<<<< HEAD
                     {ENGAGEMENT_DATA.map((item) => (
+=======
+                    {currentData.engagement.map((item) => (
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       <div key={item.name} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                         <div className="flex items-center gap-3">
                           <div className="size-3 rounded-full" style={{ backgroundColor: item.fill }} />

@@ -6,9 +6,16 @@ import {
   BarChart3, 
   Settings,
   LogOut,
+<<<<<<< HEAD
   Plus,
   ChevronLeft,
   ChevronRight
+=======
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Bell
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
@@ -26,6 +33,11 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
     { icon: Users, label: 'Student List', path: '/teacher/students' },
+<<<<<<< HEAD
+=======
+    { icon: Bell, label: 'Notifications', path: '/teacher/notifications' },
+    { icon: MessageSquare, label: 'Message Admin', path: '/teacher/messages' },
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
     { icon: BarChart3, label: 'Reports', path: '/teacher/reports' },
     { icon: Settings, label: 'Settings', path: '/teacher/settings' },
   ];
@@ -103,6 +115,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
         })}
       </nav>
 
+<<<<<<< HEAD
       {/* Action Button */}
       <div className="px-4 mb-6">
         <button className={cn(
@@ -119,6 +132,8 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
         </button>
       </div>
 
+=======
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
       {/* Teacher Profile Section */}
       <div className="p-4 border-t border-slate-100">
         <div className={cn(

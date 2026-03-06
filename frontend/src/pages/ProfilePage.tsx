@@ -9,7 +9,11 @@ import {
   ChevronRight
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+<<<<<<< HEAD
 import { motion } from 'motion/react';
+=======
+import { motion, AnimatePresence } from 'motion/react';
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { useState } from 'react';
 import { cn } from '../lib/utils';
 
@@ -17,12 +21,40 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+<<<<<<< HEAD
+=======
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleSave = () => {
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
       
+<<<<<<< HEAD
       <main className="flex-1 flex flex-col overflow-hidden">
+=======
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Success Toast */}
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, x: '-50%' }}
+              animate={{ opacity: 1, y: 20, x: '-50%' }}
+              exit={{ opacity: 0, y: -20, x: '-50%' }}
+              className="fixed top-0 left-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold"
+            >
+              <BellRing className="w-5 h-5" />
+              Settings saved successfully!
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <nav className="flex items-center gap-2 text-sm text-slate-500">
@@ -35,7 +67,14 @@ export default function ProfilePage() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
+<<<<<<< HEAD
             <button className="bg-primary text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+=======
+            <button 
+              onClick={handleSave}
+              className="bg-primary text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+            >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               Save Changes
             </button>
           </div>
@@ -206,7 +245,14 @@ export default function ProfilePage() {
               <button className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
                 Discard Changes
               </button>
+<<<<<<< HEAD
               <button className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+=======
+              <button 
+                onClick={handleSave}
+                className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+              >
+>>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                 Save Preferences
               </button>
             </div>
