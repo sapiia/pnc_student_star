@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const userRoutes = require('../routes/userRoutes');
 const evaluationRoutes = require('../routes/evaluationRoutes');
 const feedbackRoutes = require('../routes/feedbackRoutes');
@@ -11,6 +12,7 @@ const db = require('../config/database');
 const app = express();
 
 // Middleware to parse JSON bodies
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

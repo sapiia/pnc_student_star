@@ -1,69 +1,250 @@
-import { 
-  Users, 
-  Search, 
-  Bell, 
-  Plus, 
-  Edit2, 
+import {
+  Search,
   Trash2,
   Filter,
-  MoreVertical,
   Download,
   UserPlus,
+  Upload,
+  Power,
   X,
   CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../components/AdminSidebar';
 import { cn } from '../lib/utils';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-const INITIAL_USERS = [
-  { id: 1, name: 'John Doe', email: 'john.doe@pnc.edu', role: 'Student', group: 'Class A - Senior', status: 'Active', initials: 'JD', color: 'bg-blue-100 text-blue-700' },
-  { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Science Dept', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
-  { id: 3, name: 'Robert Brown', email: 'r.brown@pnc.edu', role: 'Admin', group: 'Central Office', status: 'Active', initials: 'RB', color: 'bg-orange-100 text-orange-700' },
-  { id: 4, name: 'Lucy Liu', email: 'l.liu@pnc.edu', role: 'Student', group: 'Class B - Junior', status: 'Inactive', initials: 'LL', color: 'bg-slate-100 text-slate-700' },
-  // Gen 2027 - Class A
-  { id: 101, name: 'Amin Pisal', email: 'amin.pisal@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'AP', color: 'bg-blue-100 text-blue-700' },
-  { id: 102, name: 'Chan Setha', email: 'chan.setha@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'CS', color: 'bg-blue-100 text-blue-700' },
-  { id: 103, name: 'Chan Koemsour', email: 'chan.koemsour@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'CK', color: 'bg-blue-100 text-blue-700' },
-  // Gen 2027 - Class B
-  { id: 127, name: 'Ang Thyda', email: 'ang.thyda@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'AT', color: 'bg-indigo-100 text-indigo-700' },
-  { id: 128, name: 'Bis Chantrea', email: 'bis.chantrea@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'BC', color: 'bg-indigo-100 text-indigo-700' },
-  // Gen 2027 - Class C
-  { id: 152, name: 'Chhoun Sakraech', email: 'chhoun.sakraech@pnc.edu', role: 'Student', group: 'Gen 2027 - Class C', status: 'Active', initials: 'CS', color: 'bg-emerald-100 text-emerald-700' },
-  { id: 153, name: 'Chouon Soran', email: 'chouon.soran@pnc.edu', role: 'Student', group: 'Gen 2027 - Class C', status: 'Active', initials: 'CS', color: 'bg-emerald-100 text-emerald-700' },
-  // Gen 2027 - Class D
-  { id: 177, name: 'Chouch Soyan', email: 'chouch.soyan@pnc.edu', role: 'Student', group: 'Gen 2027 - Class D', status: 'Active', initials: 'CS', color: 'bg-amber-100 text-amber-700' },
-  { id: 178, name: 'Ea Orn', email: 'ea.orn@pnc.edu', role: 'Student', group: 'Gen 2027 - Class D', status: 'Active', initials: 'EO', color: 'bg-amber-100 text-amber-700' },
-];
+type UserRole = 'Student' | 'Teacher' | 'Admin';
+type UserStatus = 'Active' | 'Inactive' | 'Invited' | 'Deleted';
+type StudentGeneration = '2026' | '2027';
+type Gender = 'male' | 'female';
+
+type UserRecord = {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  group: string;
+  status: UserStatus;
+  initials: string;
+  color: string;
+  studentId?: string;
+  generation?: StudentGeneration;
+  className?: string;
+  gender?: Gender;
+};
+
+type BulkInvitedUser = {
+  row?: number;
+  name: string;
+  email: string;
+  role: string;
+  gender?: string;
+  group?: string;
+  generation?: string | null;
+  className?: string | null;
+  studentId?: string | null;
+};
+
+type BulkValidatedRow = {
+  row: number;
+  payload: {
+    firstName: string;
+    lastName?: string;
+    email: string;
+    gender: string;
+    role: string;
+    generation?: string | null;
+    className?: string | null;
+    studentId?: string | null;
+  };
+};
+
+type ConfirmAction =
+  | {
+      kind: 'toggle-active';
+      user: UserRecord;
+      shouldEnable: boolean;
+    }
+  | {
+      kind: 'delete';
+      user: UserRecord;
+    }
+  | {
+      kind: 'delete-all';
+    };
+
+type ApiUser = {
+  id: number;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  role: string;
+  class?: string | null;
+  student_id?: string | null;
+  resolved_student_id?: string | null;
+  is_active?: number | boolean | null;
+  is_deleted?: number | boolean | null;
+};
+
+const defaultNewUser = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  role: 'Student' as UserRole,
+  generation: '2026' as StudentGeneration,
+  className: '',
+  studentId: '',
+  gender: 'male' as Gender,
+  status: 'Active' as UserStatus
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+const toDisplayNameFromEmail = (email: string) => {
+  const username = email.split('@')[0] || 'User';
+  return username
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
+  const roleLower = (apiUser.role || '').toString().toLowerCase();
+  const role: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
+  const fullName = [apiUser.first_name, apiUser.last_name].filter(Boolean).join(' ').trim();
+  const resolvedName = (apiUser.name || '').trim() || fullName || toDisplayNameFromEmail(apiUser.email);
+  const initials = resolvedName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+  const colors = [
+    'bg-blue-100 text-blue-700',
+    'bg-purple-100 text-purple-700',
+    'bg-orange-100 text-orange-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-indigo-100 text-indigo-700'
+  ];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  const isDeleted = Number(apiUser.is_deleted || 0) === 1;
+  const isActive = Number(apiUser.is_active ?? 1) === 1;
+  const status: UserStatus = isDeleted ? 'Deleted' : isActive ? 'Active' : 'Inactive';
+  const classText = (apiUser.class || '').toString().trim();
+  const group = role === 'Student'
+    ? (classText || 'Pending Class Assignment')
+    : role === 'Teacher'
+      ? 'Teaching Staff'
+      : 'Administration';
+  const studentId = ((apiUser.student_id || apiUser.resolved_student_id || '') as string).toString().trim() || undefined;
+
+  return {
+    id: apiUser.id,
+    name: resolvedName,
+    email: apiUser.email,
+    role,
+    group,
+    status,
+    initials,
+    color: randomColor,
+    studentId
+  };
+};
 
 export default function AdminUserManagementPage() {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [isBulkCommitting, setIsBulkCommitting] = useState(false);
+  const [bulkValidatedRows, setBulkValidatedRows] = useState<BulkValidatedRow[]>([]);
+  const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
+  const [newUser, setNewUser] = useState(defaultNewUser);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const [newUser, setNewUser] = useState({
-    name: '',
-    nickname: '',
-    email: '',
-    role: 'Student',
-    adminRole: 'Moderator',
-    group: '',
-    status: 'Active'
-  });
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/users`);
+        const data = await response.json();
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to load users.');
+          return;
+        }
+        const mapped = Array.isArray(data) ? data.map((item: ApiUser) => mapApiUserToRecord(item)) : [];
+        setUsers(mapped);
+      } catch {
+        setFormError('Failed to load users.');
+      }
+    };
+    loadUsers();
+  }, []);
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = roleFilter === 'All Roles' || user.role + 's' === roleFilter || (user.role === 'Admin' && roleFilter === 'Admins');
+    const normalizedQuery = searchQuery.toLowerCase();
+    const matchesSearch =
+      user.name.toLowerCase().includes(normalizedQuery) ||
+      user.email.toLowerCase().includes(normalizedQuery) ||
+      (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
+    const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
     return matchesSearch && matchesRole;
   });
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const initials = newUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    setFormError('');
+
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedFirstName = newUser.firstName.trim();
+    const trimmedLastName = newUser.lastName.trim();
+    const trimmedClass = newUser.className.trim().toUpperCase();
+    const trimmedStudentId = newUser.studentId.trim();
+
+    if (!trimmedEmail) {
+      setFormError('Email is required.');
+      return;
+    }
+    if (!trimmedFirstName) {
+      setFormError('First name is required.');
+      return;
+    }
+
+    if (newUser.role === 'Student') {
+      const studentIdPattern = /^(2026|2027)-\d{3}$/;
+      if (trimmedStudentId && !studentIdPattern.test(trimmedStudentId)) {
+        setFormError('Student ID must match format YYYY-XXX (example: 2026-001).');
+        return;
+      }
+      if (trimmedStudentId && !trimmedStudentId.startsWith(`${newUser.generation}-`)) {
+        setFormError('Student ID year must match selected generation.');
+        return;
+      }
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail)) {
+      setFormError('Email already exists.');
+      return;
+    }
+    setIsSubmitting(true);
+
+    const resolvedName = `${trimmedFirstName} ${trimmedLastName}`.trim() || toDisplayNameFromEmail(trimmedEmail);
+    const initials = resolvedName
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
     const colors = [
       'bg-blue-100 text-blue-700',
       'bg-purple-100 text-purple-700',
@@ -72,24 +253,292 @@ export default function AdminUserManagementPage() {
       'bg-indigo-100 text-indigo-700'
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const group =
+      newUser.role === 'Student'
+        ? trimmedClass
+          ? `Gen ${newUser.generation} - Class ${trimmedClass}`
+          : 'Pending Class Assignment'
+        : newUser.role === 'Teacher'
+          ? 'Teaching Staff'
+          : 'Administration';
 
-    const userToAdd = {
-      ...newUser,
-      id: Date.now(),
-      initials,
-      color: randomColor,
-      role: newUser.role === 'Admin' ? `Admin (${newUser.adminRole})` : newUser.role
-    };
+    try {
+      const roleValue = newUser.role.toLowerCase();
+      const response = await fetch(`${API_BASE_URL}/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName || undefined,
+          name: resolvedName,
+          gender: newUser.gender,
+          email: trimmedEmail,
+          role: roleValue,
+          generation: roleValue === 'student' ? newUser.generation : undefined,
+          className: roleValue === 'student' && trimmedClass ? trimmedClass : undefined,
+          studentId: roleValue === 'student' && trimmedStudentId ? trimmedStudentId : undefined
+        })
+      });
 
-    setUsers([userToAdd, ...users]);
-    setIsModalOpen(false);
-    setNewUser({ name: '', nickname: '', email: '', role: 'Student', adminRole: 'Moderator', group: '', status: 'Active' });
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || 'Failed to send invitation email.');
+        return;
+      }
+      const invitedUser: UserRecord = {
+        id: Date.now(),
+        name: resolvedName,
+        email: trimmedEmail,
+        role: newUser.role,
+        gender: newUser.gender,
+        group,
+        status: 'Invited',
+        initials,
+        color: randomColor,
+        generation: newUser.role === 'Student' ? newUser.generation : undefined,
+        className: newUser.role === 'Student' && trimmedClass ? trimmedClass : undefined,
+        studentId: newUser.role === 'Student' && trimmedStudentId ? trimmedStudentId : undefined
+      };
+
+      setUsers([invitedUser, ...users]);
+      setIsModalOpen(false);
+      setNewUser(defaultNewUser);
+      setSuccessMessage(data.message || 'Invitation email sent successfully.');
+      setToastType(data.smtpConfigured === false ? 'warning' : 'success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      setFormError('Failed to send invitation email.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleUserActive = (user: UserRecord) => {
+    if (user.status === 'Deleted') return;
+    const shouldEnable = user.status !== 'Active';
+    setConfirmAction({ kind: 'toggle-active', user, shouldEnable });
   };
 
   const deleteUser = (id: number) => {
-    setUsers(users.filter(u => u.id !== id));
+    const target = users.find((u) => u.id === id);
+    if (!target || target.status === 'Deleted') return;
+    setConfirmAction({ kind: 'delete', user: target });
+  };
+
+  const deleteAllUsers = () => {
+    const deletableUsersCount = users.filter((u) => u.status !== 'Deleted').length;
+    if (deletableUsersCount === 0 || isActionSubmitting) return;
+    setConfirmAction({ kind: 'delete-all' });
+  };
+
+  const executeConfirmedAction = async () => {
+    if (!confirmAction) return;
+    setIsActionSubmitting(true);
+    setFormError('');
+
+    const getResponseData = async (response: Response) => {
+      try {
+        return await response.json();
+      } catch {
+        return {};
+      }
+    };
+
+    try {
+      if (confirmAction.kind === 'toggle-active') {
+        const { user, shouldEnable } = confirmAction;
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}/active`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: shouldEnable })
+        });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to update user status.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: shouldEnable ? 'Active' : 'Inactive' } : u)));
+        setSuccessMessage(data.message || 'User status updated.');
+        setToastType('success');
+      } else if (confirmAction.kind === 'delete') {
+        const { user } = confirmAction;
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}`, { method: 'DELETE' });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to delete user.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: 'Deleted' } : u)));
+        setSuccessMessage(data.message || 'User deleted.');
+        setToastType('warning');
+      } else {
+        const response = await fetch(`${API_BASE_URL}/users`, { method: 'DELETE' });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to delete users.');
+          return;
+        }
+        setUsers((prev) => prev.map((u) => ({ ...u, status: 'Deleted' })));
+        setSuccessMessage(data.message || 'All users deleted.');
+        setToastType('warning');
+      }
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2500);
+      setConfirmAction(null);
+    } catch {
+      setFormError('Failed to complete the action.');
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const toUserRecordFromBulkInvite = (invited: BulkInvitedUser): UserRecord => {
+    const roleLower = (invited.role || '').toLowerCase();
+    const mappedRole: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
+    const resolvedName = invited.name?.trim() || toDisplayNameFromEmail(invited.email);
+    const initials = resolvedName
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+    const colors = [
+      'bg-blue-100 text-blue-700',
+      'bg-purple-100 text-purple-700',
+      'bg-orange-100 text-orange-700',
+      'bg-emerald-100 text-emerald-700',
+      'bg-indigo-100 text-indigo-700'
+    ];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    const generation = invited.generation === '2026' || invited.generation === '2027' ? invited.generation : undefined;
+    const className = invited.className || undefined;
+    const group =
+      invited.group ||
+      (mappedRole === 'Student'
+        ? generation && className
+          ? `Gen ${generation} - Class ${className}`
+          : 'Pending Class Assignment'
+        : mappedRole === 'Teacher'
+          ? 'Teaching Staff'
+          : 'Administration');
+    const normalizedGender = (invited.gender || '').toLowerCase();
+
+    return {
+      id: Date.now() + Math.floor(Math.random() * 10000),
+      name: resolvedName,
+      email: invited.email,
+      role: mappedRole,
+      group,
+      status: 'Invited',
+      initials,
+      color: randomColor,
+      generation,
+      className,
+      studentId: invited.studentId || undefined,
+      gender: normalizedGender === 'male' || normalizedGender === 'female' ? normalizedGender : undefined
+    };
+  };
+
+  const handleBulkImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setFormError('');
+    setIsBulkImporting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_BASE_URL}/users/invite/bulk/validate`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || 'Failed to import Excel file.');
+        return;
+      }
+
+      const failedCount = Number(data?.summary?.failedCount || 0);
+      const validatedRows = Array.isArray(data?.validRows) ? data.validRows : [];
+
+      setBulkValidationErrorCount(failedCount);
+      if (failedCount > 0) {
+        setBulkValidatedRows([]);
+      } else {
+        setBulkValidatedRows(validatedRows);
+      }
+
+      setSuccessMessage(data.message || `Validated ${validatedRows.length} users.`);
+      setToastType(failedCount > 0 ? 'warning' : 'success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 4000);
+
+      if (failedCount > 0) {
+        const firstError = data?.errors?.[0]?.error;
+        setFormError(`Some rows failed (${failedCount}). ${firstError ? `First error: ${firstError}` : ''}`);
+      }
+    } catch {
+      setFormError('Failed to import Excel file.');
+    } finally {
+      setIsBulkImporting(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const handleBulkCommit = async () => {
+    if (!bulkValidatedRows.length || bulkValidationErrorCount > 0) {
+      setFormError('Please import a valid Excel file with zero errors before sending invites.');
+      return;
+    }
+
+    setIsBulkCommitting(true);
+    setFormError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/invite/bulk/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: bulkValidatedRows.map((row) => ({
+            row: row.row,
+            payload: row.payload
+          }))
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setFormError(data.error || data.message || 'Failed to send bulk invite emails.');
+        return;
+      }
+
+      const invitedRows = Array.isArray(data.invited) ? data.invited : [];
+      const importedUsers = invitedRows.map((item: BulkInvitedUser) => toUserRecordFromBulkInvite(item));
+
+      setUsers((prev) => {
+        const existingEmails = new Set(prev.map((u) => u.email.toLowerCase()));
+        const next = importedUsers.filter((u) => !existingEmails.has(u.email.toLowerCase()));
+        return [...next, ...prev];
+      });
+
+      setSuccessMessage(data.message || `Invited ${importedUsers.length} users.`);
+      setToastType(Number(data?.summary?.emailFailedCount || 0) > 0 ? 'warning' : 'success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 4000);
+      setBulkValidatedRows([]);
+      setBulkValidationErrorCount(0);
+    } catch {
+      setFormError('Failed to send bulk invite emails.');
+    } finally {
+      setIsBulkCommitting(false);
+    }
   };
 
   return (
@@ -104,10 +553,13 @@ export default function AdminUserManagementPage() {
               initial={{ opacity: 0, y: -20, x: '-50%' }}
               animate={{ opacity: 1, y: 20, x: '-50%' }}
               exit={{ opacity: 0, y: -20, x: '-50%' }}
-              className="fixed top-0 left-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold"
+              className={cn(
+                "fixed top-0 left-1/2 z-[100] text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold",
+                toastType === 'success' ? 'bg-emerald-600' : 'bg-amber-600'
+              )}
             >
               <CheckCircle2 className="w-5 h-5" />
-              User added successfully!
+              {successMessage}
             </motion.div>
           )}
         </AnimatePresence>
@@ -122,6 +574,13 @@ export default function AdminUserManagementPage() {
           <div className="flex items-center gap-4">
             <button className="p-2 text-slate-400 hover:text-primary transition-colors">
               <Download className="w-5 h-5" />
+            </button>
+            <button
+              onClick={deleteAllUsers}
+              disabled={isActionSubmitting || users.every((u) => u.status === 'Deleted')}
+              className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
+            >
+              Delete All
             </button>
             <button 
               onClick={() => setIsModalOpen(true)}
@@ -174,6 +633,7 @@ export default function AdminUserManagementPage() {
                     <th className="px-6 py-4">User</th>
                     <th className="px-6 py-4">Role</th>
                     <th className="px-6 py-4">Class/Department</th>
+                    <th className="px-6 py-4">Student ID</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
@@ -188,8 +648,7 @@ export default function AdminUserManagementPage() {
                           </div>
                           <div>
                             <p className="text-sm font-black text-slate-900">
-                              {user.name} 
-                              {user.nickname && <span className="text-xs font-bold text-primary ml-2">({user.nickname})</span>}
+                              {user.name}
                             </p>
                             <p className="text-[10px] font-bold text-slate-400">{user.email}</p>
                           </div>
@@ -208,21 +667,36 @@ export default function AdminUserManagementPage() {
                         <span className="text-xs font-bold text-slate-600">{user.group}</span>
                       </td>
                       <td className="px-6 py-4">
+                        <span className="text-xs font-bold text-slate-600">{user.studentId || '-'}</span>
+                      </td>
+                      <td className="px-6 py-4">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                          user.status === 'Active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                          user.status === 'Active'
+                            ? "bg-emerald-50 text-emerald-600"
+                            : user.status === 'Deleted'
+                              ? "bg-rose-50 text-rose-600"
+                            : user.status === 'Invited'
+                              ? "bg-amber-50 text-amber-600"
+                              : "bg-slate-100 text-slate-400"
                         )}>
                           {user.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button className="p-2 text-slate-400 hover:text-primary transition-colors">
-                            <Edit2 className="w-4 h-4" />
+                          <button
+                            onClick={() => toggleUserActive(user)}
+                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
+                            title={user.status === 'Active' ? 'Disable user' : 'Enable user'}
+                          >
+                            <Power className="w-4 h-4" />
                           </button>
                           <button 
                             onClick={() => deleteUser(user.id)}
-                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-40"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -245,6 +719,69 @@ export default function AdminUserManagementPage() {
         </div>
       </main>
 
+      {/* Confirm Action Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isActionSubmitting && setConfirmAction(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 14 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 14 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-7"
+            >
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                {confirmAction.kind === 'delete'
+                  ? 'Delete User?'
+                  : confirmAction.kind === 'delete-all'
+                    ? 'Delete All Users?'
+                  : confirmAction.shouldEnable
+                    ? 'Enable User?'
+                    : 'Disable User?'}
+              </h3>
+              <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                {confirmAction.kind === 'delete'
+                  ? `Are you sure you want to delete "${confirmAction.user.name}"? This keeps the record for history, but disables login and marks the user as deleted.`
+                  : confirmAction.kind === 'delete-all'
+                    ? 'Are you sure you want to delete all users? This keeps records for history, but disables login and marks every account as deleted.'
+                  : confirmAction.shouldEnable
+                    ? `Are you sure you want to enable "${confirmAction.user.name}"? The user will be able to log in again.`
+                    : `Are you sure you want to disable "${confirmAction.user.name}"? The user will not be able to log in.`}
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction(null)}
+                  disabled={isActionSubmitting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={executeConfirmedAction}
+                  disabled={isActionSubmitting}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-white text-xs font-black uppercase tracking-widest disabled:opacity-60",
+                    confirmAction.kind === 'delete' || confirmAction.kind === 'delete-all'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-primary hover:bg-primary/90'
+                  )}
+                >
+                  {isActionSubmitting ? 'Processing...' : 'Confirm'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Add User Modal */}
       <AnimatePresence>
         {isModalOpen && (
@@ -265,37 +802,71 @@ export default function AdminUserManagementPage() {
               <div className="p-8">
                 <div className="flex items-center justify-between mb-8">
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Add New User</h3>
-                    <p className="text-slate-500 text-sm">Create a new account for the system.</p>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Invite New User</h3>
+                    <p className="text-slate-500 text-sm">Send an email invite with registration link.</p>
                   </div>
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                  >
-                    <X className="w-6 h-6 text-slate-400" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleBulkImport}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isBulkImporting || isSubmitting || isBulkCommitting}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isBulkImporting ? 'Importing...' : 'Import Excel'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkCommit}
+                      disabled={isBulkImporting || isSubmitting || isBulkCommitting || !bulkValidatedRows.length || bulkValidationErrorCount > 0}
+                      className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60"
+                    >
+                      {isBulkCommitting ? 'Sending...' : 'Send Invite Email'}
+                    </button>
+                    <button 
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                    >
+                      <X className="w-6 h-6 text-slate-400" />
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleAddUser} className="space-y-6">
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation, Class, Student ID.
+                  </p>
+                  {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
+                    <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                      Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to insert users and send invites.
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
                       <input 
                         required
                         type="text" 
-                        placeholder="e.g. Sokha Mean"
-                        value={newUser.name}
-                        onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                        placeholder="e.g. Sokha"
+                        value={newUser.firstName}
+                        onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nickname (Optional)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
                       <input 
                         type="text" 
-                        placeholder="e.g. Sokha"
-                        value={newUser.nickname}
-                        onChange={(e) => setNewUser({...newUser, nickname: e.target.value})}
+                        placeholder="e.g. Mean"
+                        value={newUser.lastName}
+                        onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
@@ -311,14 +882,26 @@ export default function AdminUserManagementPage() {
                       onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                     />
+                    <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Base Role</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
+                      <select
+                        value={newUser.gender}
+                        onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      >
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role</label>
                       <select 
                         value={newUser.role}
-                        onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                        onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       >
                         <option value="Student">Student</option>
@@ -326,41 +909,72 @@ export default function AdminUserManagementPage() {
                         <option value="Admin">Admin</option>
                       </select>
                     </div>
-                    {newUser.role === 'Admin' ? (
+                    {newUser.role === 'Student' ? (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Admin Specific Role</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Generation</label>
                         <select 
-                          value={newUser.adminRole}
-                          onChange={(e) => setNewUser({...newUser, adminRole: e.target.value})}
+                          value={newUser.generation}
+                          onChange={(e) => setNewUser({...newUser, generation: e.target.value as StudentGeneration})}
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         >
-                          <option value="Super Admin">Super Admin</option>
-                          <option value="Moderator">Moderator</option>
-                          <option value="Evaluator">Evaluator</option>
-                          <option value="Support">Support</option>
+                          <option value="2026">2026</option>
+                          <option value="2027">2027</option>
                         </select>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class / Department</label>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role Details</label>
                         <input 
-                          required
+                          disabled
                           type="text" 
-                          placeholder="e.g. Gen 2027 - Class A"
-                          value={newUser.group}
-                          onChange={(e) => setNewUser({...newUser, group: e.target.value})}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          value={newUser.role === 'Teacher' ? 'Teaching Staff' : 'Administration'}
+                          className="w-full px-4 py-3 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
                         />
                       </div>
                     )}
                   </div>
 
+                  {newUser.role === 'Student' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. A"
+                          value={newUser.className}
+                          onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Optional. Add later if not ready.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
+                        <input
+                          type="text"
+                          placeholder={`${newUser.generation}-001`}
+                          value={newUser.studentId}
+                          onChange={(e) => setNewUser({ ...newUser, studentId: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Format: YYYY-XXX (example: 2026-001)</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {formError && (
+                    <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                      {formError}
+                    </div>
+                  )}
+
                   <div className="pt-4">
                     <button 
                       type="submit"
+                      disabled={isSubmitting}
                       className="w-full py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
                     >
-                      Create User Account
+                      {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
                     </button>
                   </div>
                 </form>
@@ -369,6 +983,7 @@ export default function AdminUserManagementPage() {
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }
