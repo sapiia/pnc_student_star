@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { Star, Mail, LockKeyhole, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Mail, LockKeyhole, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
+import BrandLogo from '../components/BrandLogo';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -9,11 +10,8 @@ export default function ForgotPasswordPage() {
     <div className="bg-slate-50 min-h-screen flex flex-col font-sans">
       {/* Top Navigation Bar */}
       <header className="flex items-center justify-between border-b border-primary/10 px-6 py-4 lg:px-10 bg-white">
-        <div className="flex items-center gap-3 text-primary cursor-pointer" onClick={() => navigate('/')}>
-          <div className="size-8 flex items-center justify-center bg-primary/10 rounded-lg">
-            <Star className="w-5 h-5 fill-primary text-primary" />
-          </div>
-          <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">PNC Student Star</h2>
+        <div className="cursor-pointer" onClick={() => navigate('/')}>
+          <BrandLogo titleClassName="text-lg font-bold leading-tight tracking-tight" markClassName="size-8" />
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-500 hidden sm:block">Remember your password?</span>

@@ -8,11 +8,19 @@ const {
   updateSetting,
   updateSettingByKey,
   deleteSetting,
-  deleteSettingByKey
+  deleteSettingByKey,
+  getEvaluationCriteriaConfig,
+  saveEvaluationCriteriaConfig
 } = require('../controllers/settingController');
 
 // GET /api/settings - Get all settings
 router.get('/', getAllSettings);
+
+// GET /api/settings/evaluation-criteria - Get evaluation criteria config
+router.get('/evaluation-criteria', getEvaluationCriteriaConfig);
+
+// PUT /api/settings/evaluation-criteria - Update evaluation criteria config
+router.put('/evaluation-criteria', saveEvaluationCriteriaConfig);
 
 // GET /api/settings/:id - Get setting by ID
 router.get('/:id', getSettingById);

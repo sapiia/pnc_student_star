@@ -6,6 +6,8 @@ import {
   UserPlus,
   Upload,
   Power,
+  Minus,
+  Plus,
   X,
   CheckCircle2
 } from 'lucide-react';
@@ -15,8 +17,9 @@ import { cn } from '../lib/utils';
 import React, { useEffect, useState } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
-type UserStatus = 'Active' | 'Inactive' | 'Invited' | 'Deleted';
-type StudentGeneration = '2026' | '2027';
+type UserStatus = 'Active' | 'Inactive' | 'Pending' | 'Deleted';
+type StudentGeneration = string;
+type StudentMajor = string;
 type Gender = 'male' | 'female';
 
 type UserRecord = {
@@ -28,9 +31,11 @@ type UserRecord = {
   status: UserStatus;
   initials: string;
   color: string;
+  profileImage?: string;
   studentId?: string;
   generation?: StudentGeneration;
   className?: string;
+  major?: StudentMajor;
   gender?: Gender;
 };
 
@@ -43,6 +48,7 @@ type BulkInvitedUser = {
   group?: string;
   generation?: string | null;
   className?: string | null;
+  major?: string | null;
   studentId?: string | null;
 };
 
@@ -56,6 +62,7 @@ type BulkValidatedRow = {
     role: string;
     generation?: string | null;
     className?: string | null;
+    major?: string | null;
     studentId?: string | null;
   };
 };
@@ -80,12 +87,17 @@ type ApiUser = {
   first_name?: string;
   last_name?: string;
   email: string;
+  profile_image?: string | null;
   role: string;
   class?: string | null;
   student_id?: string | null;
   resolved_student_id?: string | null;
   is_active?: number | boolean | null;
+  is_disable?: number | boolean | null;
   is_deleted?: number | boolean | null;
+  is_registered?: number | boolean | null;
+  account_status?: string;
+  registration_status?: string;
 };
 
 const defaultNewUser = {
@@ -94,6 +106,7 @@ const defaultNewUser = {
   email: '',
   role: 'Student' as UserRole,
   generation: '2026' as StudentGeneration,
+  major: 'SNA' as StudentMajor,
   className: '',
   studentId: '',
   gender: 'male' as Gender,
@@ -101,6 +114,8 @@ const defaultNewUser = {
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const DEFAULT_MAJOR_OPTIONS = ['SNA', 'WEB DEV'];
+const USERS_PER_PAGE = 15;
 
 const toDisplayNameFromEmail = (email: string) => {
   const username = email.split('@')[0] || 'User';
@@ -131,8 +146,14 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
   ];
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
   const isDeleted = Number(apiUser.is_deleted || 0) === 1;
-  const isActive = Number(apiUser.is_active ?? 1) === 1;
-  const status: UserStatus = isDeleted ? 'Deleted' : isActive ? 'Active' : 'Inactive';
+  const isDisabled = typeof apiUser.is_disable !== 'undefined'
+    ? Number(apiUser.is_disable || 0) === 1
+    : Number(apiUser.is_active ?? 1) === 0;
+  const isPending = typeof apiUser.is_registered !== 'undefined'
+    ? Number(apiUser.is_registered || 0) === 0
+    : (apiUser.registration_status || '').toString().toLowerCase() === 'pending'
+      || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
+  const status: UserStatus = isDeleted ? 'Deleted' : isPending ? 'Pending' : isDisabled ? 'Inactive' : 'Active';
   const classText = (apiUser.class || '').toString().trim();
   const group = role === 'Student'
     ? (classText || 'Pending Class Assignment')
@@ -150,6 +171,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     status,
     initials,
     color: randomColor,
+    profileImage: String(apiUser.profile_image || '').trim() || undefined,
     studentId
   };
 };
@@ -169,6 +191,10 @@ export default function AdminUserManagementPage() {
   const [bulkValidatedRows, setBulkValidatedRows] = useState<BulkValidatedRow[]>([]);
   const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
   const [newUser, setNewUser] = useState(defaultNewUser);
+  const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
+  const [customMajorDraft, setCustomMajorDraft] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -201,14 +227,33 @@ export default function AdminUserManagementPage() {
     return matchesSearch && matchesRole;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * USERS_PER_PAGE,
+    currentPage * USERS_PER_PAGE
+  );
+  const emptyRows = Math.max(0, USERS_PER_PAGE - paginatedUsers.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
-    const trimmedEmail = newUser.email.trim().toLowerCase();
-    const trimmedFirstName = newUser.firstName.trim();
+  const trimmedEmail = newUser.email.trim().toLowerCase();
+  const trimmedFirstName = newUser.firstName.trim();
     const trimmedLastName = newUser.lastName.trim();
     const trimmedClass = newUser.className.trim().toUpperCase();
+    const trimmedGeneration = newUser.generation.trim();
+    const trimmedMajor = newUser.major.trim();
     const trimmedStudentId = newUser.studentId.trim();
 
     if (!trimmedEmail) {
@@ -221,12 +266,20 @@ export default function AdminUserManagementPage() {
     }
 
     if (newUser.role === 'Student') {
-      const studentIdPattern = /^(2026|2027)-\d{3}$/;
-      if (trimmedStudentId && !studentIdPattern.test(trimmedStudentId)) {
-        setFormError('Student ID must match format YYYY-XXX (example: 2026-001).');
+      const studentIdPattern = /^\d{4}-\d{3}$/;
+      if (!trimmedGeneration || !/^\d{4}$/.test(trimmedGeneration)) {
+        setFormError('Generation must be a 4-digit year.');
         return;
       }
-      if (trimmedStudentId && !trimmedStudentId.startsWith(`${newUser.generation}-`)) {
+      if (!trimmedMajor) {
+        setFormError('Major is required for student invites.');
+        return;
+      }
+      if (trimmedStudentId && !studentIdPattern.test(trimmedStudentId)) {
+        setFormError('Student ID must match format YYYY-XXX (example: 2028-001).');
+        return;
+      }
+      if (trimmedStudentId && !trimmedStudentId.startsWith(`${trimmedGeneration}-`)) {
         setFormError('Student ID year must match selected generation.');
         return;
       }
@@ -255,9 +308,7 @@ export default function AdminUserManagementPage() {
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const group =
       newUser.role === 'Student'
-        ? trimmedClass
-          ? `Gen ${newUser.generation} - Class ${trimmedClass}`
-          : 'Pending Class Assignment'
+        ? `Gen ${trimmedGeneration}${trimmedMajor ? ` - ${trimmedMajor}` : ''}${trimmedClass ? ` - Class ${trimmedClass}` : ''}`
         : newUser.role === 'Teacher'
           ? 'Teaching Staff'
           : 'Administration';
@@ -274,7 +325,8 @@ export default function AdminUserManagementPage() {
           gender: newUser.gender,
           email: trimmedEmail,
           role: roleValue,
-          generation: roleValue === 'student' ? newUser.generation : undefined,
+          generation: roleValue === 'student' ? trimmedGeneration : undefined,
+          major: roleValue === 'student' ? trimmedMajor : undefined,
           className: roleValue === 'student' && trimmedClass ? trimmedClass : undefined,
           studentId: roleValue === 'student' && trimmedStudentId ? trimmedStudentId : undefined
         })
@@ -292,10 +344,11 @@ export default function AdminUserManagementPage() {
         role: newUser.role,
         gender: newUser.gender,
         group,
-        status: 'Invited',
+        status: 'Pending',
         initials,
         color: randomColor,
-        generation: newUser.role === 'Student' ? newUser.generation : undefined,
+        generation: newUser.role === 'Student' ? trimmedGeneration : undefined,
+        major: newUser.role === 'Student' ? trimmedMajor : undefined,
         className: newUser.role === 'Student' && trimmedClass ? trimmedClass : undefined,
         studentId: newUser.role === 'Student' && trimmedStudentId ? trimmedStudentId : undefined
       };
@@ -412,14 +465,15 @@ export default function AdminUserManagementPage() {
       'bg-indigo-100 text-indigo-700'
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    const generation = invited.generation === '2026' || invited.generation === '2027' ? invited.generation : undefined;
+    const generation = (invited.generation || '').trim() || undefined;
     const className = invited.className || undefined;
+    const major = invited.major === 'SNA' || invited.major === 'WEB DEV' ? invited.major : undefined;
     const group =
       invited.group ||
       (mappedRole === 'Student'
-        ? generation && className
-          ? `Gen ${generation} - Class ${className}`
-          : 'Pending Class Assignment'
+        ? (generation || major || className
+            ? `Gen ${generation || 'Unknown'}${major ? ` - ${major}` : ''}${className ? ` - Class ${className}` : ''}`
+            : 'Pending Class Assignment')
         : mappedRole === 'Teacher'
           ? 'Teaching Staff'
           : 'Administration');
@@ -431,10 +485,11 @@ export default function AdminUserManagementPage() {
       email: invited.email,
       role: mappedRole,
       group,
-      status: 'Invited',
+      status: 'Pending',
       initials,
       color: randomColor,
       generation,
+      major,
       className,
       studentId: invited.studentId || undefined,
       gender: normalizedGender === 'male' || normalizedGender === 'female' ? normalizedGender : undefined
@@ -564,35 +619,42 @@ export default function AdminUserManagementPage() {
           )}
         </AnimatePresence>
 
-        {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-black text-slate-900">User Management</h1>
-            <p className="text-xs text-slate-500 font-bold">Manage system users, roles, and permissions.</p>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-primary transition-colors">
-              <Download className="w-5 h-5" />
-            </button>
-            <button
-              onClick={deleteAllUsers}
-              disabled={isActionSubmitting || users.every((u) => u.status === 'Deleted')}
-              className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
-            >
-              Delete All
-            </button>
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
-            >
-              <UserPlus className="w-4 h-4" />
-              Add User
-            </button>
-          </div>
-        </header>
+        <motion.div
+          initial={{ opacity: 0, y: 18, scale: 0.995 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+          className="min-h-full"
+          style={{ willChange: 'transform, opacity' }}
+        >
+          {/* Header */}
+          <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-black text-slate-900">User Management</h1>
+              <p className="text-xs text-slate-500 font-bold">Manage system users, roles, and permissions.</p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <button className="p-2 text-slate-400 hover:text-primary transition-colors">
+                <Download className="w-5 h-5" />
+              </button>
+              <button
+                onClick={deleteAllUsers}
+                disabled={isActionSubmitting || users.every((u) => u.status === 'Deleted')}
+                className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
+              >
+                Delete All
+              </button>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                Add User
+              </button>
+            </div>
+          </header>
 
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
+          <div className="p-8 max-w-7xl mx-auto space-y-8">
           {/* Filters & Search */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:w-96">
@@ -638,14 +700,37 @@ export default function AdminUserManagementPage() {
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.tbody
+                    key={currentPage}
+                    initial={{ opacity: 0, x: pageDirection >= 0 ? 10 : -10, scale: 0.995 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: pageDirection >= 0 ? -10 : 10, scale: 0.995 }}
+                    transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+                    className="divide-y divide-slate-100"
+                    style={{ willChange: 'transform, opacity' }}
+                  >
+                  {paginatedUsers.map((user, index) => (
+                    <motion.tr
+                      key={user.id}
+                      initial={{ opacity: 0, y: 6, scale: 0.998 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      whileHover={{ scale: 0.992 }}
+                      transition={{ duration: 0.3, delay: Math.min(index * 0.018, 0.16), ease: [0.16, 1, 0.3, 1] }}
+                      className="hover:bg-slate-50/50 transition-colors duration-300 group"
+                      style={{ willChange: 'transform, opacity' }}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className={cn("size-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0", user.color)}>
-                            {user.initials}
-                          </div>
+                          {user.profileImage ? (
+                            <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                              <img src={user.profileImage} alt={user.name} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={cn("size-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0", user.color)}>
+                              {user.initials}
+                            </div>
+                          )}
                           <div>
                             <p className="text-sm font-black text-slate-900">
                               {user.name}
@@ -676,7 +761,7 @@ export default function AdminUserManagementPage() {
                             ? "bg-emerald-50 text-emerald-600"
                             : user.status === 'Deleted'
                               ? "bg-rose-50 text-rose-600"
-                            : user.status === 'Invited'
+                            : user.status === 'Pending'
                               ? "bg-amber-50 text-amber-600"
                               : "bg-slate-100 text-slate-400"
                         )}>
@@ -702,21 +787,52 @@ export default function AdminUserManagementPage() {
                           </button>
                         </div>
                       </td>
+                    </motion.tr>
+                  ))}
+                  {Array.from({ length: emptyRows }).map((_, index) => (
+                    <tr key={`empty-row-${currentPage}-${index}`} aria-hidden="true" className="pointer-events-none">
+                      <td colSpan={6} className="px-6 py-0">
+                        <div className="h-[73px]" />
+                      </td>
                     </tr>
                   ))}
-                </tbody>
+                  </motion.tbody>
+                </AnimatePresence>
               </table>
             </div>
             
             <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing {filteredUsers.length} of {users.length} users</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Showing {filteredUsers.length === 0 ? 0 : (currentPage - 1) * USERS_PER_PAGE + 1}
+                -
+                {Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length} users
+              </p>
               <div className="flex gap-2">
-                <button className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors">Previous</button>
-                <button className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-900 hover:bg-slate-50 transition-colors">Next</button>
+                <button
+                  onClick={() => {
+                    setPageDirection(-1);
+                    setCurrentPage((prev) => Math.max(1, prev - 1));
+                  }}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => {
+                    setPageDirection(1);
+                    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+                  }}
+                  disabled={currentPage === totalPages || filteredUsers.length === 0}
+                  className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-900 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Next
+                </button>
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </motion.div>
       </main>
 
       {/* Confirm Action Modal */}
@@ -797,15 +913,15 @@ export default function AdminUserManagementPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden"
+              className="relative flex max-h-[92vh] w-full max-w-[72rem] flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl"
             >
-              <div className="p-8">
-                <div className="flex items-center justify-between mb-8">
+              <div className="flex-1 overflow-y-auto p-7">
+                <div className="flex items-center justify-between mb-5">
                   <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Invite New User</h3>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Invite New User</h3>
                     <p className="text-slate-500 text-sm">Send an email invite with registration link.</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -839,16 +955,16 @@ export default function AdminUserManagementPage() {
                   </div>
                 </div>
 
-                <form onSubmit={handleAddUser} className="space-y-6">
+                <form onSubmit={handleAddUser} className="space-y-4">
                   <p className="text-[10px] text-slate-400 font-bold">
-                    Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation, Class, Student ID.
+                    Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation, Major, Class, Student ID.
                   </p>
                   {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
                     <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
                       Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to insert users and send invites.
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
                       <input 
@@ -857,7 +973,7 @@ export default function AdminUserManagementPage() {
                         placeholder="e.g. Sokha"
                         value={newUser.firstName}
                         onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
                     <div className="space-y-2">
@@ -867,7 +983,7 @@ export default function AdminUserManagementPage() {
                         placeholder="e.g. Mean"
                         value={newUser.lastName}
                         onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -880,18 +996,18 @@ export default function AdminUserManagementPage() {
                       placeholder="e.g. sokha.mean@pnc.edu"
                       value={newUser.email}
                       onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                     />
                     <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
                       <select
                         value={newUser.gender}
                         onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       >
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -902,7 +1018,7 @@ export default function AdminUserManagementPage() {
                       <select 
                         value={newUser.role}
                         onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       >
                         <option value="Student">Student</option>
                         <option value="Teacher">Teacher</option>
@@ -912,14 +1028,39 @@ export default function AdminUserManagementPage() {
                     {newUser.role === 'Student' ? (
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Generation</label>
-                        <select 
-                          value={newUser.generation}
-                          onChange={(e) => setNewUser({...newUser, generation: e.target.value as StudentGeneration})}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                        >
-                          <option value="2026">2026</option>
-                          <option value="2027">2027</option>
-                        </select>
+                        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 border border-slate-100 px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewUser((prev) => ({
+                                ...prev,
+                                generation: String(Math.max(2000, (Number(prev.generation) || 2026) - 1))
+                              }))
+                            }
+                            className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <input
+                            type="text"
+                            value={newUser.generation}
+                            onChange={(e) => setNewUser({...newUser, generation: e.target.value })}
+                            placeholder="e.g. 2028"
+                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-black text-slate-900 focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewUser((prev) => ({
+                                ...prev,
+                                generation: String(Math.min(2100, (Number(prev.generation) || 2026) + 1))
+                              }))
+                            }
+                            className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -928,14 +1069,51 @@ export default function AdminUserManagementPage() {
                           disabled
                           type="text" 
                           value={newUser.role === 'Teacher' ? 'Teaching Staff' : 'Administration'}
-                          className="w-full px-4 py-3 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
+                          className="w-full px-4 py-2.5 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
                         />
                       </div>
                     )}
                   </div>
 
                   {newUser.role === 'Student' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2 ml-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Major</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextMajor = customMajorDraft.trim().toUpperCase();
+                              if (!nextMajor) return;
+                              if (!majorOptions.includes(nextMajor)) {
+                                setMajorOptions((prev) => [...prev, nextMajor]);
+                              }
+                              setNewUser((prev) => ({ ...prev, major: nextMajor }));
+                              setCustomMajorDraft('');
+                            }}
+                            className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
+                            title="Add new major"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <select
+                          value={newUser.major}
+                          onChange={(e) => setNewUser({ ...newUser, major: e.target.value as StudentMajor })}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        >
+                          {majorOptions.map((major) => (
+                            <option key={major} value={major}>{major}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={customMajorDraft}
+                          onChange={(e) => setCustomMajorDraft(e.target.value)}
+                          placeholder="Add new major manually"
+                          className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                        />
+                      </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class</label>
                         <input
@@ -943,19 +1121,19 @@ export default function AdminUserManagementPage() {
                           placeholder="e.g. A"
                           value={newUser.className}
                           onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         />
-                        <p className="text-[10px] text-slate-400 font-bold ml-1">Optional. Add later if not ready.</p>
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Optional class label like A, B, or C.</p>
                       </div>
 
-                      <div className="space-y-2">
+                      <div className="space-y-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
                         <input
                           type="text"
                           placeholder={`${newUser.generation}-001`}
                           value={newUser.studentId}
                           onChange={(e) => setNewUser({ ...newUser, studentId: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         />
                         <p className="text-[10px] text-slate-400 font-bold ml-1">Format: YYYY-XXX (example: 2026-001)</p>
                       </div>
@@ -968,11 +1146,11 @@ export default function AdminUserManagementPage() {
                     </div>
                   )}
 
-                  <div className="pt-4">
+                  <div className="pt-2">
                     <button 
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
+                      className="w-full py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
                     >
                       {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
                     </button>
@@ -987,3 +1165,4 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+
