@@ -345,6 +345,10 @@ const normalizeInviteInput = (inviteInput = {}) => {
     }
   }
 
+  const normalizedClassValue = normalizedRole === 'student'
+    ? (classValue || majorValue)
+    : classValue;
+
   return {
     firstName: normalizedFirstName,
     lastName: normalizedLastName,
@@ -354,7 +358,7 @@ const normalizeInviteInput = (inviteInput = {}) => {
     role: normalizedRole,
     generation: generationValue,
     major: majorValue,
-    className: classValue,
+    className: normalizedClassValue,
     studentId: studentIdValue,
     inviterName: inviterNameValue,
     inviterEmail: inviterEmailValue
@@ -410,15 +414,16 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
     role,
     generation: role === 'student' && generation ? generation : null,
     major: role === 'student' && major ? major : null,
-    className: role === 'student' && className ? className : null,
+    className: role === 'student' ? (className || major || null) : null,
     studentId: role === 'student' && studentId ? studentId : null,
     exp: Date.now() + INVITE_EXPIRES_HOURS * 60 * 60 * 1000
   };
 
   const tempPassword = options.tempPassword || crypto.randomBytes(18).toString('base64url');
   const hashedTempPassword = await bcrypt.hash(tempPassword, saltRounds);
+  const normalizedClassName = role === 'student' ? (className || major || '') : className;
   const classForUser = role === 'student' && generation
-    ? `Gen ${generation}${major ? ` - ${major}` : ''}${className ? ` - Class ${className}` : ''}`
+    ? `Gen ${generation}${major ? ` - ${major}` : ''}${normalizedClassName ? ` - Class ${normalizedClassName}` : ''}`
     : null;
 
   const token = createInviteToken(payload);
@@ -1050,8 +1055,11 @@ const completeInviteRegistration = async (req, res) => {
     const [existingUsers] = await db.query("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
 
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    const classValue = role === 'student' && payload.generation && payload.className
-      ? `Gen ${payload.generation} - Class ${payload.className}`
+    const studentClassName = role === 'student'
+      ? ((payload.className || payload.major || '').toString().trim())
+      : '';
+    const classValue = role === 'student' && payload.generation
+      ? `Gen ${payload.generation} - Class ${studentClassName || 'Unassigned'}`
       : null;
     const invitedFullName = `${payload.firstName || ''} ${payload.lastName || ''}`.trim();
     const resolvedName = (name || '').toString().trim() || invitedFullName || payload.name || email.split('@')[0];
@@ -1089,9 +1097,27 @@ const completeInviteRegistration = async (req, res) => {
         ? '/teacher/dashboard'
         : '/dashboard';
 
+    const [userRows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
+    const user = userRows[0] || null;
+    const columns = await getUsersTableColumns();
+    const normalizedRole = normalizeRole(role);
+    const fallbackName = user ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim() : '';
+    const responseName = user ? (fallbackName || user.email) : payload.name || payload.email;
+
     return res.status(201).json({
       message: "Registration completed successfully.",
       userId,
+      user: user ? {
+        id: user.id,
+        name: responseName,
+        email: user.email,
+        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        role: normalizedRole,
+        class: user.class,
+        student_id: user.student_id || null,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      } : null,
       redirectPath
     });
   } catch (err) {

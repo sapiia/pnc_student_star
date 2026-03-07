@@ -1,26 +1,54 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Bell,
-  CheckCircle2,
-  HelpCircle,
-  Search,
-  Settings,
-  Star,
-  Users,
-} from 'lucide-react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, Search, Send, Settings, Trash2, Users, X } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import { cn } from '../lib/utils';
+import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 
 type FeedbackItem = {
   id: number;
   teacher_id?: number;
   student_id?: number;
   evaluation_id?: number | null;
+  evaluation_period?: string | null;
   teacher_name?: string;
   teacher_profile_image?: string | null;
   comment: string;
   created_at?: string;
+};
+
+type StudentReplyItem = {
+  id: number;
+  feedback_id: number;
+  student_id: number;
+  student_name: string;
+  reply_message: string;
+  created_at?: string;
+  is_read?: number;
+};
+
+type TeacherSummary = {
+  teacherId: number;
+  teacherName: string;
+  teacherProfileImage: string | null;
+  latestAt?: string;
+  latestSnippet: string;
+  totalFeedbacks: number;
+  unreadCount: number;
+};
+
+type ChatEntry = {
+  id: string;
+  kind: 'teacher' | 'student';
+  text: string;
+  createdAt?: string;
+  quarterLabel?: string;
+  feedbackId?: number;
+  replyId?: number;
+};
+
+type DeleteTarget = {
+  kind: 'feedback' | 'reply';
+  id: number;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
@@ -35,15 +63,101 @@ const formatDateLabel = (value?: string) => {
   }).format(date);
 };
 
+const toQuarterLabel = (period?: string | null) => {
+  const text = String(period || '').trim();
+  const match = text.match(/^(\d{4})-Q([1-4])$/i);
+  if (match) return `Q${match[2]} ${match[1]}`;
+  return text || 'Unknown Quarter';
+};
+
+const sortByDateAsc = (left?: string, right?: string) => (
+  new Date(String(left || '')).getTime() - new Date(String(right || '')).getTime()
+);
+
 export default function FeedbackPage() {
-  const navigate = useNavigate();
   const [studentId, setStudentId] = useState<number | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [studentName, setStudentName] = useState('Student');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null);
   const [feedbackList, setFeedbackList] = useState<FeedbackItem[]>([]);
+  const [teacherReplies, setTeacherReplies] = useState<StudentReplyItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingReplies, setIsLoadingReplies] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [canViewTeacherFeedback, setCanViewTeacherFeedback] = useState(true);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [replyStatus, setReplyStatus] = useState('');
+  const [replyToMessage, setReplyToMessage] = useState<ChatEntry | null>(null);
+  const [hiddenMessageIds, setHiddenMessageIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+  const [seenByTeacher, setSeenByTeacher] = useState<Record<string, string>>({});
+
+  const loadFeedbacks = useCallback(async () => {
+    if (!studentId) {
+      setIsLoading(false);
+      setFeedbackList([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError('');
+
+    try {
+      const [visibilityResponse, feedbackResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
+        fetch(`${API_BASE_URL}/feedbacks/student/${studentId}`),
+      ]);
+
+      const visibilityData = await visibilityResponse.json().catch(() => ({}));
+      const feedbackData = await feedbackResponse.json().catch(() => []);
+
+      const visibilityValue = String(visibilityData?.value || 'true').trim().toLowerCase();
+      const isVisible = visibilityValue !== 'false' && visibilityValue !== '0';
+      setCanViewTeacherFeedback(isVisible);
+
+      if (!isVisible) {
+        setFeedbackList([]);
+        setSelectedTeacherId(null);
+        return;
+      }
+
+      if (!feedbackResponse.ok) {
+        throw new Error(feedbackData?.error || 'Failed to load feedback.');
+      }
+
+      const normalizedFeedbacks = Array.isArray(feedbackData) ? feedbackData : [];
+      setFeedbackList(normalizedFeedbacks);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Failed to load feedback.');
+      setFeedbackList([]);
+      setSelectedTeacherId(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studentId]);
+
+  const loadTeacherReplies = useCallback(async () => {
+    if (!studentId || !selectedTeacherId) {
+      setTeacherReplies([]);
+      return;
+    }
+
+    setIsLoadingReplies(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications/thread/student/${studentId}/teacher/${selectedTeacherId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load replies.');
+      }
+      setTeacherReplies(Array.isArray(data) ? data : []);
+    } catch {
+      setTeacherReplies([]);
+    } finally {
+      setIsLoadingReplies(false);
+    }
+  }, [selectedTeacherId, studentId]);
 
   useEffect(() => {
     try {
@@ -54,83 +168,277 @@ export default function FeedbackPage() {
       if (Number.isInteger(resolvedStudentId) && resolvedStudentId > 0) {
         setStudentId(resolvedStudentId);
       }
+      const resolvedStudentName =
+        String(authUser?.name || '').trim() ||
+        [authUser?.first_name, authUser?.last_name].filter(Boolean).join(' ').trim();
+      if (resolvedStudentName) {
+        setStudentName(resolvedStudentName);
+      }
     } catch {
       setStudentId(null);
     }
   }, []);
 
   useEffect(() => {
-    const loadFeedbacks = async () => {
-      if (!studentId) {
-        setIsLoading(false);
-        setFeedbackList([]);
-        return;
-      }
+    if (!studentId) return;
 
-      setIsLoading(true);
-      setLoadError('');
+    try {
+      const rawHidden = localStorage.getItem(`student_hidden_messages_${studentId}`);
+      const parsedHidden = rawHidden ? JSON.parse(rawHidden) : [];
+      setHiddenMessageIds(Array.isArray(parsedHidden) ? parsedHidden.map((item) => String(item)) : []);
+    } catch {
+      setHiddenMessageIds([]);
+    }
 
-      try {
-        const [visibilityResponse, feedbackResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
-          fetch(`${API_BASE_URL}/feedbacks/student/${studentId}`),
-        ]);
-
-        const visibilityData = await visibilityResponse.json().catch(() => ({}));
-        const feedbackData = await feedbackResponse.json().catch(() => []);
-
-        const visibilityValue = String(visibilityData?.value || 'true').trim().toLowerCase();
-        const isVisible = visibilityValue !== 'false' && visibilityValue !== '0';
-        setCanViewTeacherFeedback(isVisible);
-
-        if (!isVisible) {
-          setFeedbackList([]);
-          setSelectedId(null);
-          return;
-        }
-
-        if (!feedbackResponse.ok) {
-          throw new Error(feedbackData?.error || 'Failed to load feedback.');
-        }
-
-        const normalizedFeedbacks = Array.isArray(feedbackData) ? feedbackData : [];
-        setFeedbackList(normalizedFeedbacks);
-        setSelectedId(normalizedFeedbacks[0]?.id ?? null);
-      } catch (error) {
-        setLoadError(error instanceof Error ? error.message : 'Failed to load feedback.');
-        setFeedbackList([]);
-        setSelectedId(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadFeedbacks();
+    try {
+      const rawSeen = localStorage.getItem(`student_seen_by_teacher_${studentId}`);
+      const parsedSeen = rawSeen ? JSON.parse(rawSeen) : {};
+      setSeenByTeacher(parsedSeen && typeof parsedSeen === 'object' ? parsedSeen : {});
+    } catch {
+      setSeenByTeacher({});
+    }
   }, [studentId]);
 
-  const filteredFeedbacks = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return feedbackList;
-
-    return feedbackList.filter((item) => (
-      String(item.teacher_name || '').toLowerCase().includes(normalizedQuery) ||
-      String(item.comment || '').toLowerCase().includes(normalizedQuery)
-    ));
-  }, [feedbackList, searchQuery]);
+  useEffect(() => {
+    if (!studentId) return;
+    localStorage.setItem(`student_hidden_messages_${studentId}`, JSON.stringify(hiddenMessageIds));
+  }, [hiddenMessageIds, studentId]);
 
   useEffect(() => {
-    if (!filteredFeedbacks.length) {
-      setSelectedId(null);
+    if (!studentId) return;
+    localStorage.setItem(`student_seen_by_teacher_${studentId}`, JSON.stringify(seenByTeacher));
+  }, [seenByTeacher, studentId]);
+
+  useEffect(() => {
+    void loadFeedbacks();
+  }, [loadFeedbacks]);
+
+  useEffect(() => {
+    void loadTeacherReplies();
+  }, [loadTeacherReplies]);
+
+  useEffect(() => {
+    if (!studentId) return;
+
+    const socket = getRealtimeSocket();
+    const subscription = { studentId };
+    const handleFeedbackEvent = (payload: FeedbackRealtimePayload = {}) => {
+      if (Number(payload.studentId) !== studentId) return;
+      void loadFeedbacks();
+    };
+
+    socket.emit('feedback:subscribe', subscription);
+    socket.on('feedback:created', handleFeedbackEvent);
+    socket.on('feedback:updated', handleFeedbackEvent);
+    socket.on('feedback:deleted', handleFeedbackEvent);
+
+    return () => {
+      socket.emit('feedback:unsubscribe', subscription);
+      socket.off('feedback:created', handleFeedbackEvent);
+      socket.off('feedback:updated', handleFeedbackEvent);
+      socket.off('feedback:deleted', handleFeedbackEvent);
+    };
+  }, [loadFeedbacks, studentId]);
+
+  const selectedTeacherFeedbacks = useMemo(() => (
+    feedbackList
+      .filter((item) => Number(item.teacher_id) === Number(selectedTeacherId))
+      .sort((left, right) => sortByDateAsc(left.created_at, right.created_at))
+  ), [feedbackList, selectedTeacherId]);
+
+  const chatEntriesRaw = useMemo<ChatEntry[]>(() => {
+    const teacherMessages = selectedTeacherFeedbacks.map((item) => ({
+      id: `feedback-${item.id}`,
+      kind: 'teacher' as const,
+      text: String(item.comment || ''),
+      createdAt: item.created_at,
+      quarterLabel: toQuarterLabel(item.evaluation_period),
+      feedbackId: Number(item.id),
+    }));
+
+    const studentMessages = teacherReplies.map((item) => ({
+      id: `reply-${item.id}`,
+      kind: 'student' as const,
+      text: String(item.reply_message || ''),
+      createdAt: item.created_at,
+      replyId: Number(item.id),
+      feedbackId: Number(item.feedback_id),
+    }));
+
+    return [...teacherMessages, ...studentMessages].sort((left, right) => sortByDateAsc(left.createdAt, right.createdAt));
+  }, [selectedTeacherFeedbacks, teacherReplies]);
+
+  const chatEntries = useMemo(() => (
+    chatEntriesRaw.filter((entry) => !hiddenMessageIds.includes(entry.id))
+  ), [chatEntriesRaw, hiddenMessageIds]);
+
+  useEffect(() => {
+    if (!selectedTeacherId) return;
+
+    const latestTime = chatEntriesRaw
+      .filter((entry) => entry.kind === 'teacher')
+      .reduce((max, entry) => {
+        const value = new Date(String(entry.createdAt || '')).getTime();
+        return Number.isNaN(value) ? max : Math.max(max, value);
+      }, 0);
+
+    if (latestTime <= 0) return;
+
+    setSeenByTeacher((current) => ({
+      ...current,
+      [String(selectedTeacherId)]: new Date(latestTime).toISOString(),
+    }));
+  }, [chatEntriesRaw, selectedTeacherId]);
+
+  const teacherSummaries = useMemo(() => {
+    const grouped = new Map<number, FeedbackItem[]>();
+
+    feedbackList.forEach((item) => {
+      const teacherId = Number(item.teacher_id);
+      if (!Number.isInteger(teacherId) || teacherId <= 0) return;
+
+      const current = grouped.get(teacherId) || [];
+      current.push(item);
+      grouped.set(teacherId, current);
+    });
+
+    const summaries: TeacherSummary[] = Array.from(grouped.entries()).map(([teacherId, items]) => {
+      const sorted = [...items].sort((left, right) => (
+        new Date(String(right.created_at || '')).getTime() - new Date(String(left.created_at || '')).getTime()
+      ));
+      const latest = sorted[0];
+      const seenAt = new Date(String(seenByTeacher[String(teacherId)] || '')).getTime();
+      const unreadCount = sorted.filter((feedback) => {
+        const createdAt = new Date(String(feedback.created_at || '')).getTime();
+        return !Number.isNaN(createdAt) && createdAt > seenAt;
+      }).length;
+
+      return {
+        teacherId,
+        teacherName: String(latest?.teacher_name || `Teacher #${teacherId}`),
+        teacherProfileImage: latest?.teacher_profile_image || null,
+        latestAt: latest?.created_at,
+        latestSnippet: String(latest?.comment || '').trim(),
+        totalFeedbacks: items.length,
+        unreadCount,
+      };
+    });
+
+    return summaries.sort((left, right) => (
+      new Date(String(right.latestAt || '')).getTime() - new Date(String(left.latestAt || '')).getTime()
+    ));
+  }, [feedbackList, seenByTeacher]);
+
+  const filteredTeachers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return teacherSummaries;
+
+    return teacherSummaries.filter((teacher) => (
+      teacher.teacherName.toLowerCase().includes(normalizedQuery) ||
+      teacher.latestSnippet.toLowerCase().includes(normalizedQuery)
+    ));
+  }, [searchQuery, teacherSummaries]);
+
+  useEffect(() => {
+    if (!filteredTeachers.length) {
+      setSelectedTeacherId(null);
       return;
     }
 
-    const hasSelection = filteredFeedbacks.some((item) => item.id === selectedId);
+    const hasSelection = filteredTeachers.some((teacher) => teacher.teacherId === selectedTeacherId);
     if (!hasSelection) {
-      setSelectedId(filteredFeedbacks[0].id);
+      setSelectedTeacherId(filteredTeachers[0].teacherId);
     }
-  }, [filteredFeedbacks, selectedId]);
+  }, [filteredTeachers, selectedTeacherId]);
 
-  const currentFeedback = filteredFeedbacks.find((item) => item.id === selectedId) || filteredFeedbacks[0] || null;
+  const selectedTeacher = filteredTeachers.find((teacher) => teacher.teacherId === selectedTeacherId) || null;
+
+  useEffect(() => {
+    setReplyDraft('');
+    setReplyStatus('');
+    setReplyToMessage(null);
+  }, [selectedTeacherId]);
+
+  const handleHideMessage = (messageId: string) => {
+    setHiddenMessageIds((current) => (current.includes(messageId) ? current : [messageId, ...current]));
+  };
+
+  const handleQuickReply = async () => {
+    if (!studentId || !selectedTeacherId) return;
+
+    const trimmedReply = replyDraft.trim();
+    if (!trimmedReply) {
+      setReplyStatus('Please write your message first.');
+      return;
+    }
+
+    const latestFeedbackId = Number(selectedTeacherFeedbacks[selectedTeacherFeedbacks.length - 1]?.id || 0);
+    if (!Number.isInteger(latestFeedbackId) || latestFeedbackId <= 0) {
+      setReplyStatus('No teacher feedback found for this conversation.');
+      return;
+    }
+
+    const replyPrefix = replyToMessage
+      ? `Replying to ${replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'} (${formatDateLabel(replyToMessage.createdAt)}): "${replyToMessage.text.slice(0, 120)}"\n\n`
+      : '';
+    const finalReply = `${replyPrefix}${trimmedReply}`;
+
+    setIsSubmittingReply(true);
+    setReplyStatus('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: selectedTeacherId,
+          is_read: 0,
+          message: `[StudentReply] feedback_id=${latestFeedbackId}; student_id=${studentId}; student_name=${studentName}; message=${finalReply}`,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to send reply.');
+      }
+
+      setReplyDraft('');
+      setReplyToMessage(null);
+      setReplyStatus('Sent.');
+      void loadTeacherReplies();
+    } catch (error) {
+      setReplyStatus(error instanceof Error ? error.message : 'Failed to send reply.');
+    } finally {
+      setIsSubmittingReply(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeletingMessage(true);
+    setReplyStatus('');
+    try {
+      if (deleteTarget.kind === 'feedback') {
+        const response = await fetch(`${API_BASE_URL}/feedbacks/${deleteTarget.id}`, { method: 'DELETE' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Failed to delete feedback message.');
+        setFeedbackList((current) => current.filter((item) => Number(item.id) !== deleteTarget.id));
+      } else {
+        const response = await fetch(`${API_BASE_URL}/notifications/${deleteTarget.id}`, { method: 'DELETE' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || 'Failed to delete reply message.');
+        setTeacherReplies((current) => current.filter((item) => Number(item.id) !== deleteTarget.id));
+      }
+      setReplyStatus('Message deleted.');
+      setDeleteTarget(null);
+    } catch (error) {
+      setReplyStatus(error instanceof Error ? error.message : 'Failed to delete message.');
+    } finally {
+      setIsDeletingMessage(false);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -142,7 +450,7 @@ export default function FeedbackPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search feedback by teacher or content..."
+              placeholder="Search teacher..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
@@ -160,12 +468,10 @@ export default function FeedbackPage() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-96 border-r border-slate-200 bg-white flex flex-col shrink-0">
-            <div className="p-6 flex items-center justify-between border-b border-slate-50">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Feedback</h2>
-                <p className="text-xs text-slate-500 mt-1">{filteredFeedbacks.length} messages</p>
-              </div>
+          <aside className="w-96 border-r border-slate-200 bg-white flex flex-col shrink-0">
+            <div className="p-6 border-b border-slate-50">
+              <h2 className="text-xl font-bold text-slate-900">Teachers</h2>
+              <p className="text-xs text-slate-500 mt-1">{filteredTeachers.length} profiles</p>
             </div>
             <div className="flex-1 overflow-y-auto">
               {isLoading ? (
@@ -174,101 +480,230 @@ export default function FeedbackPage() {
                 <div className="p-6 text-sm font-medium text-slate-500">Teacher feedback is currently hidden by admin settings.</div>
               ) : loadError ? (
                 <div className="p-6 text-sm font-medium text-rose-600">{loadError}</div>
-              ) : filteredFeedbacks.length === 0 ? (
-                <div className="p-6 text-sm font-medium text-slate-500">No feedback has been posted yet.</div>
-              ) : filteredFeedbacks.map((item) => (
+              ) : filteredTeachers.length === 0 ? (
+                <div className="p-6 text-sm font-medium text-slate-500">No teacher feedback yet.</div>
+              ) : filteredTeachers.map((teacher) => (
                 <button
-                  key={item.id}
-                  onClick={() => setSelectedId(item.id)}
+                  key={teacher.teacherId}
+                  onClick={() => setSelectedTeacherId(teacher.teacherId)}
                   className={cn(
                     'w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative',
-                    selectedId === item.id && 'bg-slate-50'
+                    selectedTeacherId === teacher.teacherId && 'bg-slate-50'
                   )}
                 >
-                  {selectedId === item.id && (
+                  {selectedTeacherId === teacher.teacherId ? (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                  )}
+                  ) : null}
                   <div className="size-12 rounded-full overflow-hidden shrink-0 bg-primary/10 text-primary flex items-center justify-center">
-                    {item.teacher_profile_image ? (
-                      <img src={item.teacher_profile_image} alt={item.teacher_name || 'Teacher'} className="w-full h-full object-cover" />
+                    {teacher.teacherProfileImage ? (
+                      <img src={teacher.teacherProfileImage} alt={teacher.teacherName} className="w-full h-full object-cover" />
                     ) : (
                       <Users className="w-5 h-5" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1 gap-4">
-                      <p className="text-sm font-bold text-slate-900 truncate">{item.teacher_name || 'Teacher'}</p>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">{formatDateLabel(item.created_at)}</span>
+                      <p className="text-sm font-bold text-slate-900 truncate">{teacher.teacherName}</p>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">{formatDateLabel(teacher.latestAt)}</span>
+                        {teacher.unreadCount > 0 ? (
+                          <span className="inline-flex min-w-5 h-5 px-1 mt-1 rounded-full bg-rose-500 text-white text-[10px] font-black items-center justify-center">
+                            {teacher.unreadCount}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="text-xs font-bold text-primary mb-1">Evaluation Feedback</p>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{item.comment}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">
+                      {teacher.totalFeedbacks} feedback{teacher.totalFeedbacks > 1 ? 's' : ''}
+                    </p>
+                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                      {teacher.latestSnippet || 'No content'}
+                    </p>
                   </div>
                 </button>
               ))}
             </div>
-          </div>
+          </aside>
 
-          <div className="flex-1 overflow-y-auto bg-white">
-            {currentFeedback ? (
-              <div className="max-w-4xl mx-auto p-10">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-6">
-                    <div className="size-20 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-lg overflow-hidden">
-                      {currentFeedback.teacher_profile_image ? (
-                        <img
-                          src={currentFeedback.teacher_profile_image}
-                          alt={currentFeedback.teacher_name || 'Teacher'}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Users className="w-8 h-8" />
-                      )}
-                    </div>
-                    <div>
-                      <h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentFeedback.teacher_name || 'Teacher'}</h2>
-                      <p className="text-primary font-bold">Evaluation Feedback</p>
-                      <div className="flex items-center gap-2 text-slate-400 text-xs mt-2">
-                        <Star className="w-3 h-3" />
-                        <span>{formatDateLabel(currentFeedback.created_at)}</span>
+          <section className="flex-1 flex flex-col bg-white overflow-hidden">
+            {selectedTeacher ? (
+              <>
+                <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-4">
+                  <div className="size-12 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center">
+                    {selectedTeacher.teacherProfileImage ? (
+                      <img src={selectedTeacher.teacherProfileImage} alt={selectedTeacher.teacherName} className="w-full h-full object-cover" />
+                    ) : (
+                      <Users className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">{selectedTeacher.teacherName}</h3>
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">All feedback from this teacher</p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4 bg-slate-50">
+                  {isLoadingReplies ? (
+                    <div className="text-sm font-medium text-slate-500">Loading conversation...</div>
+                  ) : chatEntries.length > 0 ? chatEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={cn('flex', entry.kind === 'student' ? 'justify-end' : 'justify-start')}
+                    >
+                      <div className={cn(
+                        'max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border',
+                        entry.kind === 'student'
+                          ? 'bg-primary text-white border-primary/30'
+                          : 'bg-white text-slate-700 border-slate-200'
+                      )}>
+                        {entry.kind === 'teacher' ? (
+                          <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                            Feedback from {entry.quarterLabel}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-1">
+                            You replied
+                          </p>
+                        )}
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{entry.text}</p>
+                        <p className={cn(
+                          'mt-2 text-[10px] font-bold',
+                          entry.kind === 'student' ? 'text-white/80' : 'text-slate-400'
+                        )}>
+                          {formatDateLabel(entry.createdAt)}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReplyToMessage(entry)}
+                            className={cn(
+                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+                              entry.kind === 'student'
+                                ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
+                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                            )}
+                          >
+                            Reply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleHideMessage(entry.id)}
+                            className={cn(
+                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+                              entry.kind === 'student'
+                                ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
+                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                            )}
+                          >
+                            Hide
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget({ kind: entry.kind === 'teacher' ? 'feedback' : 'reply', id: Number(entry.kind === 'teacher' ? entry.feedbackId : entry.replyId) })}
+                            className={cn(
+                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1 transition-colors',
+                              entry.kind === 'student'
+                                ? 'border border-white/30 bg-rose-500/85 text-white hover:bg-rose-500'
+                                : 'border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                            )}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                      <Users className="w-14 h-14 mb-3 opacity-20" />
+                      <p className="text-sm">No conversation yet for this teacher.</p>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex flex-wrap gap-3 mb-10">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold border border-emerald-100">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Feedback Available
+                <div className="border-t border-slate-200 bg-white p-6 space-y-3">
+                  {replyToMessage ? (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-[11px] font-bold text-primary">
+                          Replying to {replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'}: "{replyToMessage.text.slice(0, 120)}"
+                        </p>
+                        <button type="button" onClick={() => setReplyToMessage(null)} className="text-slate-400 hover:text-slate-600">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <textarea
+                    rows={3}
+                    value={replyDraft}
+                    onChange={(event) => setReplyDraft(event.target.value)}
+                    placeholder="Reply to this teacher..."
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40"
+                  />
+                  <div className="flex items-center justify-between gap-4">
+                    <p className={cn(
+                      'text-xs font-bold',
+                      replyStatus.toLowerCase().includes('failed') || replyStatus.toLowerCase().includes('no ')
+                        ? 'text-rose-600'
+                        : 'text-emerald-600'
+                    )}>
+                      {replyStatus || ' '}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleQuickReply}
+                      disabled={isSubmittingReply || !selectedTeacher}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-60"
+                    >
+                      <Send className="w-4 h-4" />
+                      {isSubmittingReply ? 'Sending...' : 'Send'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="space-y-6 text-slate-700 leading-relaxed">
-                  <h3 className="text-xl font-bold text-slate-900">Teacher Comment</h3>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 whitespace-pre-wrap text-sm leading-relaxed">
-                    {currentFeedback.comment}
-                  </div>
-                </div>
-
-                <div className="flex gap-4 mt-12 pt-10 border-t border-slate-100">
-                  <button className="flex-1 bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                    <HelpCircle className="w-5 h-5" />
-                    Ask a Question
-                  </button>
-                  <button className="flex-1 bg-white border border-slate-200 text-slate-700 font-bold py-4 rounded-2xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5" />
-                    Acknowledge Feedback
-                  </button>
-                </div>
-              </div>
+              </>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400">
                 <Users className="w-16 h-16 mb-4 opacity-20" />
-                <p>{isLoading ? 'Loading feedback...' : 'Select a feedback message to view details'}</p>
+                <p>{isLoading ? 'Loading feedback...' : 'Select a teacher profile to see all feedback.'}</p>
               </div>
             )}
-          </div>
+          </section>
         </div>
       </main>
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <button
+            type="button"
+            onClick={() => setDeleteTarget(null)}
+            className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+            <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              This will delete the selected {deleteTarget.kind === 'feedback' ? 'feedback' : 'reply'} message for both sides.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingMessage}
+                className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
+              >
+                {isDeletingMessage ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

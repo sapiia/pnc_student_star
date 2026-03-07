@@ -93,6 +93,45 @@ class Notification {
     }
   }
 
+  static async findStudentReplyThread(studentId, teacherId) {
+    try {
+      const [rows] = await db.query(`
+        SELECT id, user_id, message, is_read, created_at, updated_at
+        FROM notifications
+        WHERE user_id = ?
+          AND message LIKE '[StudentReply]%'
+        ORDER BY created_at ASC
+      `, [teacherId]);
+
+      const parsedRows = rows
+        .map((row) => {
+          const text = String(row.message || '').trim();
+          const match = text.match(/^\[StudentReply\]\s+feedback_id=(\d+);\s*student_id=(\d+);\s*student_name=(.*?);\s*message=(.*)$/);
+          if (!match) return null;
+
+          const parsedStudentId = Number(match[2]);
+          if (parsedStudentId !== Number(studentId)) return null;
+
+          return {
+            id: Number(row.id),
+            user_id: Number(row.user_id),
+            feedback_id: Number(match[1]),
+            student_id: parsedStudentId,
+            student_name: String(match[3] || 'Student').trim() || 'Student',
+            reply_message: String(match[4] || '').trim(),
+            is_read: Number(row.is_read) === 1 ? 1 : 0,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+          };
+        })
+        .filter(Boolean);
+
+      return parsedRows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   static async findUnreadByUserId(userId) {
     try {
       const sql = `

@@ -128,6 +128,9 @@ export default function RegisterPage() {
       }
 
       const redirectPath = data.redirectPath || '/dashboard';
+      if (data.user) {
+        localStorage.setItem('auth_user', JSON.stringify(data.user));
+      }
       setSuccess('Registration completed. Redirecting...');
       setTimeout(() => navigate(redirectPath), 1200);
     } catch (_err) {

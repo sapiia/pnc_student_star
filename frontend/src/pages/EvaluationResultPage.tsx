@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -135,6 +135,7 @@ export default function EvaluationResultPage() {
   const [isLoading, setIsLoading] = useState(Boolean(locationState.evaluationId));
   const [quarterFeedback, setQuarterFeedback] = useState<FeedbackItem[]>([]);
   const [activeCriterion, setActiveCriterion] = useState<CriterionView | null>(null);
+  const feedbackScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const loadEvaluation = async () => {
@@ -196,7 +197,7 @@ export default function EvaluationResultPage() {
         const matchedFeedback = (feedbackData as FeedbackItem[])
           .filter((item) => Number(item.evaluation_id) === Number(evaluation.id))
           .sort((left, right) => (
-            new Date(String(right.created_at || '')).getTime() - new Date(String(left.created_at || '')).getTime()
+            new Date(String(left.created_at || '')).getTime() - new Date(String(right.created_at || '')).getTime()
           ));
 
         setQuarterFeedback(matchedFeedback);
@@ -207,6 +208,12 @@ export default function EvaluationResultPage() {
 
     loadQuarterFeedback();
   }, [evaluation]);
+
+  useEffect(() => {
+    const container = feedbackScrollRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [quarterFeedback]);
 
   const criteriaData = useMemo<CriterionView[]>(() => {
     if (evaluation?.responses?.length) {
@@ -386,7 +393,10 @@ export default function EvaluationResultPage() {
                     </button>
                   </div>
                   {quarterFeedback.length > 0 ? (
-                    <div className="space-y-4">
+                    <div
+                      ref={feedbackScrollRef}
+                      className="max-h-[19rem] overflow-y-auto pr-1 space-y-4"
+                    >
                       {quarterFeedback.map((feedback) => (
                         <div key={feedback.id} className="flex gap-3">
                           <div className="size-10 rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">

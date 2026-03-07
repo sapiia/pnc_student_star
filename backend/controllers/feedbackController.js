@@ -1,5 +1,13 @@
 const Feedback = require('../models/Feedback');
 const db = require('../config/database');
+const { emitFeedbackEvent, emitNotificationEvent } = require('../src/realtime');
+
+const toQuarterLabel = (period = '') => {
+  const text = String(period || '').trim();
+  const match = text.match(/^(\d{4})-Q([1-4])$/i);
+  if (match) return `Q${match[2]} ${match[1]}`;
+  return text || 'Current Evaluation';
+};
 
 const getFeedbackCharacterLimit = async () => {
   try {
@@ -143,9 +151,66 @@ const createFeedback = async (req, res) => {
     await ensureFeedbackParticipants(teacherId, studentId);
 
     const feedbackId = await Feedback.create(req.body);
+    const createdFeedback = await Feedback.findById(feedbackId);
+
+    let periodLabel = 'Current Evaluation';
+    if (Number.isInteger(evaluationId) && evaluationId > 0) {
+      try {
+        const [evaluationRows] = await db.query(
+          "SELECT period FROM evaluations WHERE id = ? LIMIT 1",
+          [evaluationId]
+        );
+        periodLabel = toQuarterLabel(evaluationRows?.[0]?.period || '');
+      } catch {
+        periodLabel = 'Current Evaluation';
+      }
+    }
+
+    const teacherName = String(createdFeedback?.teacher_name || '').trim() || `Teacher #${teacherId}`;
+    const teacherProfile = String(createdFeedback?.teacher_profile_image || '').trim() || null;
+    const feedbackNotificationText = `${teacherName} just sent feedback.`;
+    const notificationPayload = {
+      teacherId,
+      teacherName,
+      teacherProfile,
+      periodLabel,
+      feedbackId,
+      text: feedbackNotificationText,
+    };
+    const notificationMessage = `[TeacherFeedback] ${JSON.stringify(notificationPayload)}`;
+    const [notificationResult] = await db.query(
+      "INSERT INTO notifications (user_id, message, is_read) VALUES (?, ?, 0)",
+      [studentId, notificationMessage]
+    );
+    const [notificationRows] = await db.query(
+      "SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ? LIMIT 1",
+      [notificationResult.insertId]
+    );
+    emitNotificationEvent({
+      action: 'created',
+      notification: notificationRows?.[0] || {
+        id: notificationResult.insertId,
+        user_id: studentId,
+        message: notificationMessage,
+        is_read: 0,
+      },
+    });
+
+    emitFeedbackEvent({
+      action: 'created',
+      feedback: createdFeedback || {
+        id: feedbackId,
+        teacher_id: teacherId,
+        student_id: studentId,
+        evaluation_id: Number.isInteger(evaluationId) && evaluationId > 0 ? evaluationId : null,
+        comment,
+      },
+    });
+
     res.status(201).json({ 
       message: "Feedback created successfully", 
       feedbackId,
+      feedback: createdFeedback || null,
       maxCharacters,
       evaluationId: Number.isInteger(evaluationId) && evaluationId > 0 ? evaluationId : null
     });
@@ -157,10 +222,21 @@ const createFeedback = async (req, res) => {
 
 const updateFeedback = async (req, res) => {
   try {
-    const updated = await Feedback.update(req.params.id, req.body);
+    const feedbackId = Number(req.params.id);
+    const updated = await Feedback.update(feedbackId, req.body);
     if (!updated) {
       return res.status(404).json({ message: "Feedback not found" });
     }
+
+    const updatedFeedback = await Feedback.findById(feedbackId);
+    emitFeedbackEvent({
+      action: 'updated',
+      feedback: updatedFeedback || {
+        id: feedbackId,
+        ...req.body,
+      },
+    });
+
     res.json({ message: "Feedback updated successfully" });
   } catch (err) {
     console.error(err);
@@ -170,10 +246,20 @@ const updateFeedback = async (req, res) => {
 
 const deleteFeedback = async (req, res) => {
   try {
-    const deleted = await Feedback.delete(req.params.id);
+    const feedbackId = Number(req.params.id);
+    const feedbackToDelete = await Feedback.findById(feedbackId);
+    const deleted = await Feedback.delete(feedbackId);
     if (!deleted) {
       return res.status(404).json({ message: "Feedback not found" });
     }
+
+    emitFeedbackEvent({
+      action: 'deleted',
+      feedback: feedbackToDelete || {
+        id: feedbackId,
+      },
+    });
+
     res.json({ message: "Feedback deleted successfully" });
   } catch (err) {
     console.error(err);

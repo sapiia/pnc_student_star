@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Home, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Sidebar from '../components/Sidebar';
+import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {
   id: number;
@@ -10,6 +11,21 @@ type NotificationItem = {
   message: string;
   is_read: number;
   created_at?: string;
+};
+
+type TeacherFeedbackNotice = {
+  teacherId?: number;
+  teacherName?: string;
+  teacherProfile?: string | null;
+  periodLabel?: string;
+  feedbackId?: number;
+  text?: string;
+};
+
+type NotificationDetail = {
+  title: string;
+  description: string;
+  meta: Array<{ label: string; value: string }>;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
@@ -26,6 +42,53 @@ const formatDateTime = (value?: string) => {
   }).format(date);
 };
 
+const parseTeacherFeedbackNotification = (raw: string): TeacherFeedbackNotice | null => {
+  const text = String(raw || '').trim();
+  if (!text.startsWith('[TeacherFeedback]')) return null;
+  const jsonText = text.replace(/^\[TeacherFeedback\]\s*/, '').trim();
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      teacherId: Number(parsed.teacherId || 0) || undefined,
+      teacherName: String(parsed.teacherName || '').trim() || undefined,
+      teacherProfile: parsed.teacherProfile ? String(parsed.teacherProfile) : null,
+      periodLabel: String(parsed.periodLabel || '').trim() || undefined,
+      feedbackId: Number(parsed.feedbackId || 0) || undefined,
+      text: String(parsed.text || '').trim() || undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const toNotificationDetail = (notification: NotificationItem): NotificationDetail => {
+  const teacherFeedback = parseTeacherFeedbackNotification(notification.message);
+  if (teacherFeedback) {
+    return {
+      title: teacherFeedback.teacherName
+        ? `${teacherFeedback.teacherName} just sent feedback`
+        : 'Teacher Feedback',
+      description: teacherFeedback.text || 'A teacher sent you feedback.',
+      meta: [
+        { label: 'Type', value: 'Teacher Feedback' },
+        { label: 'Quarter', value: teacherFeedback.periodLabel || 'Current Evaluation' },
+        { label: 'Received', value: formatDateTime(notification.created_at) },
+      ],
+    };
+  }
+
+  return {
+    title: 'Notification Detail',
+    description: String(notification.message || '').trim() || 'No detail message.',
+    meta: [
+      { label: 'Type', value: 'General Notification' },
+      { label: 'Received', value: formatDateTime(notification.created_at) },
+      { label: 'Status', value: Number(notification.is_read) === 1 ? 'Read' : 'Unread' },
+    ],
+  };
+};
+
 export default function NotificationsPage() {
   const navigate = useNavigate();
   const [studentId, setStudentId] = useState<number | null>(null);
@@ -34,6 +97,29 @@ export default function NotificationsPage() {
   const [error, setError] = useState('');
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
+
+  const loadNotifications = useCallback(async () => {
+    if (!studentId) return;
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications/user/${studentId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load notifications.');
+      }
+
+      setNotifications(Array.isArray(data) ? data : []);
+      window.dispatchEvent(new Event('student-notifications-updated'));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load notifications.');
+      setNotifications([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studentId]);
 
   useEffect(() => {
     try {
@@ -61,34 +147,43 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!studentId) return;
+    void loadNotifications();
+  }, [loadNotifications, studentId]);
 
-    const loadNotifications = async () => {
-      setIsLoading(true);
-      setError('');
+  useEffect(() => {
+    if (!studentId) return;
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/notifications/user/${studentId}`);
-        const data = await response.json().catch(() => []);
-        if (!response.ok) {
-          throw new Error(data?.error || 'Failed to load notifications.');
-        }
-
-        setNotifications(Array.isArray(data) ? data : []);
-        window.dispatchEvent(new Event('student-notifications-updated'));
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load notifications.');
-        setNotifications([]);
-      } finally {
-        setIsLoading(false);
-      }
+    const socket = getRealtimeSocket();
+    const subscription = { userId: studentId };
+    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
+      if (Number(payload.userId) !== studentId) return;
+      void loadNotifications();
     };
 
-    loadNotifications();
-  }, [studentId]);
+    socket.emit('notification:subscribe', subscription);
+    socket.on('notification:created', handleNotificationEvent);
+    socket.on('notification:updated', handleNotificationEvent);
+    socket.on('notification:deleted', handleNotificationEvent);
+
+    return () => {
+      socket.emit('notification:unsubscribe', subscription);
+      socket.off('notification:created', handleNotificationEvent);
+      socket.off('notification:updated', handleNotificationEvent);
+      socket.off('notification:deleted', handleNotificationEvent);
+    };
+  }, [loadNotifications, studentId]);
+
+  const visibleNotifications = useMemo(() => (
+    notifications.filter((notification) => {
+      const messageText = String(notification.message || '').toLowerCase();
+      const isLegacyFeedbackNotice = messageText.includes('submitted new feedback');
+      return !isLegacyFeedbackNotice;
+    })
+  ), [notifications]);
 
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => Number(notification.is_read) !== 1).length,
-    [notifications]
+    () => visibleNotifications.filter((notification) => Number(notification.is_read) !== 1).length,
+    [visibleNotifications]
   );
 
   const handleMarkAsRead = async (notificationId: number) => {
@@ -212,10 +307,13 @@ export default function NotificationsPage() {
             <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">
               Loading notifications...
             </div>
-          ) : notifications.length > 0 ? (
+          ) : visibleNotifications.length > 0 ? (
             <div className="space-y-4">
-              {notifications.map((notification, index) => {
+              {visibleNotifications.map((notification, index) => {
                 const isRead = Number(notification.is_read) === 1;
+                const teacherFeedbackNotice = parseTeacherFeedbackNotification(notification.message);
+                const teacherName = teacherFeedbackNotice?.teacherName || 'Teacher';
+                const visibleMessage = teacherFeedbackNotice?.text || notification.message;
 
                 return (
                   <motion.div
@@ -223,12 +321,19 @@ export default function NotificationsPage() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04 }}
-                    className={`rounded-3xl border p-5 shadow-sm ${isRead ? 'bg-white border-slate-200' : 'bg-primary/5 border-primary/20'}`}
+                    onClick={() => setSelectedNotification(notification)}
+                    className={`rounded-3xl border p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-colors ${isRead ? 'bg-white border-slate-200' : 'bg-primary/5 border-primary/20'}`}
                   >
                     <div className="flex items-start gap-4">
-                      <div className={`size-12 rounded-2xl flex items-center justify-center shrink-0 ${isRead ? 'bg-slate-100 text-slate-500' : 'bg-primary text-white'}`}>
-                        <Bell className="w-5 h-5" />
-                      </div>
+                      {teacherFeedbackNotice?.teacherProfile ? (
+                        <div className="size-12 rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
+                          <img src={teacherFeedbackNotice.teacherProfile} alt={teacherName} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className={`size-12 rounded-2xl flex items-center justify-center shrink-0 ${isRead ? 'bg-slate-100 text-slate-500' : 'bg-primary text-white'}`}>
+                          <Bell className="w-5 h-5" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-4">
                           <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
@@ -238,7 +343,10 @@ export default function NotificationsPage() {
                             {!isRead ? (
                               <button
                                 type="button"
-                                onClick={() => handleMarkAsRead(notification.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleMarkAsRead(notification.id);
+                                }}
                                 disabled={activeId === notification.id}
                                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-60"
                               >
@@ -247,7 +355,10 @@ export default function NotificationsPage() {
                             ) : null}
                             <button
                               type="button"
-                              onClick={() => handleDelete(notification.id)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDelete(notification.id);
+                              }}
                               disabled={activeId === notification.id}
                               className="rounded-xl bg-rose-500 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white inline-flex items-center gap-1 disabled:opacity-60"
                             >
@@ -257,8 +368,13 @@ export default function NotificationsPage() {
                           </div>
                         </div>
                         <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                          {notification.message}
+                          {visibleMessage}
                         </p>
+                        {teacherFeedbackNotice?.periodLabel ? (
+                          <p className="mt-1 text-[11px] font-bold text-slate-500">
+                            Quarter: {teacherFeedbackNotice.periodLabel}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </motion.div>
@@ -275,6 +391,44 @@ export default function NotificationsPage() {
           )}
         </div>
       </main>
+
+      {selectedNotification ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/60"
+            onClick={() => setSelectedNotification(null)}
+          />
+          <div className="relative w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+            {(() => {
+              const detail = toNotificationDetail(selectedNotification);
+              return (
+                <>
+                  <h3 className="text-xl font-black text-slate-900">{detail.title}</h3>
+                  <p className="mt-3 text-sm text-slate-700 whitespace-pre-wrap">{detail.description}</p>
+                  <div className="mt-5 space-y-2">
+                    {detail.meta.map((item) => (
+                      <div key={item.label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                        <span className="text-sm font-bold text-slate-700">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNotification(null)}
+                      className="rounded-xl bg-primary text-white px-4 py-2 text-xs font-black uppercase tracking-widest hover:bg-primary/90"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

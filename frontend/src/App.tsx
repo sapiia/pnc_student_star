@@ -41,7 +41,8 @@ export default function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/faq" element={<FAQPage />} />
-        <Route path="/meeting" element={<MeetingPage />} />
+        <Route path="/messages" element={<MeetingPage />} />
+        <Route path="/meeting" element={<Navigate to="/messages" replace />} />
         
         {/* Teacher Portal Routes */}
         <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
