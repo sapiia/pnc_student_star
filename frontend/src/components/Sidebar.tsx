@@ -10,7 +10,6 @@ import {
   User,
   HelpCircle,
   Info,
-  Calendar,
   ChevronLeft,
   Menu,
   LogOut,
@@ -20,6 +19,7 @@ import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BrandLogo, { PNLogoMark } from './BrandLogo';
+import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 interface SidebarProps {
   className?: string;
@@ -34,6 +34,7 @@ export default function Sidebar({ className }: SidebarProps) {
   const [studentId, setStudentId] = useState<string>('');
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(
     location.pathname === '/profile' || 
@@ -101,28 +102,62 @@ export default function Sidebar({ className }: SidebarProps) {
   useEffect(() => {
     if (!authUserId) {
       setUnreadNotificationCount(0);
+      setUnreadMessageCount(0);
       return;
     }
 
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const parseDirectMessage = (raw: unknown) => {
+      const text = String(raw || '').trim();
+      const match = text.match(/^\[DirectMessage\]\s+from=(\d+);\s*to=(\d+);\s*sender_name=(.*?);\s*text=(.*)$/);
+      if (!match) return null;
+      return {
+        fromId: Number(match[1]),
+        toId: Number(match[2]),
+      };
+    };
     const loadUnreadNotifications = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/notifications/user/${authUserId}/unread`);
         const data = await response.json().catch(() => []);
         if (!response.ok || !Array.isArray(data)) {
           setUnreadNotificationCount(0);
+          setUnreadMessageCount(0);
           return;
         }
 
         setUnreadNotificationCount(data.length);
+        const directUnread = data.filter((notification: any) => {
+          const parsed = parseDirectMessage(notification?.message);
+          return parsed && parsed.toId === authUserId;
+        }).length;
+        setUnreadMessageCount(directUnread);
       } catch {
         setUnreadNotificationCount(0);
+        setUnreadMessageCount(0);
       }
     };
 
     loadUnreadNotifications();
     window.addEventListener('student-notifications-updated', loadUnreadNotifications);
-    return () => window.removeEventListener('student-notifications-updated', loadUnreadNotifications);
+    const socket = getRealtimeSocket();
+    const subscription = { userId: authUserId };
+    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
+      if (Number(payload.userId) !== authUserId) return;
+      void loadUnreadNotifications();
+    };
+    socket.emit('notification:subscribe', subscription);
+    socket.on('notification:created', handleNotificationEvent);
+    socket.on('notification:updated', handleNotificationEvent);
+    socket.on('notification:deleted', handleNotificationEvent);
+
+    return () => {
+      window.removeEventListener('student-notifications-updated', loadUnreadNotifications);
+      socket.emit('notification:unsubscribe', subscription);
+      socket.off('notification:created', handleNotificationEvent);
+      socket.off('notification:updated', handleNotificationEvent);
+      socket.off('notification:deleted', handleNotificationEvent);
+    };
   }, [authUserId]);
 
   useEffect(() => {
@@ -155,7 +190,7 @@ export default function Sidebar({ className }: SidebarProps) {
     { icon: FileText, label: 'My Evaluations', path: '/history' },
     { icon: MessageSquare, label: 'Feedback', path: '/feedback' },
     { icon: Bell, label: 'Notifications', path: '/notifications', hasNotification: unreadNotificationCount > 0 },
-    { icon: Calendar, label: 'Meeting', path: '/meeting', hasNotification: true },
+    { icon: MessageSquare, label: 'Message', path: '/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount },
   ];
 
   const settingsSubItems = [
@@ -239,10 +274,16 @@ export default function Sidebar({ className }: SidebarProps) {
                 <span className={cn("text-sm font-bold", item.isAction && !isActive && "text-primary")}>{item.label}</span>
               )}
               {item.hasNotification && (
-                <span className={cn(
-                  "absolute rounded-full ring-2 ring-white",
-                  isCollapsed ? "top-2 right-2 size-2 bg-red-500" : "right-4 top-1/2 -translate-y-1/2 size-2 bg-red-500"
-                )} />
+                typeof item.badgeCount === 'number' && item.badgeCount > 0 && !isCollapsed ? (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white">
+                    {item.badgeCount > 99 ? '99+' : item.badgeCount}
+                  </span>
+                ) : (
+                  <span className={cn(
+                    "absolute rounded-full ring-2 ring-white",
+                    isCollapsed ? "top-2 right-2 size-2 bg-red-500" : "right-4 top-1/2 -translate-y-1/2 size-2 bg-red-500"
+                  )} />
+                )
               )}
               {isCollapsed && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">

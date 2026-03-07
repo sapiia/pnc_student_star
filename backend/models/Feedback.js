@@ -69,10 +69,12 @@ class Feedback {
       const columns = await getUsersTableColumns();
       const [rows] = await db.query(`
         SELECT f.*, 
+               e.period as evaluation_period,
                ${buildDisplayNameSql('t', columns)} as teacher_name,
                ${columns.has('profile_image') ? 't.profile_image as teacher_profile_image' : 'NULL as teacher_profile_image'}
         FROM feedbacks f
         LEFT JOIN users t ON f.teacher_id = t.id
+        LEFT JOIN evaluations e ON f.evaluation_id = e.id
         WHERE f.student_id = ?
         ORDER BY f.created_at DESC
       `, [studentId]);

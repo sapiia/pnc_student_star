@@ -5,6 +5,7 @@ const {
   getNotificationById,
   getNotificationsByUserId,
   getUnreadNotificationsByUserId,
+  getStudentTeacherReplyThread,
   createNotification,
   updateNotification,
   markNotificationAsRead,
@@ -23,6 +24,9 @@ router.get('/user/:userId', getNotificationsByUserId);
 
 // GET /api/notifications/user/:userId/unread - Get unread notifications by user ID
 router.get('/user/:userId/unread', getUnreadNotificationsByUserId);
+
+// GET /api/notifications/thread/student/:studentId/teacher/:teacherId - Get student->teacher quick reply thread
+router.get('/thread/student/:studentId/teacher/:teacherId', getStudentTeacherReplyThread);
 
 // POST /api/notifications - Create new notification
 router.post('/', createNotification);

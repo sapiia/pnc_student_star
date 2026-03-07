@@ -20,10 +20,11 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import StarRating from '../components/StarRating';
 import RadarChart from '../components/RadarChart';
 import Sidebar from '../components/Sidebar';
+import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 
 type EvaluationResponse = {
   criterion_key: string;
@@ -67,6 +68,8 @@ type CriterionDetail = {
   reflection: string;
   tip: string;
 };
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 const STATUS_CARD_STYLES = [
   { color: 'text-blue-600', bgColor: 'bg-blue-100' },
@@ -142,6 +145,7 @@ export default function DashboardPage() {
   const [showUrgentNotification, setShowUrgentNotification] = useState(false);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
+  const [studentUserId, setStudentUserId] = useState<number | null>(null);
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -228,150 +232,220 @@ export default function DashboardPage() {
     }
   }, [daysLeft]);
 
-  useEffect(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-    const loadIdentity = async () => {
-      try {
-        const raw = localStorage.getItem('auth_user');
-        if (!raw) return;
-        const authUser = JSON.parse(raw);
-        const userId = Number(authUser?.id);
-        if (!Number.isInteger(userId) || userId <= 0) return;
+  const loadRecentFeedback = useCallback(async () => {
+    if (!studentUserId) {
+      setRecentFeedback([]);
+      return;
+    }
 
-        const localName = String(authUser?.name || '').trim();
-        const localStudentId = String(authUser?.student_id || '').trim();
-        if (localName) setStudentName(localName);
-        if (localStudentId) setStudentId(localStudentId);
+    try {
+      const [studentFeedbackVisibilityResponse, feedbackResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
+        fetch(`${API_BASE_URL}/feedbacks/student/${studentUserId}`),
+      ]);
 
-        const studentPrefsRaw = localStorage.getItem(`student_notify_${userId}`);
-        const studentPrefs = studentPrefsRaw ? JSON.parse(studentPrefsRaw) : null;
-        const remindersEnabled = studentPrefs?.remindersEnabled !== false;
+      const studentFeedbackVisibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
+      const feedbackData = await feedbackResponse.json().catch(() => []);
 
-        const [
-          response,
-          intervalResponse,
-          evaluationsResponse,
-          studentFeedbackVisibilityResponse,
-          reminderNotificationsResponse,
-          feedbackResponse,
-          notificationsResponse,
-        ] = await Promise.all([
-          fetch(`${API_BASE_URL}/users/${userId}`),
-          fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
-          fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
-          fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
-          fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
-          fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
-          fetch(`${API_BASE_URL}/notifications/user/${userId}`)
-        ]);
+      const canViewTeacherFeedback = !['false', '0'].includes(
+        String(studentFeedbackVisibilityData?.value || 'true').trim().toLowerCase()
+      );
 
-        const data = await response.json().catch(() => ({}));
-        const intervalData = await intervalResponse.json().catch(() => ({}));
-        const evaluations = await evaluationsResponse.json().catch(() => []);
-        const studentFeedbackVisibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
-        const reminderNotificationsData = await reminderNotificationsResponse.json().catch(() => ({}));
-        const feedbackData = await feedbackResponse.json().catch(() => []);
-        const notificationsData = await notificationsResponse.json().catch(() => []);
-        const sortedEvaluations = Array.isArray(evaluations)
-          ? [...evaluations as EvaluationRecord[]].sort((left, right) => (
-              getEvaluationSortValue(right) - getEvaluationSortValue(left)
-            ))
-          : [];
-        const latestEvaluationRecord = sortedEvaluations.length > 0 ? sortedEvaluations[0] : null;
+      if (!canViewTeacherFeedback || !feedbackResponse.ok || !Array.isArray(feedbackData)) {
+        setRecentFeedback([]);
+        return;
+      }
 
-        const resolvedName =
-          String(data?.name || '').trim() ||
-          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
-          localName ||
-          'Student';
-        const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || localStudentId || '').trim();
+      const normalizedFeedback = [...(feedbackData as FeedbackItem[])]
+        .sort((left, right) => (
+          new Date(String(right.created_at || '')).getTime() - new Date(String(left.created_at || '')).getTime()
+        ))
+        .slice(0, 3);
 
-        setStudentName(resolvedName);
-        setStudentId(resolvedStudentId);
-        setEvaluations(sortedEvaluations);
+      setRecentFeedback(normalizedFeedback);
+    } catch {
+      setRecentFeedback([]);
+    }
+  }, [studentUserId]);
 
-        const canViewTeacherFeedback = !['false', '0'].includes(
-          String(studentFeedbackVisibilityData?.value || 'true').trim().toLowerCase()
-        );
-        const normalizedFeedback = canViewTeacherFeedback && Array.isArray(feedbackData)
-          ? (feedbackData as FeedbackItem[]).slice(0, 3)
-          : [];
-        setRecentFeedback(normalizedFeedback);
-        const userNotifications = Array.isArray(notificationsData)
-          ? notificationsData as NotificationItem[]
-          : [];
-        setUnreadNotificationCount(
-          userNotifications.filter((notification) => Number(notification.is_read) !== 1).length
-        );
+  const loadIdentity = useCallback(async () => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      if (!raw) return;
+      const authUser = JSON.parse(raw);
+      const userId = Number(authUser?.id);
+      if (!Number.isInteger(userId) || userId <= 0) return;
 
-        const resolvedCycleDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
-        setCycleDays(resolvedCycleDays);
+      setStudentUserId(userId);
 
-        const localEvaluationKey = `last_evaluation_submitted_at_${userId}`;
-        const latestEvaluationDateRaw =
-          String(latestEvaluationRecord?.submitted_at || latestEvaluationRecord?.created_at || '').trim() ||
-          String(localStorage.getItem(localEvaluationKey) || '').trim();
+      const localName = String(authUser?.name || '').trim();
+      const localStudentId = String(authUser?.student_id || '').trim();
+      if (localName) setStudentName(localName);
+      if (localStudentId) setStudentId(localStudentId);
 
-        setLatestEvaluation(latestEvaluationRecord);
+      const studentPrefsRaw = localStorage.getItem(`student_notify_${userId}`);
+      const studentPrefs = studentPrefsRaw ? JSON.parse(studentPrefsRaw) : null;
+      const remindersEnabled = studentPrefs?.remindersEnabled !== false;
 
-        if (!latestEvaluationDateRaw) {
-          setDaysLeft(0);
-          return;
-        }
+      const [
+        response,
+        intervalResponse,
+        evaluationsResponse,
+        studentFeedbackVisibilityResponse,
+        reminderNotificationsResponse,
+        feedbackResponse,
+        notificationsResponse,
+      ] = await Promise.all([
+        fetch(`${API_BASE_URL}/users/${userId}`),
+        fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+        fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
+        fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
+        fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
+        fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
+        fetch(`${API_BASE_URL}/notifications/user/${userId}`)
+      ]);
 
-        const latestEvaluationDate = new Date(latestEvaluationDateRaw);
-        if (Number.isNaN(latestEvaluationDate.getTime())) {
-          setDaysLeft(0);
-          return;
-        }
+      const data = await response.json().catch(() => ({}));
+      const intervalData = await intervalResponse.json().catch(() => ({}));
+      const evaluations = await evaluationsResponse.json().catch(() => []);
+      const studentFeedbackVisibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
+      const reminderNotificationsData = await reminderNotificationsResponse.json().catch(() => ({}));
+      const feedbackData = await feedbackResponse.json().catch(() => []);
+      const notificationsData = await notificationsResponse.json().catch(() => []);
+      const sortedEvaluations = Array.isArray(evaluations)
+        ? [...evaluations as EvaluationRecord[]].sort((left, right) => (
+            getEvaluationSortValue(right) - getEvaluationSortValue(left)
+          ))
+        : [];
+      const latestEvaluationRecord = sortedEvaluations.length > 0 ? sortedEvaluations[0] : null;
 
-        const nextEvaluationDate = new Date(latestEvaluationDate);
-        nextEvaluationDate.setDate(nextEvaluationDate.getDate() + resolvedCycleDays);
+      const resolvedName =
+        String(data?.name || '').trim() ||
+        [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+        localName ||
+        'Student';
+      const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || localStudentId || '').trim();
 
-        const remainingMilliseconds = nextEvaluationDate.getTime() - Date.now();
-        const resolvedDaysLeft = Math.max(0, Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24)));
-        setDaysLeft(resolvedDaysLeft);
+      setStudentName(resolvedName);
+      setStudentId(resolvedStudentId);
+      setEvaluations(sortedEvaluations);
 
-        const adminAllowsReminders = !['false', '0'].includes(
-          String(reminderNotificationsData?.value || 'true').trim().toLowerCase()
-        );
+      const canViewTeacherFeedback = !['false', '0'].includes(
+        String(studentFeedbackVisibilityData?.value || 'true').trim().toLowerCase()
+      );
+      const normalizedFeedback = canViewTeacherFeedback && Array.isArray(feedbackData)
+        ? [...(feedbackData as FeedbackItem[])]
+          .sort((left, right) => (
+            new Date(String(right.created_at || '')).getTime() - new Date(String(left.created_at || '')).getTime()
+          ))
+          .slice(0, 3)
+        : [];
+      setRecentFeedback(normalizedFeedback);
+      const userNotifications = Array.isArray(notificationsData)
+        ? notificationsData as NotificationItem[]
+        : [];
+      setUnreadNotificationCount(
+        userNotifications.filter((notification) => Number(notification.is_read) !== 1).length
+      );
 
-        if (adminAllowsReminders && remindersEnabled && resolvedDaysLeft === 3) {
-          const reminderMessage = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextEvaluationDate)}.`;
-          const hasExistingReminder = userNotifications.some((notification) => (
-            String(notification.message || '').trim() === reminderMessage
-          ));
+      const resolvedCycleDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
+      setCycleDays(resolvedCycleDays);
 
-          if (!hasExistingReminder) {
-            const createReminderResponse = await fetch(`${API_BASE_URL}/notifications`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                user_id: userId,
-                message: reminderMessage,
-                is_read: 0,
-              }),
-            });
+      const localEvaluationKey = `last_evaluation_submitted_at_${userId}`;
+      const latestEvaluationDateRaw =
+        String(latestEvaluationRecord?.submitted_at || latestEvaluationRecord?.created_at || '').trim() ||
+        String(localStorage.getItem(localEvaluationKey) || '').trim();
 
-            if (createReminderResponse.ok) {
-              setUnreadNotificationCount((current) => current + 1);
-              window.dispatchEvent(new Event('student-notifications-updated'));
-            }
+      setLatestEvaluation(latestEvaluationRecord);
+
+      if (!latestEvaluationDateRaw) {
+        setDaysLeft(0);
+        return;
+      }
+
+      const latestEvaluationDate = new Date(latestEvaluationDateRaw);
+      if (Number.isNaN(latestEvaluationDate.getTime())) {
+        setDaysLeft(0);
+        return;
+      }
+
+      const nextEvaluationDate = new Date(latestEvaluationDate);
+      nextEvaluationDate.setDate(nextEvaluationDate.getDate() + resolvedCycleDays);
+
+      const remainingMilliseconds = nextEvaluationDate.getTime() - Date.now();
+      const resolvedDaysLeft = Math.max(0, Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24)));
+      setDaysLeft(resolvedDaysLeft);
+
+      const adminAllowsReminders = !['false', '0'].includes(
+        String(reminderNotificationsData?.value || 'true').trim().toLowerCase()
+      );
+
+      if (adminAllowsReminders && remindersEnabled && resolvedDaysLeft === 3) {
+        const reminderMessage = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextEvaluationDate)}.`;
+        const hasExistingReminder = userNotifications.some((notification) => (
+          String(notification.message || '').trim() === reminderMessage
+        ));
+
+        if (!hasExistingReminder) {
+          const createReminderResponse = await fetch(`${API_BASE_URL}/notifications`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: userId,
+              message: reminderMessage,
+              is_read: 0,
+            }),
+          });
+
+          if (createReminderResponse.ok) {
+            setUnreadNotificationCount((current) => current + 1);
+            window.dispatchEvent(new Event('student-notifications-updated'));
           }
         }
-      } catch {
-        setCycleDays(90);
-        setDaysLeft(0);
-        setEvaluations([]);
-        setRecentFeedback([]);
-        setUnreadNotificationCount(0);
-        setLatestEvaluation(null);
       }
-    };
-    loadIdentity();
+    } catch {
+      setStudentUserId(null);
+      setCycleDays(90);
+      setDaysLeft(0);
+      setEvaluations([]);
+      setRecentFeedback([]);
+      setUnreadNotificationCount(0);
+      setLatestEvaluation(null);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadIdentity();
+  }, [loadIdentity]);
+
+  useEffect(() => {
+    void loadRecentFeedback();
+  }, [loadRecentFeedback]);
+
+  useEffect(() => {
+    if (!studentUserId) return;
+
+    const socket = getRealtimeSocket();
+    const subscription = { studentId: studentUserId };
+    const handleFeedbackEvent = (payload: FeedbackRealtimePayload = {}) => {
+      if (Number(payload.studentId) !== studentUserId) return;
+      void loadRecentFeedback();
+    };
+
+    socket.emit('feedback:subscribe', subscription);
+    socket.on('feedback:created', handleFeedbackEvent);
+    socket.on('feedback:updated', handleFeedbackEvent);
+    socket.on('feedback:deleted', handleFeedbackEvent);
+
+    return () => {
+      socket.emit('feedback:unsubscribe', subscription);
+      socket.off('feedback:created', handleFeedbackEvent);
+      socket.off('feedback:updated', handleFeedbackEvent);
+      socket.off('feedback:deleted', handleFeedbackEvent);
+    };
+  }, [loadRecentFeedback, studentUserId]);
 
   const getIcon = (iconName: string) => {
     switch (iconName) {

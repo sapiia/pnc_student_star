@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -25,6 +25,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import TeacherSidebar from '../components/TeacherSidebar';
 import RadarChart from '../components/RadarChart';
 import { cn } from '../lib/utils';
+import {
+  getRealtimeSocket,
+  type FeedbackRealtimePayload,
+  type NotificationRealtimePayload,
+} from '../lib/realtime';
 
 type ApiUser = {
   id: number;
@@ -93,10 +98,49 @@ type StudentRecord = {
   latestEvaluation: EvaluationRecord | null;
 };
 
+type NotificationRecord = {
+  id: number;
+  user_id: number;
+  message: string;
+  is_read: number;
+  created_at?: string;
+};
+
+type StudentReplyRecord = {
+  notificationId: number;
+  studentId: number;
+  studentName: string;
+  feedbackId: number;
+  message: string;
+  createdAt?: string;
+  isRead: boolean;
+};
+
+type ConversationMessage = {
+  id: string;
+  source: 'teacher' | 'student';
+  text: string;
+  createdAt?: string;
+  feedbackId?: number;
+  notificationId?: number;
+  isRead?: boolean;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 const RADAR_COLORS = [
   { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' },
 ];
+const CRITERIA_COLOR_STYLES = [
+  { iconBg: 'bg-blue-100', iconText: 'text-blue-600', detailText: 'text-blue-600', stars: 'text-blue-500', hover: 'hover:border-blue-300' },
+  { iconBg: 'bg-emerald-100', iconText: 'text-emerald-600', detailText: 'text-emerald-600', stars: 'text-emerald-500', hover: 'hover:border-emerald-300' },
+  { iconBg: 'bg-amber-100', iconText: 'text-amber-600', detailText: 'text-amber-600', stars: 'text-amber-500', hover: 'hover:border-amber-300' },
+  { iconBg: 'bg-rose-100', iconText: 'text-rose-600', detailText: 'text-rose-600', stars: 'text-rose-500', hover: 'hover:border-rose-300' },
+  { iconBg: 'bg-cyan-100', iconText: 'text-cyan-600', detailText: 'text-cyan-600', stars: 'text-cyan-500', hover: 'hover:border-cyan-300' },
+  { iconBg: 'bg-fuchsia-100', iconText: 'text-fuchsia-600', detailText: 'text-fuchsia-600', stars: 'text-fuchsia-500', hover: 'hover:border-fuchsia-300' },
+  { iconBg: 'bg-indigo-100', iconText: 'text-indigo-600', detailText: 'text-indigo-600', stars: 'text-indigo-500', hover: 'hover:border-indigo-300' },
+  { iconBg: 'bg-orange-100', iconText: 'text-orange-600', detailText: 'text-orange-600', stars: 'text-orange-500', hover: 'hover:border-orange-300' },
+  { iconBg: 'bg-sky-100', iconText: 'text-sky-600', detailText: 'text-sky-600', stars: 'text-sky-500', hover: 'hover:border-sky-300' },
+] as const;
 
 const toDisplayName = (user: ApiUser) => {
   const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
@@ -185,6 +229,22 @@ const buildRadarData = (student: StudentRecord | null) => {
   }));
 };
 
+const parseStudentReplyNotification = (notification: NotificationRecord): StudentReplyRecord | null => {
+  const text = String(notification.message || '').trim();
+  const match = text.match(/^\[StudentReply\]\s+feedback_id=(\d+);\s*student_id=(\d+);\s*student_name=(.*?);\s*message=(.*)$/);
+  if (!match) return null;
+
+  return {
+    notificationId: Number(notification.id),
+    feedbackId: Number(match[1]),
+    studentId: Number(match[2]),
+    studentName: String(match[3] || 'Student').trim() || 'Student',
+    message: String(match[4] || '').trim(),
+    createdAt: notification.created_at,
+    isRead: Number(notification.is_read) === 1,
+  };
+};
+
 export default function TeacherStudentListPage() {
   const navigate = useNavigate();
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -203,8 +263,12 @@ export default function TeacherStudentListPage() {
   const [teacherName, setTeacherName] = useState('Your teacher');
   const [teacherMaxFeedbackCharacters, setTeacherMaxFeedbackCharacters] = useState(1000);
   const [feedbackHistory, setFeedbackHistory] = useState<FeedbackRecord[]>([]);
+  const [teacherNotifications, setTeacherNotifications] = useState<NotificationRecord[]>([]);
+  const [isMarkingReplyReadId, setIsMarkingReplyReadId] = useState<number | null>(null);
+  const [replyToMessage, setReplyToMessage] = useState<ConversationMessage | null>(null);
   const [hiddenFeedbackIds, setHiddenFeedbackIds] = useState<number[]>([]);
   const [isDeletingFeedbackId, setIsDeletingFeedbackId] = useState<number | null>(null);
+  const [pendingDeleteFeedbackId, setPendingDeleteFeedbackId] = useState<number | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
 
   useEffect(() => {
@@ -328,27 +392,95 @@ export default function TeacherStudentListPage() {
     loadStudents();
   }, []);
 
-  useEffect(() => {
-    const loadTeacherFeedbacks = async () => {
-      if (!teacherId) {
-        setFeedbackHistory([]);
-        return;
-      }
+  const loadTeacherFeedbacks = useCallback(async () => {
+    if (!teacherId) {
+      setFeedbackHistory([]);
+      return;
+    }
 
-      try {
-        const response = await fetch(`${API_BASE_URL}/feedbacks/teacher/${teacherId}`);
-        const data = await response.json().catch(() => []);
-        if (!response.ok) {
-          throw new Error(data?.error || 'Failed to load teacher feedback.');
-        }
-        setFeedbackHistory(Array.isArray(data) ? data : []);
-      } catch {
-        setFeedbackHistory([]);
+    try {
+      const response = await fetch(`${API_BASE_URL}/feedbacks/teacher/${teacherId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load teacher feedback.');
       }
+      setFeedbackHistory(Array.isArray(data) ? data : []);
+    } catch {
+      setFeedbackHistory([]);
+    }
+  }, [teacherId]);
+
+  useEffect(() => {
+    void loadTeacherFeedbacks();
+  }, [loadTeacherFeedbacks]);
+
+  useEffect(() => {
+    if (!teacherId) return;
+
+    const socket = getRealtimeSocket();
+    const subscription = { teacherId };
+    const handleFeedbackEvent = (payload: FeedbackRealtimePayload = {}) => {
+      if (Number(payload.teacherId) !== teacherId) return;
+      void loadTeacherFeedbacks();
     };
 
-    loadTeacherFeedbacks();
+    socket.emit('feedback:subscribe', subscription);
+    socket.on('feedback:created', handleFeedbackEvent);
+    socket.on('feedback:updated', handleFeedbackEvent);
+    socket.on('feedback:deleted', handleFeedbackEvent);
+
+    return () => {
+      socket.emit('feedback:unsubscribe', subscription);
+      socket.off('feedback:created', handleFeedbackEvent);
+      socket.off('feedback:updated', handleFeedbackEvent);
+      socket.off('feedback:deleted', handleFeedbackEvent);
+    };
+  }, [loadTeacherFeedbacks, teacherId]);
+
+  const loadTeacherNotifications = useCallback(async () => {
+    if (!teacherId) {
+      setTeacherNotifications([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications/user/${teacherId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load notifications.');
+      }
+      setTeacherNotifications(Array.isArray(data) ? data : []);
+    } catch {
+      setTeacherNotifications([]);
+    }
   }, [teacherId]);
+
+  useEffect(() => {
+    void loadTeacherNotifications();
+  }, [loadTeacherNotifications]);
+
+  useEffect(() => {
+    if (!teacherId) return;
+
+    const socket = getRealtimeSocket();
+    const subscription = { userId: teacherId };
+    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
+      if (Number(payload.userId) !== teacherId) return;
+      void loadTeacherNotifications();
+    };
+
+    socket.emit('notification:subscribe', subscription);
+    socket.on('notification:created', handleNotificationEvent);
+    socket.on('notification:updated', handleNotificationEvent);
+    socket.on('notification:deleted', handleNotificationEvent);
+
+    return () => {
+      socket.emit('notification:unsubscribe', subscription);
+      socket.off('notification:created', handleNotificationEvent);
+      socket.off('notification:updated', handleNotificationEvent);
+      socket.off('notification:deleted', handleNotificationEvent);
+    };
+  }, [loadTeacherNotifications, teacherId]);
 
   const generationOptions = useMemo(() => (
     ['All Generations', ...Array.from(new Set(students.map((student) => student.generation))).sort()]
@@ -414,12 +546,58 @@ export default function TeacherStudentListPage() {
       !hiddenFeedbackIds.includes(Number(feedback.id))
     ));
   }, [feedbackHistory, hiddenFeedbackIds, selectedStudent, teacherId]);
+  const studentReplyHistory = useMemo(() => {
+    if (!selectedStudent) return [];
+
+    return teacherNotifications
+      .map((notification) => parseStudentReplyNotification(notification))
+      .filter((item): item is StudentReplyRecord => (
+        Boolean(item) && Number(item.studentId) === Number(selectedStudent.id)
+      ))
+      .sort((left, right) => (
+        new Date(String(right.createdAt || '')).getTime() - new Date(String(left.createdAt || '')).getTime()
+      ));
+  }, [selectedStudent, teacherNotifications]);
+  const unreadReplyCountByStudent = useMemo(() => {
+    return teacherNotifications
+      .map((notification) => parseStudentReplyNotification(notification))
+      .filter((item): item is StudentReplyRecord => Boolean(item) && !item.isRead)
+      .reduce<Record<number, number>>((accumulator, item) => {
+        const key = Number(item.studentId);
+        accumulator[key] = (accumulator[key] || 0) + 1;
+        return accumulator;
+      }, {});
+  }, [teacherNotifications]);
+  const conversationMessages = useMemo<ConversationMessage[]>(() => {
+    const teacherMessages: ConversationMessage[] = visibleStudentFeedbackHistory.map((feedback) => ({
+      id: `teacher-${feedback.id}`,
+      source: 'teacher',
+      text: String(feedback.comment || '').trim(),
+      createdAt: feedback.created_at,
+      feedbackId: Number(feedback.id),
+    }));
+
+    const studentMessages: ConversationMessage[] = studentReplyHistory.map((reply) => ({
+      id: `student-${reply.notificationId}`,
+      source: 'student',
+      text: String(reply.message || '').trim(),
+      createdAt: reply.createdAt,
+      feedbackId: Number(reply.feedbackId),
+      notificationId: Number(reply.notificationId),
+      isRead: reply.isRead,
+    }));
+
+    return [...teacherMessages, ...studentMessages].sort((left, right) => (
+      new Date(String(left.createdAt || '')).getTime() - new Date(String(right.createdAt || '')).getTime()
+    ));
+  }, [studentReplyHistory, visibleStudentFeedbackHistory]);
 
   useEffect(() => {
     if (!selectedStudent) {
       setFeedbackDraft('');
       setFeedbackError('');
       setFeedbackSuccess('');
+      setReplyToMessage(null);
       return;
     }
 
@@ -429,6 +607,7 @@ export default function TeacherStudentListPage() {
     );
     setFeedbackError('');
     setFeedbackSuccess('');
+    setReplyToMessage(null);
   }, [latestTeacherFeedback, selectedStudent]);
 
   const clearFilters = () => {
@@ -449,7 +628,12 @@ export default function TeacherStudentListPage() {
       setFeedbackError('Feedback cannot be empty.');
       return;
     }
-    if (trimmedFeedback.length > teacherMaxFeedbackCharacters) {
+    const replyPrefix = replyToMessage
+      ? `Replying to ${replyToMessage.source === 'student' ? 'student' : 'teacher'} (${formatShortDate(replyToMessage.createdAt)}): "${replyToMessage.text.slice(0, 120)}"\n\n`
+      : '';
+    const finalComment = `${replyPrefix}${trimmedFeedback}`;
+
+    if (finalComment.length > teacherMaxFeedbackCharacters) {
       setFeedbackError(`Feedback must be ${teacherMaxFeedbackCharacters} characters or fewer.`);
       return;
     }
@@ -468,36 +652,13 @@ export default function TeacherStudentListPage() {
           teacher_id: teacherId,
           student_id: selectedStudent.id,
           evaluation_id: selectedStudent.latestEvaluation?.id || null,
-          comment: trimmedFeedback,
+          comment: finalComment,
         }),
       });
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data?.error || 'Failed to save feedback.');
-      }
-
-      const feedbackVisibilityResponse = await fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`);
-      const feedbackVisibilityData = await feedbackVisibilityResponse.json().catch(() => ({}));
-      const canStudentViewTeacherFeedback = !['false', '0'].includes(
-        String(feedbackVisibilityData?.value || 'true').trim().toLowerCase()
-      );
-
-      if (canStudentViewTeacherFeedback) {
-        const evaluationLabel = selectedStudent.latestEvaluation?.submitted_at
-          ? ' for your latest evaluation'
-          : '';
-        await fetch(`${API_BASE_URL}/notifications`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_id: selectedStudent.id,
-            message: `${teacherName} submitted new feedback${evaluationLabel}.`,
-            is_read: 0,
-          }),
-        }).catch(() => null);
       }
 
       setFeedbackSuccess('Feedback saved and available to the student.');
@@ -507,6 +668,7 @@ export default function TeacherStudentListPage() {
       if (teacherFeedbackResponse.ok && Array.isArray(teacherFeedbackData)) {
         setFeedbackHistory(teacherFeedbackData);
       }
+      setReplyToMessage(null);
     } catch (error) {
       setFeedbackError(error instanceof Error ? error.message : 'Failed to save feedback.');
     } finally {
@@ -519,6 +681,13 @@ export default function TeacherStudentListPage() {
   };
 
   const handleDeleteFeedbackForEveryone = async (feedbackId: number) => {
+    setPendingDeleteFeedbackId(feedbackId);
+  };
+
+  const confirmDeleteFeedbackForEveryone = async () => {
+    if (!pendingDeleteFeedbackId) return;
+
+    const feedbackId = Number(pendingDeleteFeedbackId);
     setIsDeletingFeedbackId(feedbackId);
     setFeedbackError('');
     setFeedbackSuccess('');
@@ -535,10 +704,34 @@ export default function TeacherStudentListPage() {
       setFeedbackHistory((prev) => prev.filter((feedback) => Number(feedback.id) !== feedbackId));
       setHiddenFeedbackIds((prev) => prev.filter((id) => id !== feedbackId));
       setFeedbackSuccess('Feedback deleted for everyone.');
+      setPendingDeleteFeedbackId(null);
     } catch (error) {
       setFeedbackError(error instanceof Error ? error.message : 'Failed to delete feedback.');
     } finally {
       setIsDeletingFeedbackId(null);
+    }
+  };
+
+  const handleMarkReplyAsRead = async (notificationId: number) => {
+    setIsMarkingReplyReadId(notificationId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+        method: 'PUT',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to mark reply as read.');
+      }
+
+      setTeacherNotifications((current) => current.map((notification) => (
+        Number(notification.id) === notificationId
+          ? { ...notification, is_read: 1 }
+          : notification
+      )));
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : 'Failed to mark reply as read.');
+    } finally {
+      setIsMarkingReplyReadId(null);
     }
   };
 
@@ -675,6 +868,11 @@ export default function TeacherStudentListPage() {
                                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                   {student.generation} | {student.className}
                                 </span>
+                                {(unreadReplyCountByStudent[student.id] || 0) > 0 ? (
+                                  <span className="mt-1 inline-flex w-fit items-center rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
+                                    {unreadReplyCountByStudent[student.id]} new reply{(unreadReplyCountByStudent[student.id] || 0) > 1 ? 'ies' : ''}
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </td>
@@ -786,42 +984,49 @@ export default function TeacherStudentListPage() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        {selectedCriteria.length > 0 ? selectedCriteria.map((response) => (
-                          <button
-                            key={response.criterion_key}
-                            type="button"
-                            onClick={() => setActiveCriterion({
-                              key: response.criterion_key,
-                              label: String(response.criterion_name || response.criterion_key),
-                              icon: String(response.criterion_icon || 'Star'),
-                              score: Number(response.star_value || 0),
-                              reflection: String(response.reflection || '').trim(),
-                              tip: String(response.tip_snapshot || '').trim(),
-                            })}
-                            className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left hover:border-primary/30 hover:bg-white transition-all"
-                          >
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div className="size-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                                {getIcon(response.criterion_icon)}
+                        {selectedCriteria.length > 0 ? selectedCriteria.map((response, criterionIndex) => {
+                          const style = CRITERIA_COLOR_STYLES[criterionIndex % CRITERIA_COLOR_STYLES.length];
+
+                          return (
+                            <button
+                              key={response.criterion_key}
+                              type="button"
+                              onClick={() => setActiveCriterion({
+                                key: response.criterion_key,
+                                label: String(response.criterion_name || response.criterion_key),
+                                icon: String(response.criterion_icon || 'Star'),
+                                score: Number(response.star_value || 0),
+                                reflection: String(response.reflection || '').trim(),
+                                tip: String(response.tip_snapshot || '').trim(),
+                              })}
+                              className={cn(
+                                'p-4 bg-slate-50 rounded-2xl border border-slate-100 text-left hover:bg-white transition-all',
+                                style.hover
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div className={cn('size-10 rounded-2xl flex items-center justify-center', style.iconBg, style.iconText)}>
+                                  {getIcon(response.criterion_icon)}
+                                </div>
+                                <span className={cn('text-[10px] font-black uppercase tracking-widest', style.detailText)}>Details</span>
                               </div>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-primary">Details</span>
-                            </div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                              {response.criterion_name || response.criterion_key}
-                            </p>
-                            <div className="flex text-primary">
-                              {Array.from({ length: Math.max(1, selectedStudent?.ratingScale || 5) }).map((_, index) => (
-                                <Star
-                                  key={`${response.criterion_key}-${index}`}
-                                  className={cn(
-                                    'w-3 h-3 fill-current',
-                                    index >= Math.floor(Number(response.star_value || 0)) && 'text-slate-200 fill-slate-200'
-                                  )}
-                                />
-                              ))}
-                            </div>
-                          </button>
-                        )) : Array.from({ length: 4 }).map((_, index) => (
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                {response.criterion_name || response.criterion_key}
+                              </p>
+                              <div className={cn('flex', style.stars)}>
+                                {Array.from({ length: Math.max(1, selectedStudent?.ratingScale || 5) }).map((_, index) => (
+                                  <Star
+                                    key={`${response.criterion_key}-${index}`}
+                                    className={cn(
+                                      'w-3 h-3 fill-current',
+                                      index >= Math.floor(Number(response.star_value || 0)) && 'text-slate-200 fill-slate-200'
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        }) : Array.from({ length: 4 }).map((_, index) => (
                           <div key={index} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">No Data</p>
                             <div className="flex text-slate-200">
@@ -833,10 +1038,98 @@ export default function TeacherStudentListPage() {
                         ))}
                       </div>
                     </div>
-
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-4">
-                        <h4 className="text-sm font-bold text-slate-900">Teacher's Qualitative Feedback</h4>
+                        <h4 className="text-sm font-bold text-slate-900">Teacher's Qualitative Feedback Chat</h4>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          {conversationMessages.length} messages
+                        </span>
+                      </div>
+                      <div className="max-h-80 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        {conversationMessages.length > 0 ? (
+                          conversationMessages.map((message) => (
+                            <div key={message.id} className={cn('flex', message.source === 'teacher' ? 'justify-end' : 'justify-start')}>
+                              <div
+                                className={cn(
+                                  'max-w-[85%] rounded-2xl border px-3 py-2',
+                                  message.source === 'teacher'
+                                    ? 'bg-primary text-white border-primary/40'
+                                    : 'bg-white text-slate-700 border-slate-200'
+                                )}
+                              >
+                                <p className={cn('text-[10px] font-black uppercase tracking-widest', message.source === 'teacher' ? 'text-white/80' : 'text-slate-400')}>
+                                  {message.source === 'teacher' ? 'Teacher' : 'Student'} • {formatShortDate(message.createdAt)}
+                                  {message.source === 'student' ? ` • ${message.isRead ? 'Read' : 'Unread'}` : ''}
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setReplyToMessage(message)}
+                                    className={cn(
+                                      'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+                                      message.source === 'teacher'
+                                        ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
+                                        : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                                    )}
+                                  >
+                                    Reply
+                                  </button>
+                                  {message.source === 'teacher' && message.feedbackId ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleHideFeedbackForMe(Number(message.feedbackId))}
+                                        className="rounded-lg border border-white/30 bg-white/15 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/25 transition-colors"
+                                      >
+                                        Hide
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteFeedbackForEveryone(Number(message.feedbackId))}
+                                        disabled={isDeletingFeedbackId === Number(message.feedbackId)}
+                                        className="rounded-lg border border-white/30 bg-rose-500/85 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-white hover:bg-rose-500 transition-colors disabled:opacity-60 inline-flex items-center gap-1"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        {isDeletingFeedbackId === Number(message.feedbackId) ? 'Deleting...' : 'Delete'}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {message.source === 'student' && !message.isRead && message.notificationId ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkReplyAsRead(Number(message.notificationId))}
+                                      disabled={isMarkingReplyReadId === Number(message.notificationId)}
+                                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-60"
+                                    >
+                                      {isMarkingReplyReadId === Number(message.notificationId) ? 'Saving...' : 'Mark Read'}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm font-medium text-slate-400">
+                            No messages yet. Write the first feedback below.
+                          </div>
+                        )}
+                      </div>
+
+                      {replyToMessage ? (
+                        <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-[11px] font-bold text-primary">
+                              Replying to {replyToMessage.source === 'student' ? 'student' : 'teacher'}: "{replyToMessage.text.slice(0, 120)}"
+                            </p>
+                            <button type="button" onClick={() => setReplyToMessage(null)} className="text-slate-400 hover:text-slate-600">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-center justify-between gap-4">
                         <span className={cn(
                           'text-[10px] font-black uppercase tracking-widest',
                           feedbackDraft.length > teacherMaxFeedbackCharacters ? 'text-rose-600' : 'text-slate-400'
@@ -845,8 +1138,8 @@ export default function TeacherStudentListPage() {
                         </span>
                       </div>
                       <textarea
-                        rows={6}
-                        placeholder="Write your feedback here..."
+                        rows={4}
+                        placeholder="Write your message..."
                         maxLength={teacherMaxFeedbackCharacters}
                         className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-primary/10 focus:border-primary outline-none transition-all resize-none"
                         value={feedbackDraft}
@@ -854,7 +1147,7 @@ export default function TeacherStudentListPage() {
                       />
                       {latestTeacherFeedback ? (
                         <p className="text-[11px] font-bold text-slate-400">
-                          Your latest saved feedback was posted on {formatShortDate(latestTeacherFeedback.created_at)}.
+                          Your latest sent message was posted on {formatShortDate(latestTeacherFeedback.created_at)}.
                         </p>
                       ) : null}
                       {feedbackError ? (
@@ -869,62 +1162,13 @@ export default function TeacherStudentListPage() {
                       ) : null}
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <h4 className="text-sm font-bold text-slate-900">Feedback History</h4>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          {visibleStudentFeedbackHistory.length} visible
-                        </span>
-                      </div>
-                      {visibleStudentFeedbackHistory.length > 0 ? (
-                        <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-                          {visibleStudentFeedbackHistory.map((feedback) => (
-                            <div key={feedback.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                    {formatShortDate(feedback.created_at)}
-                                  </p>
-                                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                                    {feedback.comment}
-                                  </p>
-                                </div>
-                                <div className="flex shrink-0 gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleHideFeedbackForMe(Number(feedback.id))}
-                                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-colors"
-                                  >
-                                    Hide For Me
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteFeedbackForEveryone(Number(feedback.id))}
-                                    disabled={isDeletingFeedbackId === Number(feedback.id)}
-                                    className="rounded-xl bg-rose-500 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-rose-600 transition-colors disabled:opacity-60 inline-flex items-center gap-1"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    {isDeletingFeedbackId === Number(feedback.id) ? 'Deleting...' : 'Delete For Everyone'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-medium text-slate-400">
-                          No visible feedback history for this student yet.
-                        </div>
-                      )}
-                    </div>
-
                     <button
                       onClick={handleSubmitFeedback}
                       disabled={!selectedStudent || isSubmittingFeedback || !teacherId}
                       className="w-full py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                     >
                       <Send className="w-5 h-5" />
-                      {isSubmittingFeedback ? 'Saving Feedback...' : 'Submit Feedback'}
+                      {isSubmittingFeedback ? 'Sending Message...' : 'Send Message'}
                     </button>
                     <p className="text-center text-[10px] text-slate-400">
                       {selectedStudent?.latestEvaluation?.submitted_at
@@ -938,6 +1182,39 @@ export default function TeacherStudentListPage() {
           </div>
         </div>
       </main>
+
+      {pendingDeleteFeedbackId ? (
+        <div className="fixed inset-0 z-[118] flex items-center justify-center p-4">
+          <button
+            type="button"
+            onClick={() => setPendingDeleteFeedbackId(null)}
+            className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+            <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              This will delete the selected feedback message for both teacher and student.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteFeedbackId(null)}
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteFeedbackForEveryone}
+                disabled={isDeletingFeedbackId === Number(pendingDeleteFeedbackId)}
+                className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
+              >
+                {isDeletingFeedbackId === Number(pendingDeleteFeedbackId) ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {activeCriterion ? (
@@ -1010,3 +1287,5 @@ export default function TeacherStudentListPage() {
     </div>
   );
 }
+
+

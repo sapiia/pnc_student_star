@@ -115,6 +115,7 @@ const defaultNewUser = {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 const DEFAULT_MAJOR_OPTIONS = ['SNA', 'WEB DEV'];
+const DEFAULT_CLASS_OPTIONS = ['WEB A', 'WEB B'];
 const USERS_PER_PAGE = 15;
 
 const toDisplayNameFromEmail = (email: string) => {
@@ -193,6 +194,8 @@ export default function AdminUserManagementPage() {
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
+  const [classOptions, setClassOptions] = useState<string[]>(DEFAULT_CLASS_OPTIONS);
+  const [customClassDraft, setCustomClassDraft] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -1099,7 +1102,10 @@ export default function AdminUserManagementPage() {
                         </div>
                         <select
                           value={newUser.major}
-                          onChange={(e) => setNewUser({ ...newUser, major: e.target.value as StudentMajor })}
+                          onChange={(e) => {
+                            const nextMajor = e.target.value.toUpperCase();
+                            setNewUser({ ...newUser, major: nextMajor as StudentMajor });
+                          }}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         >
                           {majorOptions.map((major) => (
@@ -1115,15 +1121,43 @@ export default function AdminUserManagementPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. A"
+                        <div className="flex items-center justify-between gap-2 ml-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextClass = customClassDraft.trim().toUpperCase();
+                              if (!nextClass) return;
+                              if (!classOptions.includes(nextClass)) {
+                                setClassOptions((prev) => [...prev, nextClass]);
+                              }
+                              setNewUser((prev) => ({ ...prev, className: nextClass }));
+                              setCustomClassDraft('');
+                            }}
+                            className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
+                            title="Add new class"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <select
                           value={newUser.className}
                           onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        >
+                          <option value="">Select class</option>
+                          {classOptions.map((classOption) => (
+                            <option key={classOption} value={classOption}>{classOption}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={customClassDraft}
+                          onChange={(e) => setCustomClassDraft(e.target.value)}
+                          placeholder="Add new class manually"
+                          className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
                         />
-                        <p className="text-[10px] text-slate-400 font-bold ml-1">Optional class label like A, B, or C.</p>
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Default options: WEB A, WEB B.</p>
                       </div>
 
                       <div className="space-y-2 md:col-span-1">
