@@ -1,12 +1,38 @@
 const db = require('../config/database');
 
+const getUsersTableColumns = async () => {
+  const [rows] = await db.query("SHOW COLUMNS FROM users");
+  return new Set(rows.map((row) => row.Field));
+};
+
+const buildDisplayNameSql = (alias, columns) => {
+  const parts = [];
+
+  if (columns.has('name')) {
+    parts.push(`NULLIF(TRIM(${alias}.name), '')`);
+  }
+  if (columns.has('first_name') || columns.has('last_name')) {
+    const firstNameExpr = columns.has('first_name') ? `COALESCE(${alias}.first_name, '')` : `''`;
+    const lastNameExpr = columns.has('last_name') ? `COALESCE(${alias}.last_name, '')` : `''`;
+    parts.push(`NULLIF(TRIM(CONCAT(${firstNameExpr}, ' ', ${lastNameExpr})), '')`);
+  }
+  if (columns.has('email')) {
+    parts.push(`${alias}.email`);
+  }
+
+  return `COALESCE(${parts.length > 0 ? parts.join(', ') : "''"})`;
+};
+
 class Feedback {
   static async findAll() {
     try {
+      const columns = await getUsersTableColumns();
       const [rows] = await db.query(`
         SELECT f.*, 
-               t.name as teacher_name, 
-               s.name as student_name
+               ${buildDisplayNameSql('t', columns)} as teacher_name, 
+               ${buildDisplayNameSql('s', columns)} as student_name,
+               ${columns.has('profile_image') ? 't.profile_image as teacher_profile_image,' : ''}
+               ${columns.has('profile_image') ? 's.profile_image as student_profile_image' : 'NULL as student_profile_image'}
         FROM feedbacks f
         LEFT JOIN users t ON f.teacher_id = t.id
         LEFT JOIN users s ON f.student_id = s.id
@@ -20,10 +46,13 @@ class Feedback {
 
   static async findById(id) {
     try {
+      const columns = await getUsersTableColumns();
       const [rows] = await db.query(`
         SELECT f.*, 
-               t.name as teacher_name, 
-               s.name as student_name
+               ${buildDisplayNameSql('t', columns)} as teacher_name, 
+               ${buildDisplayNameSql('s', columns)} as student_name,
+               ${columns.has('profile_image') ? 't.profile_image as teacher_profile_image,' : ''}
+               ${columns.has('profile_image') ? 's.profile_image as student_profile_image' : 'NULL as student_profile_image'}
         FROM feedbacks f
         LEFT JOIN users t ON f.teacher_id = t.id
         LEFT JOIN users s ON f.student_id = s.id
@@ -37,8 +66,11 @@ class Feedback {
 
   static async findByStudentId(studentId) {
     try {
+      const columns = await getUsersTableColumns();
       const [rows] = await db.query(`
-        SELECT f.*, t.name as teacher_name
+        SELECT f.*, 
+               ${buildDisplayNameSql('t', columns)} as teacher_name,
+               ${columns.has('profile_image') ? 't.profile_image as teacher_profile_image' : 'NULL as teacher_profile_image'}
         FROM feedbacks f
         LEFT JOIN users t ON f.teacher_id = t.id
         WHERE f.student_id = ?
@@ -52,8 +84,11 @@ class Feedback {
 
   static async findByTeacherId(teacherId) {
     try {
+      const columns = await getUsersTableColumns();
       const [rows] = await db.query(`
-        SELECT f.*, s.name as student_name
+        SELECT f.*, 
+               ${buildDisplayNameSql('s', columns)} as student_name,
+               ${columns.has('profile_image') ? 's.profile_image as student_profile_image' : 'NULL as student_profile_image'}
         FROM feedbacks f
         LEFT JOIN users s ON f.student_id = s.id
         WHERE f.teacher_id = ?

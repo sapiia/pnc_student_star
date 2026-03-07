@@ -3,6 +3,7 @@ import {
   LayoutDashboard, 
   FileText, 
   MessageSquare, 
+  Bell,
   Settings,
   ChevronDown,
   ChevronRight,
@@ -31,6 +32,8 @@ export default function Sidebar({ className }: SidebarProps) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Student');
   const [studentId, setStudentId] = useState<string>('');
+  const [authUserId, setAuthUserId] = useState<number | null>(null);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(
     location.pathname === '/profile' || 
@@ -54,6 +57,7 @@ export default function Sidebar({ className }: SidebarProps) {
         const authUser = JSON.parse(raw);
         const userId = Number(authUser?.id);
         if (!Number.isInteger(userId) || userId <= 0) return;
+        setAuthUserId(userId);
 
         if (authUser?.name) {
           setProfileName(String(authUser.name));
@@ -95,6 +99,33 @@ export default function Sidebar({ className }: SidebarProps) {
   }, []);
 
   useEffect(() => {
+    if (!authUserId) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadUnreadNotifications = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/notifications/user/${authUserId}/unread`);
+        const data = await response.json().catch(() => []);
+        if (!response.ok || !Array.isArray(data)) {
+          setUnreadNotificationCount(0);
+          return;
+        }
+
+        setUnreadNotificationCount(data.length);
+      } catch {
+        setUnreadNotificationCount(0);
+      }
+    };
+
+    loadUnreadNotifications();
+    window.addEventListener('student-notifications-updated', loadUnreadNotifications);
+    return () => window.removeEventListener('student-notifications-updated', loadUnreadNotifications);
+  }, [authUserId]);
+
+  useEffect(() => {
     const refreshPhoto = () => {
       try {
         const raw = localStorage.getItem('auth_user');
@@ -123,6 +154,7 @@ export default function Sidebar({ className }: SidebarProps) {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: FileText, label: 'My Evaluations', path: '/history' },
     { icon: MessageSquare, label: 'Feedback', path: '/feedback' },
+    { icon: Bell, label: 'Notifications', path: '/notifications', hasNotification: unreadNotificationCount > 0 },
     { icon: Calendar, label: 'Meeting', path: '/meeting', hasNotification: true },
   ];
 

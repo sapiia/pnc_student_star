@@ -25,39 +25,6 @@ import StarRating from '../components/StarRating';
 import RadarChart from '../components/RadarChart';
 import Sidebar from '../components/Sidebar';
 
-const RECENT_FEEDBACK = [
-  {
-    id: '1',
-    author: 'Serey Roth',
-    authorRole: 'Mentor',
-    avatar: 'https://picsum.photos/seed/serey/100/100',
-    date: '2 days ago',
-    content: '"Great progress in Job & Study this month! I noticed your focus during the JS project was excellent."'
-  },
-  {
-    id: '2',
-    author: 'Dara Vann',
-    authorRole: 'Mentor',
-    avatar: 'https://picsum.photos/seed/dara/100/100',
-    date: '1 week ago',
-    content: '"Let\'s focus more on Human & Support next quarter. Teamwork is as vital as coding skills."'
-  }
-];
-
-const RADAR_DATA = [
-  { subject: 'Living', A: 80, B: 60, fullMark: 100 },
-  { subject: 'Study', A: 90, B: 70, fullMark: 100 },
-  { subject: 'Human', A: 60, B: 75, fullMark: 100 },
-  { subject: 'Health', A: 85, B: 80, fullMark: 100 },
-  { subject: 'Feeling', A: 70, B: 75, fullMark: 100 },
-  { subject: 'Behavior', A: 80, B: 70, fullMark: 100 },
-];
-
-const RADAR_KEYS = [
-  { key: 'A', name: 'Q1 2024', color: '#5d5fef', fill: '#5d5fef' },
-  { key: 'B', name: 'Q4 2023', color: '#94a3b8', fill: '#94a3b8' },
-];
-
 type EvaluationResponse = {
   criterion_key: string;
   criterion_name?: string;
@@ -69,9 +36,25 @@ type EvaluationResponse = {
 
 type EvaluationRecord = {
   period: string;
+  rating_scale?: number;
   submitted_at?: string;
   created_at?: string;
   responses?: EvaluationResponse[];
+};
+
+type FeedbackItem = {
+  id: number;
+  teacher_name?: string;
+  teacher_profile_image?: string | null;
+  comment: string;
+  created_at?: string;
+};
+
+type NotificationItem = {
+  id: number;
+  message: string;
+  is_read: number;
+  created_at?: string;
 };
 
 type CriterionDetail = {
@@ -116,10 +99,39 @@ const formatShortDate = (value: string) => {
   }).format(date);
 };
 
+const formatLongDate = (value: Date) => (
+  new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(value)
+);
+
 const getCurrentPeriodLabel = () => {
   const now = new Date();
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   return `Q${quarter} ${now.getFullYear()}`;
+};
+
+const getPeriodSortValue = (period: string) => {
+  const trimmed = String(period || '').trim();
+  const quarterMatch = trimmed.match(/^(\d{4})-Q([1-4])$/i);
+  if (quarterMatch) {
+    return Number(quarterMatch[1]) * 10 + Number(quarterMatch[2]);
+  }
+  return Number.MIN_SAFE_INTEGER;
+};
+
+const getEvaluationSortValue = (evaluation: EvaluationRecord) => {
+  const periodSortValue = getPeriodSortValue(evaluation.period);
+  if (periodSortValue !== Number.MIN_SAFE_INTEGER) {
+    return periodSortValue;
+  }
+
+  const dateValue = new Date(
+    String(evaluation.submitted_at || evaluation.created_at || '')
+  ).getTime();
+  return Number.isNaN(dateValue) ? Number.MIN_SAFE_INTEGER : dateValue;
 };
 
 export default function DashboardPage() {
@@ -130,6 +142,9 @@ export default function DashboardPage() {
   const [showUrgentNotification, setShowUrgentNotification] = useState(false);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
+  const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackItem[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRecord | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const canStartEvaluation = !latestEvaluation || daysLeft === 0;
@@ -145,6 +160,65 @@ export default function DashboardPage() {
       ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
     }))
   ), [latestEvaluation]);
+
+  const historicalComparison = useMemo(() => {
+    const sortedEvaluations = [...evaluations].sort((left, right) => (
+      getEvaluationSortValue(left) - getEvaluationSortValue(right)
+    ));
+
+    if (sortedEvaluations.length === 0) {
+      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[] };
+    }
+
+    const comparedEvaluations = sortedEvaluations.length === 1
+      ? [sortedEvaluations[0]]
+      : sortedEvaluations.slice(-2);
+
+    const criteriaOrder = comparedEvaluations.reduce<string[]>((accumulator, evaluation) => {
+      (evaluation.responses || []).forEach((response, index) => {
+        const fallbackKey = `criterion-${index + 1}`;
+        const key = String(response.criterion_key || response.criterion_name || fallbackKey).trim() || fallbackKey;
+        if (!accumulator.includes(key)) {
+          accumulator.push(key);
+        }
+      });
+      return accumulator;
+    }, []);
+
+    const data = criteriaOrder.map((criterionKey, index) => {
+      const subject =
+        comparedEvaluations
+          .flatMap((evaluation) => evaluation.responses || [])
+          .find((response) => String(response.criterion_key || '').trim() === criterionKey)?.criterion_name ||
+        criterionKey;
+
+      const row: Record<string, string | number> = {
+        subject: String(subject || `Criterion ${index + 1}`),
+      };
+
+      comparedEvaluations.forEach((evaluation, evaluationIndex) => {
+        const chartKey = comparedEvaluations.length === 1
+          ? 'current'
+          : evaluationIndex === 0
+            ? 'previous'
+            : 'current';
+        const response = (evaluation.responses || []).find((item) => String(item.criterion_key || '').trim() === criterionKey);
+        const ratingScale = Math.max(1, Number(evaluation.rating_scale || 5));
+        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0) * (100 / ratingScale)) : 0;
+      });
+
+      return row;
+    });
+
+    const dataKeys = comparedEvaluations.map((evaluation, index) => ({
+      key: comparedEvaluations.length === 1 ? 'current' : index === 0 ? 'previous' : 'current',
+      name: formatPeriodLabel(evaluation.period),
+      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
+      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
+    }));
+
+    return { data, dataKeys };
+  }, [evaluations]);
 
   useEffect(() => {
     if (daysLeft <= 3) {
@@ -169,18 +243,41 @@ export default function DashboardPage() {
         if (localName) setStudentName(localName);
         if (localStudentId) setStudentId(localStudentId);
 
-        const [response, intervalResponse, evaluationsResponse] = await Promise.all([
+        const studentPrefsRaw = localStorage.getItem(`student_notify_${userId}`);
+        const studentPrefs = studentPrefsRaw ? JSON.parse(studentPrefsRaw) : null;
+        const remindersEnabled = studentPrefs?.remindersEnabled !== false;
+
+        const [
+          response,
+          intervalResponse,
+          evaluationsResponse,
+          studentFeedbackVisibilityResponse,
+          reminderNotificationsResponse,
+          feedbackResponse,
+          notificationsResponse,
+        ] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${userId}`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
-          fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
+          fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
+          fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
+          fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
+          fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
+          fetch(`${API_BASE_URL}/notifications/user/${userId}`)
         ]);
 
         const data = await response.json().catch(() => ({}));
         const intervalData = await intervalResponse.json().catch(() => ({}));
         const evaluations = await evaluationsResponse.json().catch(() => []);
-        const latestEvaluationRecord = Array.isArray(evaluations) && evaluations.length > 0
-          ? (evaluations[0] as EvaluationRecord)
-          : null;
+        const studentFeedbackVisibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
+        const reminderNotificationsData = await reminderNotificationsResponse.json().catch(() => ({}));
+        const feedbackData = await feedbackResponse.json().catch(() => []);
+        const notificationsData = await notificationsResponse.json().catch(() => []);
+        const sortedEvaluations = Array.isArray(evaluations)
+          ? [...evaluations as EvaluationRecord[]].sort((left, right) => (
+              getEvaluationSortValue(right) - getEvaluationSortValue(left)
+            ))
+          : [];
+        const latestEvaluationRecord = sortedEvaluations.length > 0 ? sortedEvaluations[0] : null;
 
         const resolvedName =
           String(data?.name || '').trim() ||
@@ -191,6 +288,21 @@ export default function DashboardPage() {
 
         setStudentName(resolvedName);
         setStudentId(resolvedStudentId);
+        setEvaluations(sortedEvaluations);
+
+        const canViewTeacherFeedback = !['false', '0'].includes(
+          String(studentFeedbackVisibilityData?.value || 'true').trim().toLowerCase()
+        );
+        const normalizedFeedback = canViewTeacherFeedback && Array.isArray(feedbackData)
+          ? (feedbackData as FeedbackItem[]).slice(0, 3)
+          : [];
+        setRecentFeedback(normalizedFeedback);
+        const userNotifications = Array.isArray(notificationsData)
+          ? notificationsData as NotificationItem[]
+          : [];
+        setUnreadNotificationCount(
+          userNotifications.filter((notification) => Number(notification.is_read) !== 1).length
+        );
 
         const resolvedCycleDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
         setCycleDays(resolvedCycleDays);
@@ -217,10 +329,44 @@ export default function DashboardPage() {
         nextEvaluationDate.setDate(nextEvaluationDate.getDate() + resolvedCycleDays);
 
         const remainingMilliseconds = nextEvaluationDate.getTime() - Date.now();
-        setDaysLeft(Math.max(0, Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24))));
+        const resolvedDaysLeft = Math.max(0, Math.ceil(remainingMilliseconds / (1000 * 60 * 60 * 24)));
+        setDaysLeft(resolvedDaysLeft);
+
+        const adminAllowsReminders = !['false', '0'].includes(
+          String(reminderNotificationsData?.value || 'true').trim().toLowerCase()
+        );
+
+        if (adminAllowsReminders && remindersEnabled && resolvedDaysLeft === 3) {
+          const reminderMessage = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextEvaluationDate)}.`;
+          const hasExistingReminder = userNotifications.some((notification) => (
+            String(notification.message || '').trim() === reminderMessage
+          ));
+
+          if (!hasExistingReminder) {
+            const createReminderResponse = await fetch(`${API_BASE_URL}/notifications`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                user_id: userId,
+                message: reminderMessage,
+                is_read: 0,
+              }),
+            });
+
+            if (createReminderResponse.ok) {
+              setUnreadNotificationCount((current) => current + 1);
+              window.dispatchEvent(new Event('student-notifications-updated'));
+            }
+          }
+        }
       } catch {
         setCycleDays(90);
         setDaysLeft(0);
+        setEvaluations([]);
+        setRecentFeedback([]);
+        setUnreadNotificationCount(0);
         setLatestEvaluation(null);
       }
     };
@@ -259,11 +405,16 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <button 
+              onClick={() => navigate('/notifications')}
               title="Notifications"
               className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 bg-red-500 rounded-full ring-2 ring-white text-white text-[10px] font-black flex items-center justify-center">
+                  {Math.min(unreadNotificationCount, 9)}
+                </span>
+              ) : null}
             </button>
             <button 
               onClick={() => navigate('/help')}
@@ -433,7 +584,13 @@ export default function DashboardPage() {
               {/* Progress Chart */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-sm font-bold mb-4 uppercase tracking-wider text-slate-500">Historical Growth</h3>
-                <RadarChart data={RADAR_DATA} dataKeys={RADAR_KEYS} />
+                {historicalComparison.data.length > 0 ? (
+                  <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} />
+                ) : (
+                  <div className="h-[350px] rounded-xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
+                    No evaluation history is available yet.
+                  </div>
+                )}
               </div>
 
               {/* Teacher Feedback */}
@@ -448,19 +605,34 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <div className="space-y-4">
-                  {RECENT_FEEDBACK.map((feedback) => (
+                  {recentFeedback.length > 0 ? recentFeedback.map((feedback) => (
                     <div key={feedback.id} className="flex gap-3">
                       <div className="size-8 rounded-full overflow-hidden shrink-0 bg-slate-100">
-                        <img alt={feedback.author} src={feedback.avatar} />
+                        {feedback.teacher_profile_image ? (
+                          <img alt={feedback.teacher_name || 'Teacher'} src={feedback.teacher_profile_image} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-400 text-[10px] font-black">
+                            {(feedback.teacher_name || 'T').charAt(0).toUpperCase()}
+                          </div>
+                        )}
                       </div>
                       <div className="bg-slate-50 p-3 rounded-lg flex-1">
-                        <div className="flex justify-between items-start mb-1">
-                          <p className="text-xs font-bold">{feedback.author} <span className="text-[10px] font-normal text-slate-400 block sm:inline sm:ml-2">{feedback.date}</span></p>
+                        <div className="flex justify-between items-start mb-1 gap-3">
+                          <p className="text-xs font-bold">
+                            {feedback.teacher_name || 'Teacher'}
+                            <span className="text-[10px] font-normal text-slate-400 block sm:inline sm:ml-2">
+                              {formatShortDate(String(feedback.created_at || ''))}
+                            </span>
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-600 italic leading-relaxed">{feedback.content}</p>
+                        <p className="text-xs text-slate-600 italic leading-relaxed line-clamp-3">{feedback.comment}</p>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-bold text-slate-400">
+                      No recent teacher feedback is available yet.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

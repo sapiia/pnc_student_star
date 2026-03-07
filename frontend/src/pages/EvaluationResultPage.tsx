@@ -39,12 +39,22 @@ type EvaluationResponse = {
 
 type EvaluationRecord = {
   id: number;
+  user_id?: number;
   period: string;
   rating_scale: number;
   average_score: number;
   submitted_at: string;
   created_at: string;
   responses: EvaluationResponse[];
+};
+
+type FeedbackItem = {
+  id: number;
+  teacher_name?: string;
+  teacher_profile_image?: string | null;
+  evaluation_id?: number | null;
+  comment: string;
+  created_at?: string;
 };
 
 type CriterionView = {
@@ -123,6 +133,7 @@ export default function EvaluationResultPage() {
 
   const [evaluation, setEvaluation] = useState<EvaluationRecord | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(locationState.evaluationId));
+  const [quarterFeedback, setQuarterFeedback] = useState<FeedbackItem[]>([]);
   const [activeCriterion, setActiveCriterion] = useState<CriterionView | null>(null);
 
   useEffect(() => {
@@ -148,6 +159,54 @@ export default function EvaluationResultPage() {
 
     loadEvaluation();
   }, [locationState.evaluationId]);
+
+  useEffect(() => {
+    const loadQuarterFeedback = async () => {
+      if (!evaluation?.id) {
+        setQuarterFeedback([]);
+        return;
+      }
+
+      try {
+        const raw = localStorage.getItem('auth_user');
+        const authUser = raw ? JSON.parse(raw) : null;
+        const fallbackUserId = Number(authUser?.id);
+        const userId = Number(evaluation.user_id || fallbackUserId);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          setQuarterFeedback([]);
+          return;
+        }
+
+        const [visibilityResponse, feedbackResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
+          fetch(`${API_BASE_URL}/feedbacks/student/${userId}`)
+        ]);
+
+        const visibilityData = await visibilityResponse.json().catch(() => ({}));
+        const feedbackData = await feedbackResponse.json().catch(() => []);
+        const canViewFeedback = !['false', '0'].includes(
+          String(visibilityData?.value || 'true').trim().toLowerCase()
+        );
+
+        if (!canViewFeedback || !feedbackResponse.ok || !Array.isArray(feedbackData)) {
+          setQuarterFeedback([]);
+          return;
+        }
+
+        const matchedFeedback = (feedbackData as FeedbackItem[])
+          .filter((item) => Number(item.evaluation_id) === Number(evaluation.id))
+          .sort((left, right) => (
+            new Date(String(right.created_at || '')).getTime() - new Date(String(left.created_at || '')).getTime()
+          ));
+
+        setQuarterFeedback(matchedFeedback);
+      } catch {
+        setQuarterFeedback([]);
+      }
+    };
+
+    loadQuarterFeedback();
+  }, [evaluation]);
 
   const criteriaData = useMemo<CriterionView[]>(() => {
     if (evaluation?.responses?.length) {
@@ -311,6 +370,55 @@ export default function EvaluationResultPage() {
                       </div>
                     </div>
                   ) : null}
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                      <h3 className="text-slate-900 text-lg font-bold">Teacher Feedback</h3>
+                      <p className="text-xs text-slate-500">{toPeriodLabel(evaluation?.period || '')}</p>
+                    </div>
+                    <button
+                      onClick={() => navigate('/feedback')}
+                      className="text-xs text-primary font-semibold hover:underline"
+                    >
+                      View All
+                    </button>
+                  </div>
+                  {quarterFeedback.length > 0 ? (
+                    <div className="space-y-4">
+                      {quarterFeedback.map((feedback) => (
+                        <div key={feedback.id} className="flex gap-3">
+                          <div className="size-10 rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
+                            {feedback.teacher_profile_image ? (
+                              <img
+                                src={feedback.teacher_profile_image}
+                                alt={feedback.teacher_name || 'Teacher'}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Users className="w-4 h-4 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 rounded-xl bg-slate-50 border border-slate-100 p-4">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                {formatLongDate(String(feedback.created_at || ''))}
+                              </span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+                              {feedback.comment}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-bold text-slate-400">
+                      No teacher feedback is available yet for this quarter.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
