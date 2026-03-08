@@ -14,6 +14,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherMobileNav from '../components/TeacherMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
@@ -55,25 +56,26 @@ export default function TeacherDashboardPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
       
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <TeacherMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Teacher Overview</h1>
-            <p className="text-xs text-slate-500">Welcome back, monitor your student's daily well-being.</p>
+        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate">Teacher Overview</h1>
+            <p className="text-[10px] md:text-xs text-slate-500 font-medium truncate">Monitor student well-being.</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl relative">
+          <div className="flex items-center gap-2 md:gap-4 ml-2">
+            <div className="flex items-center gap-1 md:gap-2 bg-slate-100 p-1 rounded-xl relative scale-90 md:scale-100 origin-right">
               {/* GEN Filter */}
               <div className="relative">
                 <button 
                   onClick={() => setActiveDropdown(activeDropdown === 'gen' ? null : 'gen')}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg shadow-sm text-xs font-bold transition-all",
+                    "px-2 md:px-3 py-1 md:py-1.5 rounded-lg shadow-sm text-[10px] md:text-xs font-bold transition-all whitespace-nowrap",
                     activeDropdown === 'gen' ? "bg-primary text-white" : "bg-white text-primary"
                   )}
                 >
-                  GEN: {selectedGen}
+                  GEN: {selectedGen.replace('Gen ', '')}
                 </button>
                 <AnimatePresence>
                   {activeDropdown === 'gen' && (
@@ -81,7 +83,7 @@ export default function TeacherDashboardPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
-                      className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                      className="absolute top-full right-0 md:left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
                     >
                       {gens.map(gen => (
                         <button 
@@ -102,11 +104,11 @@ export default function TeacherDashboardPage() {
                 <button 
                   onClick={() => setActiveDropdown(activeDropdown === 'class' ? null : 'class')}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    "px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-all whitespace-nowrap",
                     activeDropdown === 'class' ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-white/50"
                   )}
                 >
-                  CLASS: {selectedClass}
+                  {selectedClass}
                 </button>
                 <AnimatePresence>
                   {activeDropdown === 'class' && (
@@ -114,7 +116,7 @@ export default function TeacherDashboardPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
-                      className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                      className="absolute top-full right-0 md:left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
                     >
                       {classes.map(cls => (
                         <button 
@@ -132,7 +134,7 @@ export default function TeacherDashboardPage() {
             </div>
             <button 
               onClick={() => navigate('/teacher/notifications')}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0"
             >
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
@@ -140,8 +142,8 @@ export default function TeacherDashboardPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1200px] mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+          <div className="max-w-[1200px] mx-auto space-y-6 md:space-y-8">
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {STATS.map((stat, idx) => (
@@ -171,38 +173,38 @@ export default function TeacherDashboardPage() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-rose-50 border border-rose-100 p-6 rounded-2xl flex items-center justify-between"
+              className="bg-rose-50 border border-rose-100 p-4 md:p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
               <div className="flex items-center gap-4">
-                <div className="size-12 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-rose-200">
-                  <AlertCircle className="w-6 h-6" />
+                <div className="size-10 md:size-12 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-rose-200 shrink-0">
+                  <AlertCircle className="w-5 h-5 md:w-6 md:h-6" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-rose-900">Urgent Alerts</h4>
-                  <p className="text-sm text-rose-700">3 students rated 'Health' below 2 stars today. 5 evaluations pending for WE-2024.</p>
+                  <h4 className="font-bold text-rose-900 text-sm md:text-base">Urgent Alerts</h4>
+                  <p className="text-xs md:text-sm text-rose-700 leading-tight">3 students rated 'Health' below 2 stars today. 5 evaluations pending.</p>
                 </div>
               </div>
-              <button className="bg-rose-500 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-rose-200 hover:bg-rose-600 transition-all">
+              <button className="bg-rose-500 text-white px-6 py-2 md:py-2.5 rounded-xl font-bold shadow-lg shadow-rose-200 hover:bg-rose-600 transition-all text-sm">
                 Resolve All
               </button>
             </motion.div>
 
             {/* Student Performance List */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-slate-900">Student Performance List</h3>
-                <div className="flex items-center gap-4">
-                  <div className="relative">
+              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h3 className="text-base md:text-lg font-bold text-slate-900">Student Performance List</h3>
+                <div className="flex items-center gap-2 md:gap-4 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-none">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input 
                       type="text" 
                       placeholder="Search students..." 
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none w-64"
+                      className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none w-full sm:w-64"
                     />
                   </div>
-                  <button className="p-2 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 transition-colors">
+                  <button className="p-2 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 transition-colors shrink-0">
                     <Filter className="w-5 h-5" />
                   </button>
                 </div>
@@ -282,7 +284,7 @@ export default function TeacherDashboardPage() {
                 </table>
               </div>
 
-              <div className="p-6 border-t border-slate-50 flex items-center justify-between">
+              <div className="p-4 md:p-6 border-t border-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">Showing {filteredStudents.length} students</p>
                 <div className="flex items-center gap-2">
                   <button className="p-2 text-slate-400 hover:text-primary transition-colors">

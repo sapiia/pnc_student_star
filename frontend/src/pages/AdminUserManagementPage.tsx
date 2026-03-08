@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import React, { useEffect, useState } from 'react';
 
@@ -604,6 +605,7 @@ export default function AdminUserManagementPage() {
       <AdminSidebar />
 
       <main className="flex-1 overflow-y-auto relative">
+        <AdminMobileNav />
         {/* Success Toast */}
         <AnimatePresence>
           {showSuccess && (
@@ -630,13 +632,13 @@ export default function AdminUserManagementPage() {
           style={{ willChange: 'transform, opacity' }}
         >
           {/* Header */}
-          <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
+          <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl font-black text-slate-900">User Management</h1>
-              <p className="text-xs text-slate-500 font-bold">Manage system users, roles, and permissions.</p>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">User Management</h1>
+              <p className="text-xs text-slate-500 font-bold hidden md:block">Manage system users, roles, and permissions.</p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
               <button className="p-2 text-slate-400 hover:text-primary transition-colors">
                 <Download className="w-5 h-5" />
               </button>
@@ -657,7 +659,7 @@ export default function AdminUserManagementPage() {
             </div>
           </header>
 
-          <div className="p-8 max-w-7xl mx-auto space-y-8">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           {/* Filters & Search */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:w-96">
@@ -695,12 +697,12 @@ export default function AdminUserManagementPage() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                    <th className="px-6 py-4">User</th>
-                    <th className="px-6 py-4">Role</th>
-                    <th className="px-6 py-4">Class/Department</th>
-                    <th className="px-6 py-4">Student ID</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th className="px-4 md:px-6 py-4">User</th>
+                    <th className="px-4 md:px-6 py-4 hidden sm:table-cell">Role</th>
+                    <th className="px-6 py-4 hidden md:table-cell">Class/Department</th>
+                    <th className="px-6 py-4 hidden lg:table-cell">Student ID</th>
+                    <th className="px-6 py-4 hidden sm:table-cell">Status</th>
+                    <th className="px-4 md:px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <AnimatePresence mode="wait" initial={false}>
@@ -742,7 +744,7 @@ export default function AdminUserManagementPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 md:px-6 py-4 hidden sm:table-cell">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           user.role.includes('Admin') ? "bg-orange-50 text-orange-600" :
@@ -751,13 +753,13 @@ export default function AdminUserManagementPage() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden md:table-cell">
                         <span className="text-xs font-bold text-slate-600">{user.group}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden lg:table-cell">
                         <span className="text-xs font-bold text-slate-600">{user.studentId || '-'}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden sm:table-cell">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           user.status === 'Active'
@@ -804,7 +806,7 @@ export default function AdminUserManagementPage() {
               </table>
             </div>
             
-            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 Showing {filteredUsers.length === 0 ? 0 : (currentPage - 1) * USERS_PER_PAGE + 1}
                 -

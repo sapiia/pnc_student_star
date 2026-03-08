@@ -280,6 +280,15 @@ const createHttpError = (status, message) => {
   return error;
 };
 
+const toFallbackNameFromEmail = (email = '') => {
+  const local = (email || '').toString().trim().split('@')[0] || 'User';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 const normalizeGender = (gender = '') => gender.toString().trim().toLowerCase();
 
 const normalizeInviteInput = (inviteInput = {}) => {
@@ -504,9 +513,15 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
 const sendInviteForUser = async (inviteInput, options = {}) => {
   const normalizedInvite = normalizeInviteInput(inviteInput || {});
   const queryExecutor = options.queryExecutor || db;
-  const [existingUsers] = await queryExecutor.query("SELECT id FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
+  const [existingUsers] = await queryExecutor.query("SELECT * FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
   if (existingUsers.length > 0) {
-    throw createHttpError(409, 'A user with this email already exists.');
+    const existingName = getDisplayNameFromUserRow(existingUsers[0] || {})
+      || normalizedInvite.name
+      || toFallbackNameFromEmail(normalizedInvite.email);
+    const duplicateError = createHttpError(409, 'A user with this email already exists.');
+    duplicateError.existingUserName = existingName;
+    duplicateError.email = normalizedInvite.email;
+    throw duplicateError;
   }
 
   if (options.validateOnly) {
@@ -614,6 +629,7 @@ const validateBulkInviteRows = async (rows, options = {}) => {
   const seenEmailsInFile = new Set();
   const validRows = [];
   const errors = [];
+  const existingUsers = [];
 
   for (const row of rows) {
     const rowEmail = (row.payload.email || '').toString().trim().toLowerCase();
@@ -635,6 +651,16 @@ const validateBulkInviteRows = async (rows, options = {}) => {
         invitedUser: result.invitedUser
       });
     } catch (err) {
+      if (Number(err?.status) === 409) {
+        const fallbackName = `${(row.payload.firstName || '').toString().trim()} ${(row.payload.lastName || '').toString().trim()}`.trim()
+          || toFallbackNameFromEmail(rowEmail);
+        existingUsers.push({
+          row: row.rowNumber,
+          email: rowEmail,
+          name: (err.existingUserName || fallbackName || rowEmail).toString().trim()
+        });
+        continue;
+      }
       errors.push({
         row: row.rowNumber,
         email: rowEmail,
@@ -643,7 +669,7 @@ const validateBulkInviteRows = async (rows, options = {}) => {
     }
   }
 
-  return { validRows, errors };
+  return { validRows, errors, existingUsers };
 };
 
 // Get all users
@@ -783,8 +809,9 @@ const commitBulkInviteRows = async (rows) => {
   if (!rows.length) {
     return {
       message: 'No rows to process.',
-      summary: { totalRows: 0, invitedCount: 0, failedCount: 0, smtpConfigured: false },
+      summary: { totalRows: 0, invitedCount: 0, failedCount: 0, skippedExistingCount: 0, smtpConfigured: false },
       invited: [],
+      existingUsers: [],
       errors: []
     };
   }
@@ -793,6 +820,7 @@ const commitBulkInviteRows = async (rows) => {
   const transportInfo = createEmailTransporter();
   const invited = [];
   const errors = [];
+  const skippedExistingUsers = [];
 
   try {
     await connection.beginTransaction();
@@ -820,6 +848,16 @@ const commitBulkInviteRows = async (rows) => {
         const validated = await sendInviteForUser(payload, { validateOnly: true, queryExecutor: connection });
         normalizedRows.push({ row: rowNumber, payload: validated.validatedRow });
       } catch (err) {
+        if (Number(err?.status) === 409) {
+          const fallbackName = `${(payload.firstName || '').toString().trim()} ${(payload.lastName || '').toString().trim()}`.trim()
+            || toFallbackNameFromEmail(normalizedEmail);
+          skippedExistingUsers.push({
+            row: rowNumber,
+            email: normalizedEmail,
+            name: (err.existingUserName || fallbackName || normalizedEmail).toString().trim()
+          });
+          continue;
+        }
         errors.push({ row: rowNumber, email: normalizedEmail, error: err.message || 'Row validation failed.' });
       }
     }
@@ -832,9 +870,11 @@ const commitBulkInviteRows = async (rows) => {
           totalRows: rows.length,
           invitedCount: 0,
           failedCount: errors.length,
+          skippedExistingCount: skippedExistingUsers.length,
           smtpConfigured: transportInfo.isConfigured
         },
         invited: [],
+        existingUsers: skippedExistingUsers,
         errors
       };
     }
@@ -852,6 +892,14 @@ const commitBulkInviteRows = async (rows) => {
           emailEnvelope: result.preview
         });
       } catch (err) {
+        if (Number(err?.status) === 409) {
+          skippedExistingUsers.push({
+            row: row.row,
+            email: row.payload.email,
+            name: (err.existingUserName || toFallbackNameFromEmail(row.payload.email || '') || row.payload.email).toString().trim()
+          });
+          continue;
+        }
         errors.push({
           row: row.row,
           email: row.payload.email,
@@ -868,9 +916,11 @@ const commitBulkInviteRows = async (rows) => {
           totalRows: rows.length,
           invitedCount: 0,
           failedCount: errors.length,
+          skippedExistingCount: skippedExistingUsers.length,
           smtpConfigured: transportInfo.isConfigured
         },
         invited: [],
+        existingUsers: skippedExistingUsers,
         errors
       };
     }
@@ -910,19 +960,33 @@ const commitBulkInviteRows = async (rows) => {
     delete clean.emailEnvelope;
     return clean;
   });
+  const existingUsers = Array.from(
+    skippedExistingUsers.reduce((map, row) => {
+      const key = (row.email || '').toString().trim().toLowerCase();
+      if (!key || map.has(key)) return map;
+      map.set(key, {
+        row: row.row,
+        email: key,
+        name: (row.name || toFallbackNameFromEmail(key) || key).toString().trim()
+      });
+      return map;
+    }, new Map())
+  ).map((entry) => entry[1]);
 
   return {
     message: emailErrors.length > 0
-      ? `Users inserted (${invitedUsers.length}) but ${emailErrors.length} email(s) failed to send.`
-      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, 0 failed.`,
+      ? `Users inserted (${invitedUsers.length}), skipped ${existingUsers.length} existing user(s), but ${emailErrors.length} email(s) failed to send.`
+      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, ${existingUsers.length} existing skipped, 0 failed.`,
     summary: {
       totalRows: rows.length,
       invitedCount: invitedUsers.length,
       failedCount: 0,
+      skippedExistingCount: existingUsers.length,
       smtpConfigured: transportInfo.isConfigured,
       emailFailedCount: emailErrors.length
     },
     invited: invitedUsers,
+    existingUsers,
     errors: emailErrors
   };
 };
@@ -947,17 +1011,22 @@ const validateUsersBulkInvite = async (req, res) => {
     return res.status(400).json({ error: 'Maximum 500 rows per import.' });
   }
 
-  const { validRows, errors } = await validateBulkInviteRows(rows);
+  const { validRows, errors, existingUsers } = await validateBulkInviteRows(rows);
+  const skippedExistingCount = Array.isArray(existingUsers) ? existingUsers.length : 0;
   return res.status(200).json({
     message: errors.length > 0
       ? `Validation failed: ${errors.length} row(s) have errors.`
-      : `Validation successful for ${validRows.length} rows.`,
+      : skippedExistingCount > 0
+        ? `Validation successful for ${validRows.length} rows. Skipped ${skippedExistingCount} existing user(s).`
+        : `Validation successful for ${validRows.length} rows.`,
     summary: {
       totalRows: rows.length,
       validCount: validRows.length,
-      failedCount: errors.length
+      failedCount: errors.length,
+      skippedExistingCount
     },
     validRows,
+    existingUsers: existingUsers || [],
     errors
   });
 };

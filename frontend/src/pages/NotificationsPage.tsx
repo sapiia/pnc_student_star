@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Home, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Sidebar from '../components/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {
@@ -260,37 +261,38 @@ export default function NotificationsPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto">
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-500 text-sm">
-            <button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 hover:text-primary">
-              <Home className="w-4 h-4" />
-              Dashboard
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
+        <StudentMobileNav />
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-[110] px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] md:text-sm">
+            <button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 hover:text-primary transition-colors">
+              <Home className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
+              <span className="font-bold uppercase tracking-widest">Dashboard</span>
             </button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-medium text-slate-900">Notifications</span>
+            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 opacity-30" />
+            <span className="font-bold text-slate-900 uppercase tracking-widest">Notifications</span>
           </div>
           <button
             type="button"
             onClick={handleMarkAllRead}
             disabled={isMarkingAllRead || unreadCount === 0}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-60 transition-all shadow-lg shadow-primary/20"
           >
             <CheckCheck className="w-4 h-4" />
             {isMarkingAllRead ? 'Marking...' : 'Mark All Read'}
           </button>
         </header>
 
-        <div className="max-w-4xl mx-auto p-8 space-y-6">
-          <div className="rounded-3xl bg-white border border-slate-200 shadow-sm p-6 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
+          <div className="rounded-2xl md:rounded-3xl bg-white border border-slate-200 shadow-sm p-4 md:p-6 flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Student Alerts</p>
-              <h1 className="mt-2 text-2xl font-black text-slate-900">Notifications</h1>
+              <p className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-slate-400">Student Alerts</p>
+              <h1 className="mt-1 md:mt-2 text-xl md:text-2xl font-black text-slate-900 tracking-tight">Recent Activity</h1>
             </div>
-            <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center relative">
-              <Bell className="w-7 h-7" />
+            <div className="size-12 md:size-14 rounded-xl md:rounded-2xl bg-primary/10 text-primary flex items-center justify-center relative">
+              <Bell className="w-6 h-6 md:w-7 md:h-7" />
               {unreadCount > 0 ? (
-                <span className="absolute -top-1 -right-1 min-w-6 h-6 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 md:min-w-6 md:h-6 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center ring-4 ring-white">
                   {unreadCount}
                 </span>
               ) : null}
@@ -322,33 +324,33 @@ export default function NotificationsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04 }}
                     onClick={() => setSelectedNotification(notification)}
-                    className={`rounded-3xl border p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-colors ${isRead ? 'bg-white border-slate-200' : 'bg-primary/5 border-primary/20'}`}
+                    className={`rounded-2xl md:rounded-3xl border p-4 md:p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-colors ${isRead ? 'bg-white border-slate-200' : 'bg-primary/5 border-primary/20'}`}
                   >
-                    <div className="flex items-start gap-4">
+                    <div className="flex flex-col md:flex-row items-start gap-4">
                       {teacherFeedbackNotice?.teacherProfile ? (
-                        <div className="size-12 rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
+                        <div className="size-10 md:size-12 rounded-xl md:rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
                           <img src={teacherFeedbackNotice.teacherProfile} alt={teacherName} className="w-full h-full object-cover" />
                         </div>
                       ) : (
-                        <div className={`size-12 rounded-2xl flex items-center justify-center shrink-0 ${isRead ? 'bg-slate-100 text-slate-500' : 'bg-primary text-white'}`}>
+                        <div className={`size-10 md:size-12 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0 ${isRead ? 'bg-slate-100 text-slate-500' : 'bg-primary text-white'}`}>
                           <Bell className="w-5 h-5" />
                         </div>
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4">
-                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                      <div className="flex-1 min-w-0 w-full">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                             {isRead ? 'Read' : 'Unread'} • {formatDateTime(notification.created_at)}
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 md:justify-end">
                             {!isRead ? (
-                              <button
+                               <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void handleMarkAsRead(notification.id);
                                 }}
                                 disabled={activeId === notification.id}
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-60"
+                                className="rounded-lg md:rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-60 transition-colors"
                               >
                                 {activeId === notification.id ? 'Saving...' : 'Mark Read'}
                               </button>
@@ -360,20 +362,20 @@ export default function NotificationsPage() {
                                 void handleDelete(notification.id);
                               }}
                               disabled={activeId === notification.id}
-                              className="rounded-xl bg-rose-500 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white inline-flex items-center gap-1 disabled:opacity-60"
+                              className="rounded-lg md:rounded-xl bg-rose-500/10 hover:bg-rose-500 px-2.5 py-1.5 md:px-3 md:py-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest text-rose-600 hover:text-white inline-flex items-center gap-1.5 disabled:opacity-60 transition-all"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" />
                               {activeId === notification.id ? 'Deleting...' : 'Delete'}
                             </button>
                           </div>
                         </div>
-                        <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
+                        <p className="mt-4 text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap line-clamp-3 md:line-clamp-none">
                           {visibleMessage}
                         </p>
                         {teacherFeedbackNotice?.periodLabel ? (
-                          <p className="mt-1 text-[11px] font-bold text-slate-500">
-                            Quarter: {teacherFeedbackNotice.periodLabel}
-                          </p>
+                          <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 bg-slate-100 rounded-lg">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Evaluation: {teacherFeedbackNotice.periodLabel}</span>
+                          </div>
                         ) : null}
                       </div>
                     </div>

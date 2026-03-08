@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherMobileNav from '../components/TeacherMobileNav';
 import RadarChart from '../components/RadarChart';
 import { cn } from '../lib/utils';
 import {
@@ -568,6 +569,10 @@ export default function TeacherStudentListPage() {
         return accumulator;
       }, {});
   }, [teacherNotifications]);
+  const unreadNotificationCount = useMemo(
+    () => teacherNotifications.filter((n) => Number(n.is_read) !== 1).length,
+    [teacherNotifications]
+  );
   const conversationMessages = useMemo<ConversationMessage[]>(() => {
     const teacherMessages: ConversationMessage[] = visibleStudentFeedbackHistory.map((feedback) => ({
       id: `teacher-${feedback.id}`,
@@ -739,39 +744,44 @@ export default function TeacherStudentListPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <nav className="flex items-center gap-2 text-sm text-slate-500">
-            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary">Home</button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-semibold text-slate-900">Students</span>
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <TeacherMobileNav />
+        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+          <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500">
+            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary transition-colors">Home</button>
+            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span className="font-semibold text-slate-900 truncate">Students</span>
           </nav>
-          <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="flex items-center gap-2 md:gap-4 ml-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search ID, name, or email..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                className="w-32 sm:w-48 md:w-72 pl-8 md:pl-10 pr-4 py-1.5 md:py-2 bg-slate-100 border-none rounded-full text-xs md:text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <button
               onClick={() => navigate('/teacher/notifications')}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 min-w-4 md:min-w-5 h-4 md:h-5 px-1 rounded-full bg-rose-500 text-white text-[8px] md:text-[10px] font-black flex items-center justify-center ring-2 ring-white">
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </span>
+              ) : null}
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-[1400px] mx-auto">
-            <header className="mb-8">
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Student Performance List</h1>
-              <p className="text-slate-500 mt-2">Teacher can review each criterion, open its details, and submit feedback with the admin limit applied.</p>
+            <header className="mb-6 md:mb-8">
+              <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Student Performance List</h1>
+              <p className="text-xs md:text-base text-slate-500 mt-1 md:mt-2">Review performance and provide guidance.</p>
             </header>
 
             <div className="flex flex-col lg:flex-row gap-8">
@@ -824,8 +834,8 @@ export default function TeacherStudentListPage() {
                   </button>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                  <table className="w-full text-left min-w-[600px]">
                     <thead>
                       <tr className="bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
                         <th className="px-6 py-4">Student ID</th>
@@ -1228,11 +1238,11 @@ export default function TeacherStudentListPage() {
               className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.97 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+              initial={{ x: '100%', opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 bottom-0 w-full md:w-[480px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] flex flex-col z-[100]"
             >
               <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
                 <div className="flex items-start gap-4">

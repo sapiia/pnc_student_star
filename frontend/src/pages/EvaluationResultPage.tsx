@@ -26,6 +26,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import StarRating from '../components/StarRating';
 import RadarChart from '../components/RadarChart';
 import Sidebar from '../components/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 
 type EvaluationResponse = {
   criterion_id?: string | null;
@@ -268,35 +269,35 @@ export default function EvaluationResultPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+      <main className="flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
+        <StudentMobileNav />
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">Evaluation Results</h2>
+            <h2 className="text-slate-900 text-sm md:text-lg font-bold leading-tight tracking-tight uppercase tracking-widest font-black">Evaluation Results</h2>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <div className="flex items-center justify-end gap-3 md:gap-4">
+            <button className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
+            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl hidden md:block">
               <Settings className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1200px] mx-auto flex flex-col gap-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-[1200px] mx-auto flex flex-col gap-6 md:gap-8">
             <motion.section
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center text-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden"
+              className="flex flex-col items-center text-center bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-emerald-400 to-primary" />
-              <div className="size-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                <PartyPopper className="w-8 h-8" />
+              <div className="size-12 md:size-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                <PartyPopper className="w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <h1 className="text-slate-900 text-3xl md:text-4xl font-bold leading-tight mb-2">Evaluation Complete!</h1>
-              <p className="text-slate-600 text-lg max-w-2xl">
+              <h1 className="text-slate-900 text-2xl md:text-4xl font-black leading-tight mb-2 tracking-tight">Well Done!</h1>
+              <p className="text-slate-600 text-sm md:text-lg max-w-2xl font-bold">
                 {evaluation?.period
                   ? `Your ${toPeriodLabel(evaluation.period)} evaluation was submitted on ${completedLabel}.`
                   : 'Your evaluation has been submitted successfully.'}
@@ -305,10 +306,10 @@ export default function EvaluationResultPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               <div className="lg:col-span-7 flex flex-col gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-slate-900 text-xl font-bold">Performance Overview</h3>
-                    <div className="flex gap-4 text-xs font-semibold uppercase tracking-wider">
+                <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 h-full">
+                  <div className="flex items-center justify-between mb-6 md:mb-8">
+                    <h3 className="text-slate-900 text-lg md:text-xl font-black uppercase tracking-widest">Growth Radar</h3>
+                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
                       <div className="flex items-center gap-1.5">
                         <span className="w-3 h-3 rounded-full bg-primary" />
                         <span className="text-primary">{toPeriodLabel(evaluation?.period || '')}</span>
@@ -379,15 +380,15 @@ export default function EvaluationResultPage() {
                   ) : null}
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 flex-1">
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div>
-                      <h3 className="text-slate-900 text-lg font-bold">Teacher Feedback</h3>
-                      <p className="text-xs text-slate-500">{toPeriodLabel(evaluation?.period || '')}</p>
+                      <h3 className="text-slate-900 text-base md:text-lg font-black uppercase tracking-widest">Teacher Feedback</h3>
+                      <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">{toPeriodLabel(evaluation?.period || '')}</p>
                     </div>
                     <button
                       onClick={() => navigate('/feedback')}
-                      className="text-xs text-primary font-semibold hover:underline"
+                      className="text-[10px] md:text-xs text-primary font-black uppercase tracking-widest hover:underline"
                     >
                       View All
                     </button>
@@ -399,7 +400,7 @@ export default function EvaluationResultPage() {
                     >
                       {quarterFeedback.map((feedback) => (
                         <div key={feedback.id} className="flex gap-3">
-                          <div className="size-10 rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
+                          <div className="size-9 md:size-10 rounded-xl overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center border border-slate-200">
                             {feedback.teacher_profile_image ? (
                               <img
                                 src={feedback.teacher_profile_image}
@@ -410,14 +411,14 @@ export default function EvaluationResultPage() {
                               <Users className="w-4 h-4 text-slate-400" />
                             )}
                           </div>
-                          <div className="flex-1 rounded-xl bg-slate-50 border border-slate-100 p-4">
-                            <div className="flex items-center justify-between gap-3 mb-2">
-                              <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                          <div className="flex-1 rounded-xl bg-slate-50 border border-slate-100 p-3 md:p-4">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 md:gap-3 mb-2">
+                              <p className="text-sm font-black text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
+                              <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 {formatLongDate(String(feedback.created_at || ''))}
                               </span>
                             </div>
-                            <p className="text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+                            <p className="text-sm leading-relaxed text-slate-600 font-medium line-clamp-4">
                               {feedback.comment}
                             </p>
                           </div>
@@ -425,8 +426,8 @@ export default function EvaluationResultPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-bold text-slate-400">
-                      No teacher feedback is available yet for this quarter.
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">
+                      No feedback yet.
                     </div>
                   )}
                 </div>
@@ -436,8 +437,8 @@ export default function EvaluationResultPage() {
             <section className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-slate-900 text-2xl font-bold">Criteria Breakdown</h2>
-                  <p className="text-sm text-slate-500">Click any criterion to view its stars and full comment.</p>
+                  <h2 className="text-slate-900 text-xl md:text-2xl font-black uppercase tracking-widest">Detail View</h2>
+                  <p className="text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-widest">Click cards for full reflections.</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -477,20 +478,20 @@ export default function EvaluationResultPage() {
               </div>
             </section>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8 pb-12">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3 md:gap-4 mt-8 pb-12">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="w-full sm:w-auto px-8 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+                className="flex-1 md:flex-none px-8 py-3.5 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
               >
                 <LayoutDashboard className="w-5 h-5" />
-                Return to Dashboard
+                Return Home
               </button>
               <button
                 onClick={() => navigate('/history')}
-                className="w-full sm:w-auto px-8 py-3 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                className="flex-1 md:flex-none px-8 py-3.5 bg-white text-slate-700 font-black text-[10px] uppercase tracking-widest rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
               >
                 <History className="w-5 h-5" />
-                View Full History
+                History
               </button>
             </div>
           </div>
@@ -515,41 +516,41 @@ export default function EvaluationResultPage() {
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
             >
-              <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
+              <div className="p-6 md:p-8 border-b border-slate-100 flex items-start justify-between gap-6">
                 <div className="flex items-start gap-4">
-                  <div className={`size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color}`}>
-                    {getIcon(activeCriterion.icon, 'w-7 h-7')}
+                  <div className={`size-12 md:size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color} shrink-0`}>
+                    {getIcon(activeCriterion.icon, 'w-6 h-6 md:w-7 md:h-7')}
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Criterion Detail</p>
-                    <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
-                    <div className="flex items-center gap-3">
-                      <StarRating rating={activeCriterion.score} max={ratingScale} starClassName="w-5 h-5" />
-                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/{ratingScale} Stars</span>
+                  <div className="space-y-1 md:space-y-2">
+                    <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-primary">Detail View</p>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{activeCriterion.label}</h3>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <StarRating rating={activeCriterion.score} max={ratingScale} starClassName="size-4 md:size-5" />
+                      <span className="text-xs md:text-sm font-black text-slate-900">{activeCriterion.score}/{ratingScale}</span>
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveCriterion(null)}
-                  className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors"
+                  className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-8 space-y-6">
-                <div className="rounded-2xl border border-primary/10 bg-primary/5 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
+              <div className="p-6 md:p-8 space-y-4 md:space-y-6">
+                <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4 md:p-5">
+                  <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700">
                     {activeCriterion.tip || 'No admin tip was saved for this criterion.'}
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Your Comment</p>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+                  <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Your Reflection</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                    {activeCriterion.reflection || 'No written comment was submitted for this criterion.'}
+                    {activeCriterion.reflection || 'No written reflection was submitted for this criterion.'}
                   </p>
                 </div>
               </div>

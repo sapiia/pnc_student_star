@@ -14,6 +14,7 @@ import {
   ArrowDownRight
 } from 'lucide-react';
 import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherMobileNav from '../components/TeacherMobileNav';
 import { motion } from 'motion/react';
 import { 
   LineChart, 
@@ -124,21 +125,22 @@ export default function TeacherReportsPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
       
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <TeacherMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Academic Analytics</h1>
-            <p className="text-xs text-slate-500">Deep dive into class performance and student growth trends.</p>
+        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate">Academic Analytics</h1>
+            <p className="text-[10px] md:text-xs text-slate-500 font-medium truncate">Class performance and trends.</p>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all">
-              <Download className="w-4 h-4" />
-              Export PDF
+          <div className="flex items-center gap-2 md:gap-4 ml-2">
+            <button className="hidden sm:flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 bg-white border border-slate-200 rounded-xl text-[10px] md:text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shrink-0">
+              <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              Export
             </button>
             <button 
               onClick={() => navigate('/teacher/notifications')}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0"
             >
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
@@ -146,8 +148,8 @@ export default function TeacherReportsPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1400px] mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+          <div className="max-w-[1400px] mx-auto space-y-6 md:space-y-8">
             {/* Filters Bar */}
             <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
               <div className="relative">
@@ -205,7 +207,7 @@ export default function TeacherReportsPage() {
                 </div>
               </div>
               
-              <div className="h-[400px] w-full">
+              <div className="h-[250px] md:h-[400px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={currentData.trend}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -258,7 +260,7 @@ export default function TeacherReportsPage() {
                   <h3 className="text-xl font-black text-slate-900 tracking-tight">Criteria Distribution</h3>
                   <BarChart3 className="w-5 h-5 text-slate-400" />
                 </div>
-                <div className="h-[300px] w-full">
+                <div className="h-[250px] md:h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={currentData.criteria} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
