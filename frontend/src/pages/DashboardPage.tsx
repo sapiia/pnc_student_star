@@ -153,19 +153,30 @@ export default function DashboardPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRecord | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const canStartEvaluation = !latestEvaluation || daysLeft === 0;
 
-  const currentStatusCriteria = useMemo(() => (
-    (latestEvaluation?.responses || []).map((response, index) => ({
-      key: response.criterion_key,
-      label: String(response.criterion_name || response.criterion_key || `Criterion ${index + 1}`),
-      icon: String(response.criterion_icon || 'Star'),
-      score: Number(response.star_value || 0),
-      reflection: String(response.reflection || '').trim(),
-      tip: String(response.tip_snapshot || '').trim(),
-      ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
-    }))
-  ), [latestEvaluation]);
+  const currentStatusCriteria = useMemo(() => {
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    
+    return activeGlobal.map((criterion, index) => {
+      const response = (latestEvaluation?.responses || []).find(r => 
+        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+      );
+      
+      return {
+        key: String(criterion.id || criterion.name || `criterion-${index}`),
+        label: String(criterion.name || 'Unnamed Criterion'),
+        icon: String(criterion.icon || 'Star'),
+        score: response ? Number(response.star_value || 0) : 0,
+        reflection: response ? String(response.reflection || '').trim() : '',
+        tip: response ? String(response.tip_snapshot || '').trim() : '',
+        ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
+      };
+    });
+  }, [globalCriteria, latestEvaluation]);
 
   const historicalComparison = useMemo(() => {
     const sortedEvaluations = [...evaluations].sort((left, right) => (
@@ -173,33 +184,20 @@ export default function DashboardPage() {
     ));
 
     if (sortedEvaluations.length === 0) {
-      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[] };
+      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[], maxValue: globalRatingScale };
     }
 
     const comparedEvaluations = sortedEvaluations.length === 1
       ? [sortedEvaluations[0]]
       : sortedEvaluations.slice(-2);
 
-    const criteriaOrder = comparedEvaluations.reduce<string[]>((accumulator, evaluation) => {
-      (evaluation.responses || []).forEach((response, index) => {
-        const fallbackKey = `criterion-${index + 1}`;
-        const key = String(response.criterion_key || response.criterion_name || fallbackKey).trim() || fallbackKey;
-        if (!accumulator.includes(key)) {
-          accumulator.push(key);
-        }
-      });
-      return accumulator;
-    }, []);
+    const maxValue = globalRatingScale;
 
-    const data = criteriaOrder.map((criterionKey, index) => {
-      const subject =
-        comparedEvaluations
-          .flatMap((evaluation) => evaluation.responses || [])
-          .find((response) => String(response.criterion_key || '').trim() === criterionKey)?.criterion_name ||
-        criterionKey;
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
+    const data = activeGlobal.map((criterion, index) => {
       const row: Record<string, string | number> = {
-        subject: String(subject || `Criterion ${index + 1}`),
+        subject: String(criterion.name || `Criterion ${index + 1}`),
       };
 
       comparedEvaluations.forEach((evaluation, evaluationIndex) => {
@@ -208,9 +206,12 @@ export default function DashboardPage() {
           : evaluationIndex === 0
             ? 'previous'
             : 'current';
-        const response = (evaluation.responses || []).find((item) => String(item.criterion_key || '').trim() === criterionKey);
-        const ratingScale = Math.max(1, Number(evaluation.rating_scale || 5));
-        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0) * (100 / ratingScale)) : 0;
+        const response = (evaluation.responses || []).find(r => 
+          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+        );
+        // Use raw star values - RadarChart uses domain=[0, ratingScale] for correct rings
+        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
       });
 
       return row;
@@ -218,13 +219,14 @@ export default function DashboardPage() {
 
     const dataKeys = comparedEvaluations.map((evaluation, index) => ({
       key: comparedEvaluations.length === 1 ? 'current' : index === 0 ? 'previous' : 'current',
-      name: formatPeriodLabel(evaluation.period),
-      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
-      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
+      name: index === 0 && comparedEvaluations.length > 1 ? 'Baseline' : formatPeriodLabel(evaluation.period),
+      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
+      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
     }));
 
-    return { data, dataKeys };
-  }, [evaluations]);
+    return { data, dataKeys, maxValue };
+  }, [evaluations, globalRatingScale]);
+
 
   useEffect(() => {
     if (daysLeft <= 3) {
@@ -297,6 +299,7 @@ export default function DashboardPage() {
         reminderNotificationsResponse,
         feedbackResponse,
         notificationsResponse,
+        criteriaConfigResponse,
       ] = await Promise.all([
         fetch(`${API_BASE_URL}/users/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
@@ -304,7 +307,8 @@ export default function DashboardPage() {
         fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
         fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
         fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
-        fetch(`${API_BASE_URL}/notifications/user/${userId}`)
+        fetch(`${API_BASE_URL}/notifications/user/${userId}`),
+        fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
       ]);
 
       const data = await response.json().catch(() => ({}));
@@ -314,6 +318,12 @@ export default function DashboardPage() {
       const reminderNotificationsData = await reminderNotificationsResponse.json().catch(() => ({}));
       const feedbackData = await feedbackResponse.json().catch(() => []);
       const notificationsData = await notificationsResponse.json().catch(() => []);
+      const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+
+      const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
+      setGlobalRatingScale(nextRatingScale);
+      setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+
       const sortedEvaluations = Array.isArray(evaluations)
         ? [...evaluations as EvaluationRecord[]].sort((left, right) => (
             getEvaluationSortValue(right) - getEvaluationSortValue(left)
@@ -665,7 +675,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-semibold mb-1">{criterion.label}</p>
-                        <StarRating rating={criterion.score} />
+                        <StarRating rating={criterion.score} max={globalRatingScale} />
                       </div>
                       <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
                     </motion.button>
@@ -680,7 +690,7 @@ export default function DashboardPage() {
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-sm font-bold mb-4 uppercase tracking-wider text-slate-500">Historical Growth</h3>
                 {historicalComparison.data.length > 0 ? (
-                  <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} />
+                  <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} maxValue={historicalComparison.maxValue} />
                 ) : (
                   <div className="h-[350px] rounded-xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
                     No evaluation history is available yet.
@@ -764,8 +774,8 @@ export default function DashboardPage() {
                     <p className="text-[11px] font-black uppercase tracking-widest text-primary">Current Status Detail</p>
                     <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
                     <div className="flex items-center gap-3">
-                      <StarRating rating={activeCriterion.score} starClassName="w-5 h-5" />
-                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/5 Stars</span>
+                      <StarRating rating={activeCriterion.score} max={globalRatingScale} starClassName="w-5 h-5" />
+                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/{globalRatingScale} Stars</span>
                     </div>
                   </div>
                 </div>

@@ -105,6 +105,7 @@ export default function TeacherAttentionStudentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [globalRatingScale, setGlobalRatingScale] = useState(5);
 
   useEffect(() => {
     try {
@@ -123,13 +124,18 @@ export default function TeacherAttentionStudentsPage() {
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [usersResponse, evaluationsResponse] = await Promise.all([
+      const [usersResponse, evaluationsResponse, criteriaConfigResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/users`),
-        fetch(`${API_BASE_URL}/evaluations`)
+        fetch(`${API_BASE_URL}/evaluations`),
+        fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
       ]);
 
       const usersData = await usersResponse.json().catch(() => []);
       const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+
+      const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
+      setGlobalRatingScale(nextRatingScale);
 
       const latestEvaluationByUser = new Map<number, EvaluationRecord>();
       if (Array.isArray(evaluationsData)) {
@@ -362,7 +368,7 @@ export default function TeacherAttentionStudentsPage() {
                                 <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">Avg Score</p>
                                 <div className="flex items-center gap-1.5">
                                     <div className="flex text-amber-400">
-                                        {[...Array(5)].map((_, i) => (
+                                        {[...Array(globalRatingScale)].map((_, i) => (
                                             <Star key={i} className={cn("w-3.5 h-3.5 fill-current", i >= Math.floor(student.rating) && "text-slate-200 fill-slate-200")} />
                                         ))}
                                     </div>

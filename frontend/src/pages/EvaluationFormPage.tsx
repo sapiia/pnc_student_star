@@ -149,22 +149,26 @@ export default function EvaluationFormPage() {
           return;
         }
 
-        const nextRatingScale = Math.max(1, Number(data.ratingScale || 5));
-        const normalizedCriteria = data.criteria.map((item: { id?: string; name?: string; icon?: string; description?: string; starDescriptions?: string[] }, index: number) => {
+        const activeCriteria = data.criteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
+        if (activeCriteria.length === 0) return;
+
+        const nextRatingScale = Math.max(1, Number(data?.ratingScale || 5));
+        setRatingScale(nextRatingScale);
+        
+        const mappedCriteria = activeCriteria.map((c: any, index: number) => {
           const style = CRITERION_STYLES[index % CRITERION_STYLES.length];
           return {
-            id: String(item.id || '').trim() || undefined,
-            key: toCriterionKey(String(item.name || item.id || `criterion${index + 1}`)),
-            label: String(item.name || `Criterion ${index + 1}`),
-            icon: String(item.icon || 'Star'),
-            description: String(item.description || '').trim(),
-            starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(item.starDescriptions?.[starIndex] || '').trim()),
+            id: String(c.id || '').trim() || undefined,
+            key: c.key || String(c.id || c.name || `criterion${index + 1}`),
+            label: String(c.name || `Criterion ${index + 1}`),
+            icon: String(c.icon || 'Star'),
+            description: String(c.description || '').trim(),
+            starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(c.starDescriptions?.[starIndex] || '').trim()),
             ...style,
           };
         });
 
-        setRatingScale(nextRatingScale);
-        setCriteria(normalizedCriteria);
+        setCriteria(mappedCriteria);
       } catch {
         // keep fallback criteria so the student can still evaluate
       }

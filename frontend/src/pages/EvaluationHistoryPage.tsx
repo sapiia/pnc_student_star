@@ -93,6 +93,7 @@ export default function EvaluationHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
 
   useEffect(() => {
     const loadEvaluationHistory = async () => {
@@ -118,15 +119,21 @@ export default function EvaluationHistoryPage() {
           return;
         }
 
-        const [userResponse, intervalResponse, evaluationsResponse] = await Promise.all([
+        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${userId}`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
-          fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
+          fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
         ]);
 
         const userData = await userResponse.json().catch(() => ({}));
         const intervalData = await intervalResponse.json().catch(() => ({}));
         const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
+        const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+
+        const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
+        const ratingScale = nextRatingScale;
+        setGlobalRatingScale(nextRatingScale);
 
         const resolvedName =
           String(userData?.name || '').trim() ||
@@ -154,7 +161,7 @@ export default function EvaluationHistoryPage() {
               nextDueDate,
               nextDueLabel: formatLongDate(nextDueDate),
               rating: Number(evaluation.average_score || 0),
-              ratingScale: Math.max(1, Number(evaluation.rating_scale || 5)),
+              ratingScale: nextRatingScale,
             };
           })
           .sort((a, b) => new Date(b.completedDate).getTime() - new Date(a.completedDate).getTime());

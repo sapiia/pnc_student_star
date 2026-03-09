@@ -2,6 +2,7 @@ const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const path = require('path');
 const XLSX = require('xlsx');
 const saltRounds = 10;
 const Notification = require('../models/Notification');
@@ -485,7 +486,10 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
 
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
-      <h2 style="color: #0f172a; margin-top: 0;">Welcome to PNC Student Star!</h2>
+      <div style="text-align: center; margin-bottom: 25px;">
+        <img src="cid:star_gmail_logo" style="width: 84px; height: 84px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="PNC Student Star Profile" />
+      </div>
+      <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Welcome to PNC Student Star!</h2>
       <p>Hello,</p>
       <p>We are excited to invite you to join the <strong>PNC Student Star</strong> platform as <strong>${roleLabel}</strong>.</p>
       <p>Our community is growing, and we can't wait for you to explore all the features we have prepared for you.</p>
@@ -509,6 +513,12 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
     </div>
   `;
 
+  const logoAttachment = {
+    filename: 'star_gmail_logo.jpg',
+    path: path.join(__dirname, '../uploads/logo/star_gmail_logo.jpg'),
+    cid: 'star_gmail_logo'
+  };
+
   return {
     classForUser,
     hashedTempPassword,
@@ -516,7 +526,8 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       to: email,
       subject: 'PNC Student Star Invitation',
       text,
-      html
+      html,
+      attachments: [logoAttachment]
     },
     roleDashboardPath,
     temporaryPassword: tempPassword,
@@ -531,6 +542,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       temporaryPassword: tempPassword,
       invitedBy: inviterIdentity,
       roleDashboardPath,
+      attachments: [logoAttachment],
       smtpConfigured: false
     },
     invitedUser: buildInvitedUserSummary(normalizedInvite)
@@ -592,12 +604,13 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
 
   if (isConfigured && transporter && !options.skipSendEmail) {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+      from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
       replyTo: ADMIN_INVITER_EMAIL,
       to: artifacts.emailMessage.to,
       subject: artifacts.emailMessage.subject,
       text: artifacts.emailMessage.text,
-      html: artifacts.emailMessage.html
+      html: artifacts.emailMessage.html,
+      attachments: artifacts.emailMessage.attachments
     });
   }
 
@@ -993,12 +1006,13 @@ const commitBulkInviteRows = async (rows) => {
     for (const row of invited) {
       try {
         await transportInfo.transporter.sendMail({
-          from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+          from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
           replyTo: ADMIN_INVITER_EMAIL,
           to: row.emailEnvelope.to,
           subject: row.emailEnvelope.subject,
           text: row.emailEnvelope.text,
-          html: row.emailEnvelope.html
+          html: row.emailEnvelope.html,
+          attachments: row.emailEnvelope.attachments
         });
       } catch (err) {
         console.error('Failed to send invite email to:', row.email, err);
