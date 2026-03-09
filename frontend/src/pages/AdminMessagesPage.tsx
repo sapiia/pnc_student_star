@@ -12,6 +12,7 @@ import {
 import AdminSidebar from '../components/AdminSidebar';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
+import { useAdminUnreadNotifications } from '../lib/useAdminUnreadNotifications';
 
 type ApiUser = {
   id: number;
@@ -111,6 +112,7 @@ const composeDirectMessage = (payload: DirectMessage) => (
 
 export default function AdminMessagesPage() {
   const navigate = useNavigate();
+  const { unreadMessageCount } = useAdminUnreadNotifications();
   const [adminId, setAdminId] = useState<number | null>(null);
   const [adminName, setAdminName] = useState('Administrator');
   const [adminAvatar, setAdminAvatar] = useState('https://picsum.photos/seed/admin-self/100/100');
@@ -599,7 +601,7 @@ export default function AdminMessagesPage() {
             <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">Messages</h2>
             <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-full">
               <span className="size-2 bg-primary rounded-full animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest">{unreadTotal} New Messages</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{unreadMessageCount} New Messages</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -608,7 +610,7 @@ export default function AdminMessagesPage() {
               className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
             >
               <Bell className="w-5 h-5" />
-              {unreadTotal > 0 ? <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" /> : null}
+              {unreadMessageCount > 0 ? <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" /> : null}
             </button>
             <button
               onClick={() => navigate('/admin/settings')}

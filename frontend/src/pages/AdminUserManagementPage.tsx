@@ -4,6 +4,7 @@ import {
   Filter,
   Download,
   UserPlus,
+  Edit2,
   Upload,
   Power,
   Minus,
@@ -37,6 +38,14 @@ type UserRecord = {
   className?: string;
   major?: StudentMajor;
   gender?: Gender;
+};
+
+type EditUserForm = {
+  name: string;
+  email: string;
+  role: UserRole;
+  className: string;
+  studentId: string;
 };
 
 type BulkInvitedUser = {
@@ -200,6 +209,15 @@ export default function AdminUserManagementPage() {
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editForm, setEditForm] = useState<EditUserForm>({
+    name: '',
+    email: '',
+    role: 'Student',
+    className: '',
+    studentId: ''
+  });
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -386,6 +404,85 @@ export default function AdminUserManagementPage() {
     const deletableUsersCount = users.filter((u) => u.status !== 'Deleted').length;
     if (deletableUsersCount === 0 || isActionSubmitting) return;
     setConfirmAction({ kind: 'delete-all' });
+  };
+
+  const openEditModal = (user: UserRecord) => {
+    setFormError('');
+    setEditingUser(user);
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      className: user.group || '',
+      studentId: user.studentId || ''
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    const name = editForm.name.trim();
+    const email = editForm.email.trim().toLowerCase();
+    const role = editForm.role.toLowerCase();
+    const className = editForm.className.trim();
+    const studentId = editForm.studentId.trim();
+
+    if (!name) {
+      setFormError('Name is required.');
+      return;
+    }
+    if (!email) {
+      setFormError('Email is required.');
+      return;
+    }
+    if (editForm.role === 'Student' && !studentId) {
+      setFormError('Student ID is required when role is student.');
+      return;
+    }
+
+    setIsEditSubmitting(true);
+    setFormError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          email,
+          role,
+          class_name: className || null,
+          student_id: editForm.role === 'Student' ? studentId : null
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setFormError(data.error || 'Failed to update user.');
+        return;
+      }
+
+      setUsers((prev) => prev.map((user) => (
+        user.id === editingUser.id
+          ? {
+              ...user,
+              name,
+              email,
+              role: editForm.role,
+              group: className || (editForm.role === 'Teacher' ? 'Teaching Staff' : editForm.role === 'Admin' ? 'Administration' : user.group),
+              studentId: editForm.role === 'Student' ? studentId : undefined
+            }
+          : user
+      )));
+      setEditingUser(null);
+      setSuccessMessage(data.message || 'User updated successfully.');
+      setToastType('success');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2500);
+    } catch {
+      setFormError('Failed to update user.');
+    } finally {
+      setIsEditSubmitting(false);
+    }
   };
 
   const executeConfirmedAction = async () => {
@@ -774,6 +871,14 @@ export default function AdminUserManagementPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            onClick={() => openEditModal(user)}
+                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
+                            title="Edit user"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => toggleUserActive(user)}
                             disabled={user.status === 'Deleted' || isActionSubmitting}
                             className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
@@ -903,6 +1008,108 @@ export default function AdminUserManagementPage() {
 
       {/* Add User Modal */}
       <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isEditSubmitting && setEditingUser(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 18 }}
+              className="relative w-full max-w-2xl rounded-3xl bg-white p-7 shadow-2xl"
+            >
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Edit User</h3>
+              <p className="mt-1 text-sm font-medium text-slate-500">Update user information and save to database.</p>
+
+              <form onSubmit={handleSaveEdit} className="mt-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role</label>
+                    <select
+                      value={editForm.role}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value as UserRole }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    >
+                      <option value="Student">Student</option>
+                      <option value="Teacher">Teacher</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class/Group</label>
+                    <input
+                      type="text"
+                      value={editForm.className}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, className: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+                {editForm.role === 'Student' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
+                    <input
+                      type="text"
+                      value={editForm.studentId}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, studentId: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                )}
+
+                {formError && (
+                  <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                    {formError}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    disabled={isEditSubmitting}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isEditSubmitting}
+                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    {isEditSubmitting ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 

@@ -9,8 +9,65 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
+const PRIMARY_ADMIN_EMAIL = (process.env.PRIMARY_ADMIN_EMAIL || 'moeurnsophy92@gmail.com').toString().trim().toLowerCase();
+const MAX_LOGIN_ATTEMPTS = Number(process.env.MAX_LOGIN_ATTEMPTS || 5);
+const LOGIN_BLOCK_MINUTES = Number(process.env.LOGIN_BLOCK_MINUTES || 15);
+const loginAttemptState = new Map();
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
+const resolveRoleByEmail = (email = '', role = '') => {
+  const normalizedEmail = email.toString().trim().toLowerCase();
+  if (PRIMARY_ADMIN_EMAIL && normalizedEmail === PRIMARY_ADMIN_EMAIL) {
+    return 'admin';
+  }
+  return normalizeRole(role);
+};
+
+const getLoginRecord = (email = '') => {
+  const normalizedEmail = email.toString().trim().toLowerCase();
+  if (!normalizedEmail) return null;
+  const current = loginAttemptState.get(normalizedEmail);
+  if (!current) return null;
+
+  const now = Date.now();
+  if (current.blockedUntil && now >= current.blockedUntil) {
+    loginAttemptState.delete(normalizedEmail);
+    return null;
+  }
+
+  return current;
+};
+
+const getRemainingBlockMs = (email = '') => {
+  const record = getLoginRecord(email);
+  if (!record?.blockedUntil) return 0;
+  return Math.max(0, record.blockedUntil - Date.now());
+};
+
+const clearLoginRecord = (email = '') => {
+  const normalizedEmail = email.toString().trim().toLowerCase();
+  if (!normalizedEmail) return;
+  loginAttemptState.delete(normalizedEmail);
+};
+
+const registerFailedLogin = (email = '') => {
+  const normalizedEmail = email.toString().trim().toLowerCase();
+  if (!normalizedEmail) return { failedCount: 0, blockedUntil: 0 };
+
+  const now = Date.now();
+  const existing = getLoginRecord(normalizedEmail);
+  const failedCount = (existing?.failedCount || 0) + 1;
+  const blockedUntil = failedCount >= MAX_LOGIN_ATTEMPTS
+    ? now + LOGIN_BLOCK_MINUTES * 60 * 1000
+    : 0;
+
+  const nextRecord = {
+    failedCount,
+    blockedUntil
+  };
+  loginAttemptState.set(normalizedEmail, nextRecord);
+  return nextRecord;
+};
 
 const splitFullName = (fullName = '') => {
   const cleaned = fullName.toString().trim().replace(/\s+/g, ' ');
@@ -714,7 +771,7 @@ const createUser = async (req, res) => {
   const { name, gender, email, password, role, class_name, student_id } = req.body;
 
   try {
-    const normalizedRole = normalizeRole(role);
+    const normalizedRole = resolveRoleByEmail(email, role);
     const normalizedStudentId = (student_id || '').toString().trim();
 
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
@@ -1170,7 +1227,7 @@ const getUserProfile = async (req, res) => {
       last_name: (user.last_name || '').toString().trim() || null,
       email: user.email,
       profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
-      role: normalizeRole(user.role),
+      role: resolveRoleByEmail(user.email, user.role),
       department: (user.department || '').toString().trim(),
       student_id: hasStudentId ? ((user.student_id || user.resolved_student_id || '') || null) : null,
       class: hasClass ? (user.class || null) : null,
@@ -1297,7 +1354,7 @@ const updateUserProfile = async (req, res) => {
         last_name: (user.last_name || '').toString().trim() || null,
         email: user.email,
         profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
-        role: normalizeRole(user.role),
+        role: resolveRoleByEmail(user.email, user.role),
         department: (user.department || '').toString().trim(),
         student_id: columns.has('student_id') ? ((user.student_id || user.resolved_student_id || '') || null) : null,
         class: columns.has('class') ? (user.class || null) : null,
@@ -1356,7 +1413,7 @@ const updateUserProfileImage = async (req, res) => {
         id: user.id,
         name: getDisplayNameFromUserRow(user) || user.email,
         email: user.email,
-        role: normalizeRole(user.role),
+        role: resolveRoleByEmail(user.email, user.role),
         profile_image: (user.profile_image || '').toString().trim() || null,
         student_id: columns.has('student_id') ? (user.student_id || null) : null,
         updated_at: user.updated_at
@@ -1436,6 +1493,14 @@ const loginUser = async (req, res) => {
     return res.status(400).json({ error: "Email and password are required." });
   }
 
+  const remainingBlockMs = getRemainingBlockMs(email);
+  if (remainingBlockMs > 0) {
+    const remainingMinutes = Math.ceil(remainingBlockMs / 60000);
+    return res.status(429).json({
+      error: `Too many wrong attempts. Account is temporarily blocked. Try again in ${remainingMinutes} minute(s).`
+    });
+  }
+
   try {
     const columns = await getUsersTableColumns();
     const hasIsDeleted = columns.has('is_deleted');
@@ -1444,11 +1509,17 @@ const loginUser = async (req, res) => {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ? LIMIT 1", [email]);
 
     if (rows.length === 0) {
+      const failedResult = registerFailedLogin(email);
+      if (failedResult.blockedUntil) {
+        return res.status(429).json({
+          error: `Too many wrong attempts. Account is temporarily blocked. Try again in ${LOGIN_BLOCK_MINUTES} minute(s).`
+        });
+      }
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
     const user = rows[0];
-    const normalizedRole = normalizeRole(user.role);
+    const normalizedRole = resolveRoleByEmail(user.email, user.role);
     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
 
     if (hasIsDeleted && Number(user.is_deleted) === 1) {
@@ -1468,8 +1539,16 @@ const loginUser = async (req, res) => {
       : user.password === password;
 
     if (!passwordMatches) {
+      const failedResult = registerFailedLogin(email);
+      if (failedResult.blockedUntil) {
+        return res.status(429).json({
+          error: `Too many wrong attempts. Account is temporarily blocked. Try again in ${LOGIN_BLOCK_MINUTES} minute(s).`
+        });
+      }
       return res.status(401).json({ error: "Invalid email or password." });
     }
+
+    clearLoginRecord(email);
 
     const redirectPath = normalizedRole === 'admin'
       ? '/admin/dashboard'

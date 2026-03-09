@@ -2,7 +2,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
-  Calendar, 
   BarChart3, 
   Settings,
   LogOut,
@@ -15,6 +14,7 @@ import { cn } from '../lib/utils';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BrandLogo, { PNLogoMark } from './BrandLogo';
+import { useAdminUnreadNotifications } from '../lib/useAdminUnreadNotifications';
 
 interface AdminSidebarProps {
   className?: string;
@@ -27,12 +27,12 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Administrator');
   const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/admin/100/100');
+  const { unreadMessageCount } = useAdminUnreadNotifications();
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
-    { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
-    { icon: Calendar, label: 'Evaluation Periods', path: '/admin/evaluations' },
+    { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount },
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];
@@ -174,12 +174,18 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
               {!isCollapsed && (
                 <span className="text-sm font-bold">{item.label}</span>
               )}
-              {item.hasNotification && (
-                <span className={cn(
-                  "absolute rounded-full ring-2 ring-white",
-                  isCollapsed ? "top-2 right-2 size-2 bg-red-500" : "right-4 top-1/2 -translate-y-1/2 size-2 bg-red-500"
-                )} />
-              )}
+              {item.hasNotification ? (
+                typeof item.badgeCount === 'number' && item.badgeCount > 0 && !isCollapsed ? (
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white">
+                    {item.badgeCount > 99 ? '99+' : item.badgeCount}
+                  </span>
+                ) : (
+                  <span className={cn(
+                    "absolute rounded-full ring-2 ring-white",
+                    isCollapsed ? "top-2 right-2 size-2 bg-red-500" : "right-4 top-1/2 -translate-y-1/2 size-2 bg-red-500"
+                  )} />
+                )
+              ) : null}
               {isCollapsed && (
                 <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
                   {item.label}

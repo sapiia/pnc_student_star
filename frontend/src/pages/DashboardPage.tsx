@@ -151,6 +151,7 @@ export default function DashboardPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRecord | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
+  const [assessmentWindow, setAssessmentWindow] = useState<{ start: string; end: string }>({ start: '', end: '' });
   const canStartEvaluation = !latestEvaluation || daysLeft === 0;
 
   const currentStatusCriteria = useMemo(() => (
@@ -231,6 +232,30 @@ export default function DashboardPage() {
       setShowUrgentNotification(false);
     }
   }, [daysLeft]);
+
+  useEffect(() => {
+    const loadEvaluationWindow = async () => {
+      try {
+        const [startResponse, endResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/settings/key/next_assessment_start`),
+          fetch(`${API_BASE_URL}/settings/key/next_assessment_end`),
+        ]);
+        const startData = await startResponse.json().catch(() => ({}));
+        const endData = await endResponse.json().catch(() => ({}));
+
+        setAssessmentWindow({
+          start: startResponse.ok ? String(startData?.value || '').slice(0, 10) : '',
+          end: endResponse.ok ? String(endData?.value || '').slice(0, 10) : '',
+        });
+      } catch {
+        setAssessmentWindow({ start: '', end: '' });
+      }
+    };
+
+    void loadEvaluationWindow();
+    window.addEventListener('evaluation-window-updated', loadEvaluationWindow);
+    return () => window.removeEventListener('evaluation-window-updated', loadEvaluationWindow);
+  }, []);
 
   const loadRecentFeedback = useCallback(async () => {
     if (!studentUserId) {
@@ -501,6 +526,12 @@ export default function DashboardPage() {
         </header>
 
         <div className="p-8 max-w-7xl mx-auto space-y-8">
+          {assessmentWindow.start && assessmentWindow.end ? (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary">Evaluation Window</p>
+              <p className="text-sm font-bold text-slate-700 mt-1">{assessmentWindow.start} to {assessmentWindow.end}</p>
+            </div>
+          ) : null}
           {/* Urgent Notification */}
           <AnimatePresence>
             {showUrgentNotification && (

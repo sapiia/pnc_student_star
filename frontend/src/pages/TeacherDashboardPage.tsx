@@ -48,6 +48,7 @@ export default function TeacherDashboardPage() {
   const [selectedClass, setSelectedClass] = useState('WebA');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDropdown, setActiveDropdown] = useState<'gen' | 'class' | null>(null);
+  const [assessmentWindow, setAssessmentWindow] = useState<{ start: string; end: string }>({ start: '', end: '' });
 
   const gens = Object.keys(GENERATION_CLASSES);
   const classes = GENERATION_CLASSES[selectedGen] ?? [];
@@ -57,6 +58,30 @@ export default function TeacherDashboardPage() {
       setSelectedClass(classes[0] ?? '');
     }
   }, [classes, selectedClass]);
+
+  useEffect(() => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const loadEvaluationWindow = async () => {
+      try {
+        const [startResponse, endResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/settings/key/next_assessment_start`),
+          fetch(`${API_BASE_URL}/settings/key/next_assessment_end`),
+        ]);
+        const startData = await startResponse.json().catch(() => ({}));
+        const endData = await endResponse.json().catch(() => ({}));
+        setAssessmentWindow({
+          start: startResponse.ok ? String(startData?.value || '').slice(0, 10) : '',
+          end: endResponse.ok ? String(endData?.value || '').slice(0, 10) : '',
+        });
+      } catch {
+        setAssessmentWindow({ start: '', end: '' });
+      }
+    };
+
+    void loadEvaluationWindow();
+    window.addEventListener('evaluation-window-updated', loadEvaluationWindow);
+    return () => window.removeEventListener('evaluation-window-updated', loadEvaluationWindow);
+  }, []);
 
   const classSummary = useMemo(() => {
     return classes.map((className) => {
@@ -185,6 +210,12 @@ export default function TeacherDashboardPage() {
 
         <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-[1200px] mx-auto space-y-8">
+            {assessmentWindow.start && assessmentWindow.end ? (
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 px-6 py-4">
+                <p className="text-xs font-black uppercase tracking-widest text-primary">Evaluation Window</p>
+                <p className="text-sm font-bold text-slate-700 mt-1">{assessmentWindow.start} to {assessmentWindow.end}</p>
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {STATS.map((stat, idx) => (
                 <motion.div

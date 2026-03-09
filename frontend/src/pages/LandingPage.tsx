@@ -54,7 +54,11 @@ export default function LandingPage() {
 
       const data = await response.json();
       if (!response.ok) {
-        setLoginError(data.error || 'Login failed.');
+        if (response.status === 429) {
+          setLoginError(data.error || 'Too many wrong attempts. Account is temporarily blocked. Please try again later.');
+        } else {
+          setLoginError(data.error || 'Login failed.');
+        }
         return;
       }
 
