@@ -19,12 +19,19 @@ import {
   Users2,
   MessageCircle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
+<<<<<<< HEAD
 import StarRating from '../components/ui/StarRating';
 import RadarChart from '../components/ui/RadarChart';
 import Sidebar from '../components/layout/sidebar/Sidebar';
 import Footer from '../components/layout/Footer';
+=======
+import StarRating from '../components/StarRating';
+import RadarChart from '../components/RadarChart';
+import Sidebar from '../components/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 
 type EvaluationResponse = {
@@ -140,6 +147,7 @@ const getEvaluationSortValue = (evaluation: EvaluationRecord) => {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const currentPeriodLabel = getCurrentPeriodLabel();
   const [daysLeft, setDaysLeft] = useState(0);
   const [cycleDays, setCycleDays] = useState(90);
@@ -464,6 +472,14 @@ export default function DashboardPage() {
     }
   };
 
+  const cardEntryTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.42, ease: [0.22, 1, 0.36, 1] as const };
+
+  const listItemTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const };
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Sidebar Navigation */}
@@ -471,22 +487,23 @@ export default function DashboardPage() {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
+        <StudentMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-500 text-sm">
-            <Home className="w-4 h-4" />
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] md:text-sm">
+            <Home className="w-3.5 h-3.5 md:w-4 md:h-4" />
             <span>/</span>
             <span className="font-medium text-slate-900">Student Dashboard</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             <button 
               onClick={() => navigate('/notifications')}
               title="Notifications"
-              className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600"
+              className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600 shrink-0"
             >
-              <Bell className="w-5 h-5" />
+              <Bell className="w-4.5 h-4.5 md:w-5 md:h-5" />
               {unreadNotificationCount > 0 ? (
-                <span className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 bg-red-500 rounded-full ring-2 ring-white text-white text-[10px] font-black flex items-center justify-center">
+                <span className="absolute top-1.5 right-1.5 min-w-4 md:min-w-5 h-4 md:h-5 px-1 bg-red-500 rounded-full ring-2 ring-white text-white text-[8px] md:text-[10px] font-black flex items-center justify-center">
                   {Math.min(unreadNotificationCount, 9)}
                 </span>
               ) : null}
@@ -494,21 +511,23 @@ export default function DashboardPage() {
             <button 
               onClick={() => navigate('/help')}
               title="Help Center"
-              className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-600"
+              className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-600 shrink-0"
             >
-              <HelpCircle className="w-5 h-5" />
+              <HelpCircle className="w-4.5 h-4.5 md:w-5 md:h-5" />
             </button>
           </div>
         </header>
 
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           {/* Urgent Notification */}
           <AnimatePresence>
             {showUrgentNotification && (
               <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                transition={listItemTransition}
+                style={{ willChange: 'transform, opacity' }}
                 className="bg-rose-50 border border-rose-100 p-4 rounded-xl flex items-center gap-4 text-rose-800"
               >
                 <div className="size-10 bg-rose-500 text-white rounded-lg flex items-center justify-center shrink-0">
@@ -535,35 +554,39 @@ export default function DashboardPage() {
           {/* Summary Welcome Card */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <motion.section 
-              initial={{ opacity: 0, y: 20 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+              transition={cardEntryTransition}
+              style={{ willChange: 'transform, opacity' }}
+              className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
             >
               <div className="flex flex-col md:flex-row items-center h-full">
-                <div className="p-8 flex-1">
-                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Hello, {studentName}! Ready for your {currentPeriodLabel} Evaluation?</h2>
+                <div className="p-6 md:p-8 flex-1 text-center md:text-left">
+                  <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-2">Hello, {studentName}! Ready for your {currentPeriodLabel} Evaluation?</h2>
                   {studentId && (
-                    <p className="text-xs font-bold text-slate-500 mb-2">Student ID: {studentId}</p>
+                    <p className="text-[10px] md:text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Student ID: {studentId}</p>
                   )}
-                  <p className="text-slate-600 mb-6 max-w-xl">Track your progress across 8 key areas of development. Regular self-reflection helps you stay focused on your personal and professional growth goals.</p>
+                  <p className="text-sm md:text-base text-slate-600 mb-6 max-w-xl">Track your progress across 8 key areas. Regular reflection helps you stay focused on your goals.</p>
                   {!canStartEvaluation ? (
-                    <p className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-4">
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-amber-600 mb-6">
                       Next evaluation unlocks in {daysLeft} day{daysLeft === 1 ? '' : 's'}
                     </p>
                   ) : null}
-                  <button 
-                    onClick={() => canStartEvaluation && navigate('/evaluate')}
-                    disabled={!canStartEvaluation}
-                    className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
-                  >
-                    <PlusCircle className="w-5 h-5" />
-                    {canStartEvaluation ? 'Start New Evaluation' : `Available In ${daysLeft} Days`}
-                  </button>
+                  <div className="flex justify-center md:justify-start">
+                    <button
+                      onClick={() => canStartEvaluation && navigate('/evaluate')}
+                      disabled={!canStartEvaluation}
+                      className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow-lg shadow-primary/20"
+                    >
+                      <PlusCircle className="w-5 h-5" />
+                      {canStartEvaluation ? 'Start Evaluation' : `Available In ${daysLeft} Days`}
+                    </button>
+                  </div>
                 </div>
-                <div className="w-full md:w-64 h-48 md:h-auto bg-primary/5 flex items-center justify-center">
+                <div className="w-full md:w-64 h-40 md:h-auto bg-primary/5 flex items-center justify-center shrink-0">
                   <div className="relative">
-                    <div className="size-32 bg-primary/20 rounded-full animate-pulse flex items-center justify-center">
-                      <Star className="w-12 h-12 text-primary fill-primary" />
+                    <div className={`size-24 md:size-32 bg-primary/20 rounded-full flex items-center justify-center ${prefersReducedMotion ? '' : 'animate-pulse'}`}>
+                      <Star className="w-10 h-10 md:w-12 md:h-12 text-primary fill-primary" />
                     </div>
                   </div>
                 </div>
@@ -572,29 +595,32 @@ export default function DashboardPage() {
 
             {/* Countdown Card */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="bg-slate-900 rounded-xl p-8 text-white relative overflow-hidden flex flex-col justify-center"
+              transition={prefersReducedMotion ? { duration: 0 } : { ...cardEntryTransition, delay: 0.08 }}
+              style={{ willChange: 'transform, opacity' }}
+              className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white relative overflow-hidden flex flex-col justify-center"
             >
               <div className="absolute top-0 right-0 p-4 opacity-10">
-                <Clock className="w-32 h-32 -mr-8 -mt-8" />
+                <Clock className="w-24 h-24 md:w-32 md:h-32 -mr-6 md:-mr-8 -mt-6 md:-mt-8" />
               </div>
               <div className="relative z-10">
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">Next Evaluation In</p>
+                <p className="text-slate-400 text-[10px] md:text-xs font-black uppercase tracking-widest mb-4">Next Evaluation In</p>
                 <div className="flex items-baseline gap-2 mb-6">
-                  <span className="text-6xl font-black">{daysLeft}</span>
-                  <span className="text-xl font-bold text-slate-400">Days</span>
+                  <span className="text-5xl md:text-6xl font-black">{daysLeft}</span>
+                  <span className="text-lg md:text-xl font-bold text-slate-400">Days</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                     <motion.div 
-                      initial={{ width: 0 }}
+                      initial={prefersReducedMotion ? false : { width: 0 }}
                       animate={{ width: `${Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100))}%` }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                      style={{ willChange: 'width' }}
                       className="h-full bg-primary"
                     />
                   </div>
-                  <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                  <div className="flex justify-between text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-wider">
                     <span>Cycle: {cycleDays} Days</span>
                     <span>{Math.round(Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100)))}% Remaining</span>
                   </div>
@@ -622,10 +648,11 @@ export default function DashboardPage() {
                     <motion.button
                       type="button"
                       key={criterion.key}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.05 }}
-                      whileHover={{ y: -3, scale: 1.01 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { ...listItemTransition, delay: idx * 0.04 }}
+                      whileHover={prefersReducedMotion ? undefined : { y: -2, scale: 1.005 }}
+                      style={{ willChange: 'transform, opacity' }}
                       onClick={() => {
                         setActiveCriterion({
                           key: criterion.key,
@@ -638,7 +665,7 @@ export default function DashboardPage() {
                           tip: criterion.tip,
                         });
                       }}
-                      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-colors"
+                      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all transform-gpu"
                     >
                       <div className={`size-12 rounded-lg ${criterion.bgColor} ${criterion.color} flex items-center justify-center shrink-0`}>
                         {getIcon(criterion.icon)}
@@ -726,14 +753,16 @@ export default function DashboardPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={listItemTransition}
               onClick={() => setActiveCriterion(null)}
               className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 18, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 18, scale: 0.97 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              transition={listItemTransition}
+              style={{ willChange: 'transform, opacity' }}
               className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
             >
               <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">

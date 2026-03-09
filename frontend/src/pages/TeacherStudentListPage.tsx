@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Bell,
   Brain,
@@ -22,8 +22,14 @@ import {
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+<<<<<<< HEAD
 import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import RadarChart from '../components/ui/RadarChart';
+=======
+import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherMobileNav from '../components/TeacherMobileNav';
+import RadarChart from '../components/RadarChart';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { cn } from '../lib/utils';
 import {
   getRealtimeSocket,
@@ -220,13 +226,14 @@ const getIcon = (iconName?: string | null, className = 'w-5 h-5') => {
 };
 
 const buildRadarData = (student: StudentRecord | null) => {
-  if (!student?.latestEvaluation?.responses?.length) return [];
+  if (!student?.latestEvaluation?.responses?.length) return { data: [], maxValue: 5 };
 
   const ratingScale = Math.max(1, Number(student.latestEvaluation.rating_scale || student.ratingScale || 5));
-  return student.latestEvaluation.responses.map((response) => ({
+  const data = student.latestEvaluation.responses.map((response) => ({
     subject: String(response.criterion_name || response.criterion_key || 'Criterion'),
-    score: Math.max(0, Number(response.star_value || 0) * (100 / ratingScale)),
+    score: Math.max(0, Number(response.star_value || 0)),
   }));
+  return { data, maxValue: ratingScale };
 };
 
 const parseStudentReplyNotification = (notification: NotificationRecord): StudentReplyRecord | null => {
@@ -247,8 +254,10 @@ const parseStudentReplyNotification = (notification: NotificationRecord): Studen
 
 export default function TeacherStudentListPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [isPerformanceOpen, setIsPerformanceOpen] = useState(false);
   const [selectedGeneration, setSelectedGeneration] = useState('All Generations');
   const [selectedClass, setSelectedClass] = useState('All Classes');
   const [selectedGender, setSelectedGender] = useState('All Gender');
@@ -410,6 +419,20 @@ export default function TeacherStudentListPage() {
     }
   }, [teacherId]);
 
+  const passedState = location.state as { selectedStudentId?: number, openPerformance?: boolean } | null;
+
+  useEffect(() => {
+    if (students.length > 0 && passedState?.selectedStudentId) {
+      setSelectedId(passedState.selectedStudentId);
+      if (passedState.openPerformance) {
+        setIsPerformanceOpen(true);
+      }
+      
+      // Clear state so it doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [students, passedState, navigate, location.pathname]);
+
   useEffect(() => {
     void loadTeacherFeedbacks();
   }, [loadTeacherFeedbacks]);
@@ -568,6 +591,10 @@ export default function TeacherStudentListPage() {
         return accumulator;
       }, {});
   }, [teacherNotifications]);
+  const unreadNotificationCount = useMemo(
+    () => teacherNotifications.filter((n) => Number(n.is_read) !== 1).length,
+    [teacherNotifications]
+  );
   const conversationMessages = useMemo<ConversationMessage[]>(() => {
     const teacherMessages: ConversationMessage[] = visibleStudentFeedbackHistory.map((feedback) => ({
       id: `teacher-${feedback.id}`,
@@ -739,44 +766,49 @@ export default function TeacherStudentListPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <nav className="flex items-center gap-2 text-sm text-slate-500">
-            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary">Home</button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-semibold text-slate-900">Students</span>
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <TeacherMobileNav />
+        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+          <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500">
+            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary transition-colors">Home</button>
+            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span className="font-semibold text-slate-900 truncate">Students</span>
           </nav>
-          <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="flex items-center gap-2 md:gap-4 ml-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search ID, name, or email..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                className="w-32 sm:w-48 md:w-72 pl-8 md:pl-10 pr-4 py-1.5 md:py-2 bg-slate-100 border-none rounded-full text-xs md:text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
               />
             </div>
             <button
               onClick={() => navigate('/teacher/notifications')}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 min-w-4 md:min-w-5 h-4 md:h-5 px-1 rounded-full bg-rose-500 text-white text-[8px] md:text-[10px] font-black flex items-center justify-center ring-2 ring-white">
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </span>
+              ) : null}
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1400px] mx-auto">
-            <header className="mb-8">
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Student Performance List</h1>
-              <p className="text-slate-500 mt-2">Teacher can review each criterion, open its details, and submit feedback with the admin limit applied.</p>
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+          <div className="max-w-[1600px] mx-auto">
+            <header className="mb-6 md:mb-8">
+              <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Student Performance List</h1>
+              <p className="text-xs md:text-base text-slate-500 mt-1 md:mt-2">Review performance and provide guidance.</p>
             </header>
 
-            <div className="flex flex-col lg:flex-row gap-8">
-              <div className="flex-1 space-y-6">
-                <div className="flex flex-col xl:flex-row xl:items-center gap-4">
+            <div className="flex flex-col lg:flex-row gap-8 items-start">
+              <div className="flex-1 w-full space-y-6 overflow-hidden">
+                <div className="flex flex-row flex-wrap items-center gap-4">
                   <div className="relative">
                     <select
                       value={selectedGeneration}
@@ -824,8 +856,8 @@ export default function TeacherStudentListPage() {
                   </button>
                 </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+                  <table className="w-full text-left min-w-[600px]">
                     <thead>
                       <tr className="bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
                         <th className="px-6 py-4">Student ID</th>
@@ -855,7 +887,10 @@ export default function TeacherStudentListPage() {
                             'group transition-all cursor-pointer',
                             selectedStudent?.id === student.id ? 'bg-primary/5' : 'hover:bg-slate-50/50'
                           )}
-                          onClick={() => setSelectedId(student.id)}
+                          onClick={() => {
+                            setSelectedId(student.id);
+                            setIsPerformanceOpen(true);
+                          }}
                         >
                           <td className="px-6 py-5 text-sm font-medium text-slate-500">{student.studentId}</td>
                           <td className="px-6 py-5">
@@ -907,7 +942,7 @@ export default function TeacherStudentListPage() {
                               'text-xs font-bold transition-colors',
                               selectedStudent?.id === student.id ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'
                             )}>
-                              {selectedStudent?.id === student.id ? 'Selected' : 'View'}
+                              View Overview
                             </button>
                           </td>
                         </tr>
@@ -937,44 +972,51 @@ export default function TeacherStudentListPage() {
                 </div>
               </div>
 
-              <div className="w-full lg:w-[470px] shrink-0">
-                <motion.div
-                  layout
-                  key={selectedStudent?.id || 'empty'}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden sticky top-8"
-                >
-                  <div className="p-8 border-b border-slate-50">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-xl font-black text-slate-900">Performance Overview</h3>
-                      <div className="size-12 rounded-2xl overflow-hidden border-2 border-primary/20 bg-slate-100">
-                        {selectedStudent ? (
-                          <img src={selectedStudent.avatar} alt={selectedStudent.name} className="w-full h-full object-cover" />
-                        ) : null}
+              <AnimatePresence mode="wait">
+                {isPerformanceOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, x: 20 }}
+                    animate={{ opacity: 1, scale: 1, x: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, x: 20 }}
+                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    className="w-full lg:w-[480px] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden shrink-0 sticky top-0 h-fit max-h-[calc(100vh-160px)]"
+                  >
+                    <div className="p-6 border-b border-slate-50 shrink-0 relative bg-white z-10">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight">Performance Overview</h3>
+                        <button
+                          type="button"
+                          onClick={() => setIsPerformanceOpen(false)}
+                          className="size-8 rounded-full border border-slate-100 text-slate-400 hover:bg-slate-50 hover:text-slate-600 flex items-center justify-center transition-all"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <div className="size-10 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-100">
+                           <img src={selectedStudent?.avatar} alt={selectedStudent?.name} className="w-full h-full object-cover" />
+                         </div>
+                         <div>
+                            <h4 className="text-sm font-black text-slate-900 leading-none mb-1">
+                              {selectedStudent?.name}
+                            </h4>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                               {selectedStudent?.studentId} | {selectedStudent?.className}
+                            </p>
+                         </div>
                       </div>
                     </div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Selected Student</p>
-                    <h4 className="text-lg font-bold text-slate-900">
-                      {selectedStudent ? `${selectedStudent.name} (${selectedStudent.studentId})` : 'No student selected'}
-                    </h4>
-                    {selectedStudent ? (
-                      <p className="text-sm text-slate-500 mt-2">
-                        {selectedStudent.generation} | {selectedStudent.className} | {selectedStudent.gender}
-                      </p>
-                    ) : null}
-                  </div>
 
-                  <div className="p-8 space-y-8">
-                    <div className="h-64 flex items-center justify-center">
-                      {selectedStudent && radarData.length > 0 ? (
-                        <RadarChart data={radarData} dataKeys={RADAR_COLORS} />
-                      ) : (
-                        <div className="w-full h-full rounded-2xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-medium text-slate-400 text-center px-6">
-                          No evaluation data is available for this student yet.
-                        </div>
-                      )}
-                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar relative">
+                      <div className="h-64 flex items-center justify-center shrink-0 bg-slate-50/50 rounded-2xl border border-slate-100 shadow-inner p-4 relative overflow-hidden">
+                        {selectedStudent && radarData.data.length > 0 ? (
+                          <RadarChart data={radarData.data} dataKeys={RADAR_COLORS} maxValue={radarData.maxValue} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400 text-center px-6">
+                            No evaluation data is available for this student yet.
+                          </div>
+                        )}
+                      </div>
 
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -1177,114 +1219,115 @@ export default function TeacherStudentListPage() {
                     </p>
                   </div>
                 </motion.div>
-              </div>
-            </div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </main>
+      </div>
+    </main>
 
-      {pendingDeleteFeedbackId ? (
-        <div className="fixed inset-0 z-[118] flex items-center justify-center p-4">
-          <button
+    {pendingDeleteFeedbackId ? (
+      <div className="fixed inset-0 z-[118] flex items-center justify-center p-4">
+        <button
+          type="button"
+          onClick={() => setPendingDeleteFeedbackId(null)}
+          className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+        />
+        <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+          <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
+          <p className="mt-2 text-sm text-slate-500">
+            This will delete the selected feedback message for both teacher and student.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setPendingDeleteFeedbackId(null)}
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDeleteFeedbackForEveryone}
+              disabled={isDeletingFeedbackId === Number(pendingDeleteFeedbackId)}
+              className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
+            >
+              {isDeletingFeedbackId === Number(pendingDeleteFeedbackId) ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+
+    <AnimatePresence>
+      {activeCriterion ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <motion.button
             type="button"
-            onClick={() => setPendingDeleteFeedbackId(null)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setActiveCriterion(null)}
             className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
           />
-          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
-            <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              This will delete the selected feedback message for both teacher and student.
-            </p>
-            <div className="mt-6 flex gap-3">
+          <motion.div
+            initial={{ x: '100%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '100%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute right-0 top-0 bottom-0 w-full md:w-[480px] bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.1)] flex flex-col z-[100]"
+          >
+            <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div className="size-14 rounded-2xl flex items-center justify-center bg-primary/10 text-primary">
+                  {getIcon(activeCriterion.icon, 'w-7 h-7')}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-primary">Criterion Detail</p>
+                  <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
+                  <div className="flex items-center gap-3 text-primary">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <Star
+                        key={index}
+                        className={cn(
+                          'w-4 h-4 fill-current',
+                          index >= Math.floor(activeCriterion.score) && 'text-slate-200 fill-slate-200'
+                        )}
+                      />
+                    ))}
+                    <span className="text-sm font-black text-slate-900">{activeCriterion.score}/5 Stars</span>
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setPendingDeleteFeedbackId(null)}
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                onClick={() => setActiveCriterion(null)}
+                className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteFeedbackForEveryone}
-                disabled={isDeletingFeedbackId === Number(pendingDeleteFeedbackId)}
-                className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
-              >
-                {isDeletingFeedbackId === Number(pendingDeleteFeedbackId) ? 'Deleting...' : 'Delete'}
+                <X className="w-5 h-5" />
               </button>
             </div>
-          </div>
+
+            <div className="p-8 space-y-6">
+              <div className="rounded-2xl border border-primary/10 bg-primary/5 p-5">
+                <p className="text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
+                <p className="text-sm font-medium leading-relaxed text-slate-700">
+                  {activeCriterion.tip || 'No admin tip was saved for this criterion.'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Student Reflection</p>
+                <p className="text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
+                  {activeCriterion.reflection || 'No student reflection was submitted for this criterion.'}
+                </p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       ) : null}
-
-      <AnimatePresence>
-        {activeCriterion ? (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-            <motion.button
-              type="button"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setActiveCriterion(null)}
-              className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.97 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
-            >
-              <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
-                <div className="flex items-start gap-4">
-                  <div className="size-14 rounded-2xl flex items-center justify-center bg-primary/10 text-primary">
-                    {getIcon(activeCriterion.icon, 'w-7 h-7')}
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Criterion Detail</p>
-                    <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
-                    <div className="flex items-center gap-3 text-primary">
-                      {Array.from({ length: 5 }).map((_, index) => (
-                        <Star
-                          key={index}
-                          className={cn(
-                            'w-4 h-4 fill-current',
-                            index >= Math.floor(activeCriterion.score) && 'text-slate-200 fill-slate-200'
-                          )}
-                        />
-                      ))}
-                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/5 Stars</span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveCriterion(null)}
-                  className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-8 space-y-6">
-                <div className="rounded-2xl border border-primary/10 bg-primary/5 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
-                  <p className="text-sm font-medium leading-relaxed text-slate-700">
-                    {activeCriterion.tip || 'No admin tip was saved for this criterion.'}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Student Reflection</p>
-                  <p className="text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                    {activeCriterion.reflection || 'No student reflection was submitted for this criterion.'}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        ) : null}
-      </AnimatePresence>
-    </div>
+    </AnimatePresence>
+  </div>
   );
 }
 

@@ -24,7 +24,12 @@ import {
   Radar,
   Tooltip
 } from 'recharts';
+<<<<<<< HEAD
 import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
+=======
+import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { cn } from '../lib/utils';
 import { CRITERIA } from '../constants';
 
@@ -78,8 +83,9 @@ export default function AdminClassStudentsPage() {
       <AdminSidebar />
 
       <main className="flex-1 flex flex-col overflow-hidden">
+        <AdminMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <header className="h-auto min-h-14 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin/dashboard')}
@@ -106,7 +112,7 @@ export default function AdminClassStudentsPage() {
 
         <div className="flex-1 overflow-hidden flex">
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden p-8">
+          <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-8">
             <div className="max-w-6xl mx-auto w-full space-y-6 flex flex-col h-full">
               {/* Search & Filter */}
               <div className="flex gap-4 items-center">
@@ -132,12 +138,12 @@ export default function AdminClassStudentsPage() {
                   <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 bg-slate-50 z-10">
                       <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                        <th className="px-6 py-4">Student</th>
-                        <th className="px-6 py-4">Gender</th>
-                        <th className="px-6 py-4">GPA</th>
-                        <th className="px-6 py-4">Attendance</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
+                        <th className="px-4 md:px-6 py-4">Student</th>
+                    <th className="px-6 py-4 hidden md:table-cell">Gender</th>
+                    <th className="px-6 py-4 hidden md:table-cell">GPA</th>
+                    <th className="px-6 py-4 hidden sm:table-cell">Attendance</th>
+                    <th className="px-6 py-4 hidden sm:table-cell">Status</th>
+                    <th className="px-4 md:px-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -154,13 +160,13 @@ export default function AdminClassStudentsPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
+                        <td className="px-6 py-4 hidden md:table-cell">
                             <span className="text-xs font-bold text-slate-600">{student.gender}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-xs font-bold text-slate-600">{student.gpa}</span>
                           </td>
-                          <td className="px-6 py-4">
+                        <td className="px-6 py-4 hidden sm:table-cell">
                             <span className="text-xs font-bold text-slate-600">{student.attendance}</span>
                           </td>
                           <td className="px-6 py-4">
@@ -205,7 +211,7 @@ export default function AdminClassStudentsPage() {
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
-                className="w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col shrink-0 relative z-20"
+                className="w-full md:w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col shrink-0 relative z-20 fixed md:static inset-0 md:inset-auto"
               >
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="font-black text-slate-900">Student Details</h3>

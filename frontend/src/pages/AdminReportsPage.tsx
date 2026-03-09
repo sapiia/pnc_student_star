@@ -39,7 +39,12 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
+<<<<<<< HEAD
 import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
+=======
+import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { cn } from '../lib/utils';
 import { CRITERIA } from '../constants';
 
@@ -123,21 +128,22 @@ export default function AdminReportsPage() {
       <AdminSidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <AdminMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div className="flex items-center gap-8">
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-8 w-full md:w-auto">
             <div>
-              <h1 className="text-xl font-black text-slate-900">Visual Reports</h1>
-              <p className="text-xs text-slate-500 font-bold">Comprehensive performance analytics.</p>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">Visual Reports</h1>
+              <p className="text-xs text-slate-500 font-bold hidden md:block">Comprehensive performance analytics.</p>
             </div>
             
-            <nav className="flex bg-slate-100 p-1 rounded-xl">
+            <nav className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto w-full md:w-auto">
               {(['overview', 'students', 'teachers'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
                     activeTab === tab ? "bg-white text-primary shadow-sm" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
@@ -155,7 +161,7 @@ export default function AdminReportsPage() {
           </div>
         </header>
 
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           <AnimatePresence mode="wait">
             {activeTab === 'students' ? (
               <motion.div 
@@ -176,7 +182,7 @@ export default function AdminReportsPage() {
                         setSelectedClass('All');
                         setSelectedStudentId('All');
                       }}
-                      className="block w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
+                      className="block w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
                     >
                       <option value="All">All Generations</option>
                       {GENERATIONS.map(gen => <option key={gen} value={gen}>{gen}</option>)}
@@ -192,7 +198,7 @@ export default function AdminReportsPage() {
                         setSelectedClass(e.target.value);
                         setSelectedStudentId('All');
                       }}
-                      className="block w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                      className="block w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                     >
                       <option value="All">All Classes</option>
                       {selectedGen !== 'All' && CLASSES[selectedGen].map(c => <option key={c} value={c}>{c}</option>)}

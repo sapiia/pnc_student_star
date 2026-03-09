@@ -14,10 +14,12 @@ import FAQPage from './pages/FAQPage';
 import MeetingPage from './pages/MeetingPage';
 import TeacherDashboardPage from './pages/TeacherDashboardPage';
 import TeacherStudentListPage from './pages/TeacherStudentListPage';
+import TeacherStudentProfilePage from './pages/TeacherStudentProfilePage';
 import TeacherProfilePage from './pages/TeacherProfilePage';
 import TeacherReportsPage from './pages/TeacherReportsPage';
 import TeacherMessagesPage from './pages/TeacherMessagesPage';
 import TeacherNotificationsPage from './pages/TeacherNotificationsPage';
+import TeacherAttentionStudentsPage from './pages/TeacherAttentionStudentsPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminUserManagementPage from './pages/AdminUserManagementPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
@@ -47,10 +49,12 @@ export default function App() {
         {/* Teacher Portal Routes */}
         <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
         <Route path="/teacher/students" element={<TeacherStudentListPage />} />
+        <Route path="/teacher/students/:id" element={<TeacherStudentProfilePage />} />
         <Route path="/teacher/reports" element={<TeacherReportsPage />} />
         <Route path="/teacher/messages" element={<TeacherMessagesPage />} />
         <Route path="/teacher/notifications" element={<TeacherNotificationsPage />} />
         <Route path="/teacher/settings" element={<TeacherProfilePage />} />
+        <Route path="/teacher/attention" element={<TeacherAttentionStudentsPage />} />
 
         {/* Admin Portal Routes */}
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />

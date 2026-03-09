@@ -8,6 +8,7 @@ import {
   Search,
   Send,
   Settings,
+<<<<<<< HEAD
 } from "lucide-react";
 import AdminSidebar from "../components/layout/sidebar/AdminSidebar";
 import { cn } from "../lib/utils";
@@ -16,6 +17,13 @@ import {
   type NotificationRealtimePayload,
   type TypingRealtimePayload,
 } from "../lib/realtime";
+=======
+} from 'lucide-react';
+import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
+import { cn } from '../lib/utils';
+import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 
 type ApiUser = {
   id: number;
@@ -711,7 +719,8 @@ export default function AdminMessagesPage() {
       <AdminSidebar />
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0 z-10">
+        <AdminMobileNav />
+        <header className="h-auto min-h-14 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">
               Messages
@@ -743,7 +752,7 @@ export default function AdminMessagesPage() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-full md:w-[350px] border-r border-slate-200 bg-white flex flex-col shrink-0">
+          <div className={cn("w-full md:w-[350px] border-r border-slate-200 bg-white flex flex-col shrink-0", selectedContact ? "hidden md:flex" : "flex")}>
             <div className="p-6">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -819,11 +828,17 @@ export default function AdminMessagesPage() {
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+          <div className={cn("flex-1 flex flex-col overflow-hidden bg-slate-50", !selectedContact ? "hidden md:flex" : "flex")}>
             {selectedContact ? (
               <>
-                <div className="p-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div className="p-4 md:p-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setSelectedContactId(null)}
+                      className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
                     <div className="size-12 rounded-2xl overflow-hidden shrink-0 shadow-sm bg-slate-200">
                       <img
                         src={selectedContact.avatar}
@@ -842,7 +857,7 @@ export default function AdminMessagesPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 md:space-y-6 custom-scrollbar">
                   {visibleMessages.length > 0 ? (
                     visibleMessages.map((msg) => (
                       <div
@@ -999,7 +1014,7 @@ export default function AdminMessagesPage() {
                   )}
                 </div>
 
-                <div className="p-8 bg-white border-t border-slate-200">
+                <div className="p-4 md:p-8 bg-white border-t border-slate-200">
                   {replyTarget ? (
                     <div className="mb-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2">
                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">

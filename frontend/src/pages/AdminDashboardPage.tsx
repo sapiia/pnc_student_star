@@ -15,7 +15,12 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
+<<<<<<< HEAD
 import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
+=======
+import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
+>>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { cn } from '../lib/utils';
 
 const STUDENT_STATS = {
@@ -66,31 +71,32 @@ export default function AdminDashboardPage() {
       <AdminSidebar />
 
       <main className="flex-1 overflow-y-auto">
+        <AdminMobileNav />
         {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-6 lg:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-black text-slate-900">Admin Dashboard</h1>
-            <p className="text-xs text-slate-500 font-bold">Welcome back. Here's what's happening today.</p>
+            <h1 className="text-lg md:text-xl font-black text-slate-900">Admin Dashboard</h1>
+            <p className="text-xs text-slate-500 font-bold hidden md:block">Welcome back. Here's what's happening today.</p>
           </div>
           
-          <div className="flex items-center gap-6">
-            <div className="relative hidden lg:block">
+          <div className="flex items-center gap-3 md:gap-6 w-full md:w-auto">
+            <div className="relative flex-1 md:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input 
                 type="text" 
-                placeholder="Search data, users, or reports..." 
-                className="pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-primary/20 rounded-xl text-sm w-80 transition-all outline-none"
+                placeholder="Search..." 
+                className="pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-primary/20 rounded-xl text-sm w-full md:w-48 lg:w-80 transition-all outline-none"
               />
             </div>
             
-            <button className="relative size-10 rounded-xl flex items-center justify-center hover:bg-slate-100 text-slate-600 transition-colors">
+            <button className="relative size-10 rounded-xl flex items-center justify-center hover:bg-slate-100 text-slate-600 transition-colors flex-shrink-0">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2.5 right-2.5 size-2 bg-rose-500 rounded-full ring-2 ring-white" />
             </button>
           </div>
         </header>
 
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
+        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 lg:space-y-8 pb-24 md:pb-8">
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Total Students Card */}
