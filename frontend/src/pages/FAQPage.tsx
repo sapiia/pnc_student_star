@@ -1,12 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-import { HelpCircle, ChevronDown, ChevronUp, Search } from 'lucide-react';
-import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
 import { HelpCircle, ChevronDown, ChevronUp, Search, ArrowRight } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 
@@ -148,3 +143,5 @@ export default function FAQPage() {
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
+
+

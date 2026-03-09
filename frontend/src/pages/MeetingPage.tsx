@@ -13,12 +13,10 @@ import {
   User,
   X,
 } from 'lucide-react';
-<<<<<<< HEAD
+
 import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
-import Sidebar from '../components/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
 
@@ -809,3 +807,5 @@ export default function MeetingPage() {
     </div>
   );
 }
+
+

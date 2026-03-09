@@ -5,12 +5,10 @@ import {
   BellRing, 
   ChevronRight
 } from 'lucide-react';
-<<<<<<< HEAD
+
 import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
-=======
-import TeacherSidebar from '../components/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -442,3 +440,5 @@ export default function TeacherProfilePage() {
     </div>
   );
 }
+
+

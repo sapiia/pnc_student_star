@@ -24,16 +24,12 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-<<<<<<< HEAD
+
 import StarRating from '../components/ui/StarRating';
 import RadarChart from '../components/ui/RadarChart';
 import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
-import StarRating from '../components/StarRating';
-import RadarChart from '../components/RadarChart';
-import Sidebar from '../components/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+
 
 type EvaluationResponse = {
   criterion_id?: string | null;
@@ -693,3 +689,5 @@ export default function EvaluationResultPage() {
     </div>
   );
 }
+
+

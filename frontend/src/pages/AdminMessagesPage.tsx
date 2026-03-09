@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,22 +9,15 @@ import {
   Search,
   Send,
   Settings,
-<<<<<<< HEAD
 } from "lucide-react";
 import AdminSidebar from "../components/layout/sidebar/AdminSidebar";
+import AdminMobileNav from "../components/AdminMobileNav";
 import { cn } from "../lib/utils";
 import {
   getRealtimeSocket,
   type NotificationRealtimePayload,
   type TypingRealtimePayload,
 } from "../lib/realtime";
-=======
-} from 'lucide-react';
-import AdminSidebar from '../components/AdminSidebar';
-import AdminMobileNav from '../components/AdminMobileNav';
-import { cn } from '../lib/utils';
-import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 
 type ApiUser = {
   id: number;
@@ -1102,3 +1096,4 @@ export default function AdminMessagesPage() {
     </div>
   );
 }
+

@@ -9,12 +9,8 @@ import {
   ClipboardList,
   ChevronRight
 } from 'lucide-react';
-<<<<<<< HEAD
 import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
-import Sidebar from '../components/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
@@ -527,3 +523,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+

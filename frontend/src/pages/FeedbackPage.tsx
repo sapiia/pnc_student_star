@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, Search, Send, Settings, Trash2, Users, X } from 'lucide-react';
-<<<<<<< HEAD
+import { Bell, Search, Send, Settings, Trash2, Users, X, ArrowLeft } from 'lucide-react';
 import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
-import Sidebar from '../components/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
-import { ArrowLeft } from 'lucide-react';
 
 type FeedbackItem = {
   id: number;
@@ -727,3 +722,5 @@ export default function FeedbackPage() {
     </div>
   );
 }
+
+

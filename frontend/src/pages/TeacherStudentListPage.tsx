@@ -22,14 +22,11 @@ import {
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-<<<<<<< HEAD
+
 import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
-import RadarChart from '../components/ui/RadarChart';
-=======
-import TeacherSidebar from '../components/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
-import RadarChart from '../components/RadarChart';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+import RadarChart from '../components/ui/RadarChart';
+
 import { cn } from '../lib/utils';
 import {
   getRealtimeSocket,
@@ -1330,5 +1327,7 @@ export default function TeacherStudentListPage() {
   </div>
   );
 }
+
+
 
 

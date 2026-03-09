@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-import { Bell, CheckCheck, ChevronRight, Home, Trash2 } from 'lucide-react';
-import { motion } from 'motion/react';
-import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
 import { Bell, CheckCheck, ChevronRight, Home, Trash2, MessageSquare, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {
@@ -495,3 +489,5 @@ export default function NotificationsPage() {
     </div>
   );
 }
+
+

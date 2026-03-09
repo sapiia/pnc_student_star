@@ -13,15 +13,11 @@ import {
   Filter,
   X
 } from 'lucide-react';
-<<<<<<< HEAD
-import { motion } from 'motion/react';
-import Sidebar from '../components/layout/sidebar/Sidebar';
-=======
 import { motion, AnimatePresence } from 'motion/react';
-import Sidebar from '../components/Sidebar';
-import StudentMobileNav from '../components/StudentMobileNav';
 import { useState } from 'react';
->>>>>>> a87e8d1d0127d4f583881c856eda9712fb3e1fd0
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
+
 
 const CATEGORIES = [
   { id: 'all', label: 'All Articles', count: 89 },
@@ -276,3 +272,5 @@ export default function HelpCenterPage() {
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
+
+
