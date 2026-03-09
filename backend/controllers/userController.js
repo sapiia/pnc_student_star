@@ -399,6 +399,8 @@ const buildInvitedUserSummary = (normalizedInvite) => {
 };
 
 const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
+  console.log('Building invite artifacts for:', normalizedInvite.email);
+
   const {
     firstName,
     lastName,
@@ -451,36 +453,57 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       : '/dashboard';
 
   const text = [
-    `You are invited to join PNC Student Star as ${roleLabel}.`,
+    'Welcome to PNC Student Star!',
+    '',
+    `Hello, you have been invited to join the PNC Student Star platform as a ${roleLabel}.`,
+    'We are excited to have you as part of our community!',
+    '',
     `Invited by: ${inviterIdentity}`,
     '',
-    'Temporary password (for first login):',
-    tempPassword,
-    '',
-    'Please complete your registration using this link:',
+    'To get started, please complete your registration by clicking the link below:',
     inviteLink,
     '',
-    'After registration, use this email and temporary password to log in (you can change it later).',
+    '--- Account Details ---',
+    `Temporary Password (for your first login): ${tempPassword}`,
     '',
-    'After completing registration, login here:',
+    'After registration, you can log in using your email and the temporary password provided above. You will be able to change your password after your first login.',
+    '',
+    'Login here after registration:',
     loginLink,
     '',
-    `After login, you will be redirected to: ${roleDashboardPath}`,
+    `Redirected to: ${roleDashboardPath}`,
+    '-----------------------',
     '',
-    `This link expires in ${INVITE_EXPIRES_HOURS} hours.`
+    `This invitation link will expire in ${INVITE_EXPIRES_HOURS} hours.`,
+    '',
+    'Best regards,',
+    'PNC Student Star Team'
   ].join('\n');
 
   const html = `
-    <p>You are invited to join <strong>PNC Student Star</strong> as <strong>${roleLabel}</strong>.</p>
-    <p><strong>Invited by:</strong> ${inviterIdentity}</p>
-    <p><strong>Temporary password (for first login):</strong> <code>${tempPassword}</code></p>
-    <p>Please complete your registration using the link below:</p>
-    <p><a href="${inviteLink}">${inviteLink}</a></p>
-    <p>After registration, use this email and temporary password to log in (you can change it later).</p>
-    <p>After completing registration, login here:</p>
-    <p><a href="${loginLink}">${loginLink}</a></p>
-    <p>After login, you will be redirected to: <strong>${roleDashboardPath}</strong>.</p>
-    <p>This link expires in ${INVITE_EXPIRES_HOURS} hours.</p>
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
+      <h2 style="color: #0f172a; margin-top: 0;">Welcome to PNC Student Star!</h2>
+      <p>Hello,</p>
+      <p>We are excited to invite you to join the <strong>PNC Student Star</strong> platform as <strong>${roleLabel}</strong>.</p>
+      <p>Our community is growing, and we can't wait for you to explore all the features we have prepared for you.</p>
+      
+      <div style="margin: 25px 0; text-align: center;">
+        <a href="${inviteLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Complete Your Registration</a>
+      </div>
+
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+        <p style="margin-top: 0; font-weight: bold;">Quick Access Details:</p>
+        <p><strong>Invited by:</strong> ${inviterIdentity}</p>
+        <p><strong>Temporary Password:</strong> <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 4px;">${tempPassword}</code></p>
+      </div>
+
+      <p style="margin-top: 20px;">After registering, you can log in at <a href="${loginLink}">${loginLink}</a> using your email and the temporary password above. You will be able to set a new password during or after your first login.</p>
+      
+      <p style="color: #64748b; font-size: 0.875rem;">Note: This invitation link will expire in ${INVITE_EXPIRES_HOURS} hours.</p>
+      
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="color: #64748b; font-size: 0.875rem;">Best regards,<br /><strong>PNC Student Star Team</strong></p>
+    </div>
   `;
 
   return {
@@ -499,6 +522,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
       subject: 'PNC Student Star Invitation',
       text,
+      html,
       inviteLink,
       loginLink,
       temporaryPassword: tempPassword,
@@ -511,6 +535,8 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
 };
 
 const sendInviteForUser = async (inviteInput, options = {}) => {
+  console.log('Sending invite for user:', inviteInput.email, 'Options:', options);
+
   const normalizedInvite = normalizeInviteInput(inviteInput || {});
   const queryExecutor = options.queryExecutor || db;
   const [existingUsers] = await queryExecutor.query("SELECT * FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
@@ -521,6 +547,7 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     const duplicateError = createHttpError(409, 'A user with this email already exists.');
     duplicateError.existingUserName = existingName;
     duplicateError.email = normalizedInvite.email;
+
     throw duplicateError;
   }
 
@@ -529,12 +556,14 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
       validatedRow: {
         firstName: normalizedInvite.firstName,
         lastName: normalizedInvite.lastName,
+        name: normalizedInvite.name,
         email: normalizedInvite.email,
         gender: normalizedInvite.gender,
         role: normalizedInvite.role,
-        generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
-        className: normalizedInvite.role === 'student' ? normalizedInvite.className || null : null,
-        studentId: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+        generation: normalizedInvite.generation || null,
+        major: normalizedInvite.major || null,
+        className: normalizedInvite.className || null,
+        studentId: normalizedInvite.studentId || null,
         inviterName: normalizedInvite.inviterName || undefined,
         inviterEmail: normalizedInvite.inviterEmail || undefined
       },
@@ -761,9 +790,9 @@ const createUser = async (req, res) => {
       isRegistered: true
     });
 
-    res.status(201).json({ 
-      message: "User created successfully", 
-      userId: result.insertId 
+    res.status(201).json({
+      message: "User created successfully",
+      userId: result.insertId
     });
   } catch (err) {
     console.error(err);
@@ -774,7 +803,7 @@ const createUser = async (req, res) => {
 // Update user
 const updateUser = async (req, res) => {
   const { name, email, role, class_name, student_id } = req.body;
-  
+
   try {
     const normalizedRole = normalizeRole(role);
     const normalizedStudentId = (student_id || '').toString().trim();
@@ -806,6 +835,8 @@ const inviteUser = async (req, res) => {
 };
 
 const commitBulkInviteRows = async (rows) => {
+  console.log('Starting commitBulkInviteRows with', rows.length, 'rows');
+
   if (!rows.length) {
     return {
       message: 'No rows to process.',
@@ -862,23 +893,6 @@ const commitBulkInviteRows = async (rows) => {
       }
     }
 
-    if (errors.length > 0) {
-      await connection.rollback();
-      return {
-        message: `Validation failed: ${errors.length} row(s) have errors. No users were inserted.`,
-        summary: {
-          totalRows: rows.length,
-          invitedCount: 0,
-          failedCount: errors.length,
-          skippedExistingCount: skippedExistingUsers.length,
-          smtpConfigured: transportInfo.isConfigured
-        },
-        invited: [],
-        existingUsers: skippedExistingUsers,
-        errors
-      };
-    }
-
     for (const row of normalizedRows) {
       try {
         const result = await sendInviteForUser(row.payload, {
@@ -908,10 +922,10 @@ const commitBulkInviteRows = async (rows) => {
       }
     }
 
-    if (errors.length > 0) {
+    if (invited.length === 0 && errors.length > 0) {
       await connection.rollback();
       return {
-        message: `Invite preparation failed: ${errors.length} row(s) failed. No users were inserted.`,
+        message: `Bulk invite failed: No valid users to invite. ${errors.length} row(s) had errors.`,
         summary: {
           totalRows: rows.length,
           invitedCount: 0,
@@ -946,6 +960,7 @@ const commitBulkInviteRows = async (rows) => {
           html: row.emailEnvelope.html
         });
       } catch (err) {
+        console.error('Failed to send invite email to:', row.email, err);
         emailErrors.push({
           row: row.row,
           email: row.email,
@@ -975,19 +990,19 @@ const commitBulkInviteRows = async (rows) => {
 
   return {
     message: emailErrors.length > 0
-      ? `Users inserted (${invitedUsers.length}), skipped ${existingUsers.length} existing user(s), but ${emailErrors.length} email(s) failed to send.`
-      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, ${existingUsers.length} existing skipped, 0 failed.`,
+      ? `Users inserted (${invitedUsers.length}), skipped ${existingUsers.length + errors.length} user(s), but ${emailErrors.length} email(s) failed to send.`
+      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, ${existingUsers.length + errors.length} skipped or failed.`,
     summary: {
       totalRows: rows.length,
       invitedCount: invitedUsers.length,
-      failedCount: 0,
+      failedCount: errors.length,
       skippedExistingCount: existingUsers.length,
       smtpConfigured: transportInfo.isConfigured,
       emailFailedCount: emailErrors.length
     },
     invited: invitedUsers,
     existingUsers,
-    errors: emailErrors
+    errors: [...errors, ...emailErrors]
   };
 };
 
@@ -1584,6 +1599,16 @@ const setUserActive = async (req, res) => {
       values.push(is_active ? 0 : 1);
     }
 
+    if (!is_active) {
+      const [userRow] = await db.query("SELECT role FROM users WHERE id = ?", [req.params.id]);
+      if (userRow.length > 0 && userRow[0].role === 'admin') {
+        const [activeAdmins] = await db.query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 AND (is_deleted IS NULL OR is_deleted = 0)");
+        if (activeAdmins.length <= 1) {
+          return res.status(403).json({ error: "Cannot disable the only active administrative account." });
+        }
+      }
+    }
+
     setClauses.push('updated_at = CURRENT_TIMESTAMP()');
     let sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
     values.push(req.params.id);
@@ -1664,6 +1689,35 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// Permanent individual delete
+const hardDeleteUser = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  try {
+    // Prevent hard-deleting the only admin? (Optional safety)
+    const [userRow] = await db.query("SELECT role FROM users WHERE id = ?", [userId]);
+    if (userRow.length > 0 && userRow[0].role === 'admin') {
+      const [admins] = await db.query("SELECT id FROM users WHERE role = 'admin'");
+      if (admins.length <= 1) {
+        return res.status(403).json({ error: "Cannot delete the only administrative account." });
+      }
+    }
+
+    const [result] = await db.query("DELETE FROM users WHERE id = ?", [userId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    return res.json({ message: "User permanently deleted from database." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to permanently delete user." });
+  }
+};
+
 // Delete all users (soft delete/archive)
 const deleteAllUsers = async (req, res) => {
   try {
@@ -1709,6 +1763,28 @@ const deleteAllUsers = async (req, res) => {
   }
 };
 
+// Disable all users
+const disableAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query("UPDATE users SET is_active = 0, is_disable = 1, updated_at = CURRENT_TIMESTAMP() WHERE (is_deleted IS NULL OR is_deleted = 0)");
+    return res.json({ message: `${result.affectedRows} users disabled successfully.`, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to disable users." });
+  }
+};
+
+// Hard delete non-admin users
+const hardDeleteAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query("DELETE FROM users WHERE role <> 'admin'");
+    return res.json({ message: `${result.affectedRows} non-admin users permanently deleted.`, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to hard-delete users." });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -1719,7 +1795,10 @@ module.exports = {
   updateUserProfileImage,
   changeUserPassword,
   deleteUser,
+  hardDeleteUser,
   deleteAllUsers,
+  hardDeleteAllUsers,
+  disableAllUsers,
   setUserActive,
   loginUser,
   inviteUser,
