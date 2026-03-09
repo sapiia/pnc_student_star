@@ -131,6 +131,8 @@ export default function TeacherStudentProfilePage() {
   const [replyToMessage, setReplyToMessage] = useState<ConversationMessage | null>(null);
   const [isMarkingReplyReadId, setIsMarkingReplyReadId] = useState<number | null>(null);
   const [teacherMaxFeedbackCharacters, setTeacherMaxFeedbackCharacters] = useState(1000);
+  const [globalRatingScale, setGlobalRatingScale] = useState(5);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
 
   useEffect(() => {
     try {
@@ -177,10 +179,11 @@ export default function TeacherStudentProfilePage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [userRes, evalRes, setRes] = await Promise.all([
+        const [userRes, evalRes, setRes, criteriaRes] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${id}`),
           fetch(`${API_BASE_URL}/evaluations/user/${id}`),
-          fetch(`${API_BASE_URL}/settings/key/teacher_max_feedback_characters`)
+          fetch(`${API_BASE_URL}/settings/key/teacher_max_feedback_characters`),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
         ]);
         
         if (userRes.ok) setStudent(await userRes.json());
@@ -194,6 +197,12 @@ export default function TeacherStudentProfilePage() {
            const setData = await setRes.json();
            const limit = Number(setData?.value);
            if (limit > 0) setTeacherMaxFeedbackCharacters(limit);
+        }
+        if (criteriaRes.ok) {
+           const criteriaData = await criteriaRes.json();
+           const scale = Math.max(1, Number(criteriaData?.ratingScale || 5));
+           setGlobalRatingScale(scale);
+           setGlobalCriteria(Array.isArray(criteriaData?.criteria) ? criteriaData.criteria : []);
         }
       } catch (err) {
         console.error("Failed to load student profile", err);
@@ -339,16 +348,45 @@ export default function TeacherStudentProfilePage() {
   };
 
   const radarData = useMemo(() => {
-    if (!latestEval?.responses?.length) return { data: [], maxValue: 5 };
-    const ratingScale = Math.max(1, Number(latestEval.rating_scale || 5));
-    const data = latestEval.responses.map((response: any) => ({
-      subject: String(response.criterion_name || response.criterion_key || 'Criterion'),
-      score: Math.max(0, Number(response.star_value || 0)),
-    }));
-    return { data, maxValue: ratingScale };
-  }, [latestEval]);
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    if (!activeGlobal.length) return { data: [], maxValue: globalRatingScale };
+    
+    const data = activeGlobal.map((criterion, index) => {
+      const response = (latestEval?.responses || []).find((r: any) => 
+        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+      );
+      
+      return {
+        subject: String(criterion.name || `Criterion ${index + 1}`),
+        score: response ? Math.max(0, Number(response.star_value || 0)) : 0,
+      };
+    });
 
-  const selectedCriteria = latestEval?.responses || [];
+    return { data, maxValue: globalRatingScale };
+  }, [latestEval, globalCriteria, globalRatingScale]);
+
+  const selectedCriteria = useMemo(() => {
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    
+    return activeGlobal.map((criterion, index) => {
+      const response = (latestEval?.responses || []).find((r: any) => 
+        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+      );
+      
+      return {
+        criterion_id: criterion.id,
+        criterion_key: criterion.id || criterion.name || `criterion-${index}`,
+        criterion_name: criterion.name,
+        criterion_icon: criterion.icon,
+        star_value: response ? Number(response.star_value || 0) : 0,
+        reflection: response ? String(response.reflection || '').trim() : '',
+        tip_snapshot: response ? String(response.tip_snapshot || '').trim() : '',
+        tip: response ? String(response.tip_snapshot || '').trim() : '',
+      };
+    });
+  }, [globalCriteria, latestEval]);
 
   if (isLoading) {
     return (
@@ -622,7 +660,7 @@ export default function TeacherStudentProfilePage() {
                                  <span className={cn('text-[9px] font-black uppercase tracking-widest', style.detailText)}>Details</span>
                                </div>
                                <div className={cn('flex gap-1 mb-4', style.stars)}>
-                                 {Array.from({ length: 5 }).map((_, i) => (
+                                 {Array.from({ length: globalRatingScale }).map((_, i) => (
                                    <Star key={i} className={cn('w-4 h-4 fill-current', i >= Math.floor(response.star_value) && 'text-slate-200 fill-slate-200')} />
                                  ))}
                                </div>
@@ -675,7 +713,7 @@ export default function TeacherStudentProfilePage() {
                     <p className="text-[11px] font-black uppercase tracking-widest text-primary">Criterion Detail</p>
                     <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
                     <div className="flex items-center gap-3 text-primary">
-                      {Array.from({ length: 5 }).map((_, index) => (
+                      {Array.from({ length: globalRatingScale }).map((_, index) => (
                         <Star
                           key={index}
                           className={cn(
@@ -684,7 +722,7 @@ export default function TeacherStudentProfilePage() {
                           )}
                         />
                       ))}
-                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/5 Stars</span>
+                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/{globalRatingScale} Stars</span>
                     </div>
                   </div>
                 </div>

@@ -276,6 +276,7 @@ export default function TeacherStudentListPage() {
   const [isDeletingFeedbackId, setIsDeletingFeedbackId] = useState<number | null>(null);
   const [pendingDeleteFeedbackId, setPendingDeleteFeedbackId] = useState<number | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
+  const [globalRatingScale, setGlobalRatingScale] = useState(5);
 
   useEffect(() => {
     try {
@@ -324,15 +325,17 @@ export default function TeacherStudentListPage() {
       setLoadError('');
 
       try {
-        const [usersResponse, evaluationsResponse, feedbackLimitResponse] = await Promise.all([
+        const [usersResponse, evaluationsResponse, feedbackLimitResponse, criteriaConfigResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/users`),
           fetch(`${API_BASE_URL}/evaluations`),
           fetch(`${API_BASE_URL}/settings/key/teacher_max_feedback_characters`),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
         ]);
 
         const usersData = await usersResponse.json().catch(() => []);
         const evaluationsData = await evaluationsResponse.json().catch(() => []);
         const feedbackLimitData = await feedbackLimitResponse.json().catch(() => ({}));
+        const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
 
         if (!usersResponse.ok) {
           throw new Error(usersData?.error || 'Failed to load students.');
@@ -345,6 +348,9 @@ export default function TeacherStudentListPage() {
         setTeacherMaxFeedbackCharacters(
           Number.isFinite(configuredLimit) && configuredLimit > 0 ? configuredLimit : 1000
         );
+
+        const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
+        setGlobalRatingScale(nextRatingScale);
 
         const latestEvaluationByUser = new Map<number, EvaluationRecord>();
         if (Array.isArray(evaluationsData)) {
@@ -366,7 +372,7 @@ export default function TeacherStudentListPage() {
                 const averageScore = latestEvaluation && Number.isFinite(Number(latestEvaluation.average_score))
                   ? Number(latestEvaluation.average_score)
                   : null;
-                const ratingScale = Math.max(1, Number(latestEvaluation?.rating_scale || 5));
+                const ratingScale = nextRatingScale;
 
                 return {
                   id: Number(user.id),
@@ -1053,7 +1059,7 @@ export default function TeacherStudentListPage() {
                                 {response.criterion_name || response.criterion_key}
                               </p>
                               <div className={cn('flex', style.stars)}>
-                                {Array.from({ length: Math.max(1, selectedStudent?.ratingScale || 5) }).map((_, index) => (
+                                {Array.from({ length: globalRatingScale }).map((_, index) => (
                                   <Star
                                     key={`${response.criterion_key}-${index}`}
                                     className={cn(

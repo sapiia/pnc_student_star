@@ -139,9 +139,11 @@ export default function EvaluationResultPage() {
   const [isLoading, setIsLoading] = useState(Boolean(locationState.evaluationId));
   const [quarterFeedback, setQuarterFeedback] = useState<FeedbackItem[]>([]);
   const [activeCriterion, setActiveCriterion] = useState<CriterionView | null>(null);
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const feedbackScrollRef = useRef<HTMLDivElement | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -151,6 +153,20 @@ export default function EvaluationResultPage() {
 
   useEffect(() => {
     const loadEvaluationAndComparison = async () => {
+      // Fetch global rating scale configuration
+      try {
+        const criteriaRes = await fetch(`${API_BASE_URL}/settings/evaluation-criteria`);
+        const criteriaData = await criteriaRes.json().catch(() => ({}));
+        if (criteriaRes.ok && criteriaData?.ratingScale) {
+          setGlobalRatingScale(Math.max(1, Number(criteriaData.ratingScale)));
+        }
+        if (criteriaRes.ok && Array.isArray(criteriaData?.criteria)) {
+          setGlobalCriteria(criteriaData.criteria);
+        }
+      } catch (err) {
+        console.error('Error loading global rating scale/criteria:', err);
+      }
+
       if (!locationState.evaluationId) {
         setIsLoading(false);
         return;
@@ -311,6 +327,27 @@ export default function EvaluationResultPage() {
   }, []);
 
   const criteriaData = useMemo<CriterionView[]>(() => {
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    
+    if (activeGlobal.length > 0) {
+      return activeGlobal.map((criterion, index) => {
+        const response = (evaluation?.responses || []).find(r => 
+          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+        );
+        
+        return {
+          key: String(criterion.id || criterion.name || `criterion-${index}`),
+          label: String(criterion.name || 'Unnamed Criterion'),
+          icon: String(criterion.icon || 'Star'),
+          score: response ? Number(response.star_value || 0) : 0,
+          reflection: response ? String(response.reflection || '').trim() : '',
+          tip: response ? String(response.tip_snapshot || '').trim() : '',
+          ...CRITERION_STYLES[index % CRITERION_STYLES.length],
+        };
+      });
+    }
+
     if (evaluation?.responses?.length) {
       return evaluation.responses.map((response, index) => ({
         key: response.criterion_key || toCriterionKey(response.criterion_name || `criterion${index + 1}`),
@@ -334,9 +371,9 @@ export default function EvaluationResultPage() {
       tip: '',
       ...CRITERION_STYLES[index % CRITERION_STYLES.length],
     }));
-  }, [evaluation, locationState.reflections, locationState.scores]);
+  }, [globalCriteria, evaluation, locationState.reflections, locationState.scores]);
 
-  const ratingScale = Math.max(1, Number(evaluation?.rating_scale || 5));
+  const ratingScale = globalRatingScale;
   const averageScore = criteriaData.length > 0
     ? criteriaData.reduce((sum, item) => sum + item.score, 0) / criteriaData.length
     : Number(evaluation?.average_score || 0);

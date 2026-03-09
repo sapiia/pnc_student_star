@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { 
-  Star, 
-  Bell, 
-  HelpCircle, 
+import {
+  Star,
+  Bell,
+  HelpCircle,
   PlusCircle,
   Home,
   Briefcase,
@@ -134,54 +134,77 @@ export default function DashboardPage() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [latestEvaluation, setLatestEvaluation] = useState<EvaluationRecord | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const canStartEvaluation = !latestEvaluation || daysLeft === 0;
 
-  const currentStatusCriteria = useMemo(() => (
-    (latestEvaluation?.responses || []).map((response, index) => ({
-      key: response.criterion_key,
-      label: String(response.criterion_name || response.criterion_key || `Criterion ${index + 1}`),
-      icon: String(response.criterion_icon || 'Star'),
-      score: Number(response.star_value || 0),
-      reflection: String(response.reflection || '').trim(),
-      tip: String(response.tip_snapshot || '').trim(),
-      ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
-    }))
-  ), [latestEvaluation]);
+  const currentStatusCriteria = useMemo(() => {
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+
+    return activeGlobal.map((criterion, index) => {
+      const response = (latestEvaluation?.responses || []).find(r =>
+        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+      );
+
+      return {
+        key: String(criterion.id || criterion.name || `criterion-${index}`),
+        label: String(criterion.name || 'Unnamed Criterion'),
+        icon: String(criterion.icon || 'Star'),
+        score: response ? Number(response.star_value || 0) : 0,
+        reflection: response ? String(response.reflection || '').trim() : '',
+        tip: response ? String(response.tip_snapshot || '').trim() : '',
+        ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
+      };
+    });
+  }, [globalCriteria, latestEvaluation]);
 
   const historicalComparison = useMemo(() => {
-    const sortedEvaluations = [...evaluations].sort((left, right) => getEvaluationSortValue(left) - getEvaluationSortValue(right));
-    if (sortedEvaluations.length === 0) return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[] };
+    const sortedEvaluations = [...evaluations].sort((left, right) => (
+      getEvaluationSortValue(left) - getEvaluationSortValue(right)
+    ));
 
-    const comparedEvaluations = sortedEvaluations.length === 1 ? [sortedEvaluations[0]] : sortedEvaluations.slice(-2);
-    const criteriaOrder = comparedEvaluations.reduce<string[]>((acc, evaluation) => {
-      (evaluation.responses || []).forEach((response, idx) => {
-        const key = String(response.criterion_key || response.criterion_name || `criterion-${idx + 1}`).trim() || `criterion-${idx + 1}`;
-        if (!acc.includes(key)) acc.push(key);
-      });
-      return acc;
-    }, []);
+    if (sortedEvaluations.length === 0) {
+      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[], maxValue: globalRatingScale };
+    }
 
-    const data = criteriaOrder.map((criterionKey, index) => {
-      const subject = comparedEvaluations.flatMap(e => e.responses || []).find(r => String(r.criterion_key || '').trim() === criterionKey)?.criterion_name || criterionKey;
-      const row: Record<string, string | number> = { subject: String(subject || `Criterion ${index + 1}`) };
+    const comparedEvaluations = sortedEvaluations.length === 1
+      ? [sortedEvaluations[0]]
+      : sortedEvaluations.slice(-2);
+
+    const maxValue = globalRatingScale;
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+
+    const data = activeGlobal.map((criterion, index) => {
+      const row: Record<string, string | number> = {
+        subject: String(criterion.name || `Criterion ${index + 1}`),
+      };
+
       comparedEvaluations.forEach((evaluation, evaluationIndex) => {
-        const chartKey = comparedEvaluations.length === 1 ? 'current' : evaluationIndex === 0 ? 'previous' : 'current';
-        const response = (evaluation.responses || []).find(item => String(item.criterion_key || '').trim() === criterionKey);
-        const ratingScale = Math.max(1, Number(evaluation.rating_scale || 5));
-        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0) * (100 / ratingScale)) : 0;
+        const chartKey = comparedEvaluations.length === 1
+          ? 'current'
+          : evaluationIndex === 0
+            ? 'previous'
+            : 'current';
+        const response = (evaluation.responses || []).find(r => 
+          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+        );
+        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
       });
       return row;
     });
 
     const dataKeys = comparedEvaluations.map((evaluation, index) => ({
       key: comparedEvaluations.length === 1 ? 'current' : index === 0 ? 'previous' : 'current',
-      name: formatPeriodLabel(evaluation.period),
-      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
-      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#94a3b8',
+      name: index === 0 && comparedEvaluations.length > 1 ? 'Baseline' : formatPeriodLabel(evaluation.period),
+      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
+      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
     }));
 
-    return { data, dataKeys };
-  }, [evaluations]);
+    return { data, dataKeys, maxValue };
+  }, [evaluations, globalRatingScale, globalCriteria]);
+
 
   useEffect(() => { setShowUrgentNotification(daysLeft <= 3); }, [daysLeft]);
 
@@ -219,29 +242,44 @@ export default function DashboardPage() {
       const prefs = prefsRaw ? JSON.parse(prefsRaw) : null;
       const remindersEnabled = prefs?.remindersEnabled !== false;
 
-      const [userRes, intervalRes, evalRes, visibilityRes, reminderRes, feedbackRes, notifRes] = await Promise.all([
+      const [
+        response,
+        intervalResponse,
+        evaluationsResponse,
+        studentFeedbackVisibilityResponse,
+        reminderNotificationsResponse,
+        feedbackResponse,
+        notificationsResponse,
+        criteriaConfigResponse,
+      ] = await Promise.all([
         fetch(`${API_BASE_URL}/users/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
         fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
         fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
         fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
-        fetch(`${API_BASE_URL}/notifications/user/${userId}`)
+        fetch(`${API_BASE_URL}/notifications/user/${userId}`),
+        fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
       ]);
 
-      const userData = await userRes.json().catch(() => ({}));
-      const intervalData = await intervalRes.json().catch(() => ({}));
-      const evalData = await evalRes.json().catch(() => []);
-      const visibilityData = await visibilityRes.json().catch(() => ({}));
-      const reminderData = await reminderRes.json().catch(() => ({}));
-      const feedbackData = await feedbackRes.json().catch(() => []);
-      const notifData = await notifRes.json().catch(() => []);
+      const data = await response.json().catch(() => ({}));
+      const intervalData = await intervalResponse.json().catch(() => ({}));
+      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      const visibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
+      const reminderData = await reminderNotificationsResponse.json().catch(() => ({}));
+      const feedbackData = await feedbackResponse.json().catch(() => []);
+      const notifData = await notificationsResponse.json().catch(() => []);
+      const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
 
-      const sortedEvals = Array.isArray(evalData) ? [...evalData].sort((a, b) => getEvaluationSortValue(b) - getEvaluationSortValue(a)) : [];
+      const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
+      setGlobalRatingScale(nextRatingScale);
+      setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+
+      const sortedEvals = Array.isArray(evaluationsData) ? [...evaluationsData].sort((a, b) => getEvaluationSortValue(b) - getEvaluationSortValue(a)) : [];
       const latestEval = sortedEvals.length > 0 ? sortedEvals[0] : null;
 
-      const resolvedName = String(userData?.name || '').trim() || [userData?.first_name, userData?.last_name].filter(Boolean).join(' ').trim() || localName || 'Student';
-      const resolvedStudentId = String(userData?.student_id || userData?.resolved_student_id || localStudentId || '').trim();
+      const resolvedName = String(data?.name || '').trim() || [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() || localName || 'Student';
+      const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || localStudentId || '').trim();
 
       setStudentName(resolvedName);
       setStudentId(resolvedStudentId);
@@ -382,10 +420,36 @@ export default function DashboardPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {currentStatusCriteria.map((criterion, idx) => (
-                    <motion.button key={criterion.key} type="button" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...listTransition, delay: idx * 0.04 }} whileHover={{ y: -2 }} onClick={() => setActiveCriterion({ key: criterion.key, label: criterion.label, icon: criterion.icon, color: criterion.color, bgColor: criterion.bgColor, score: criterion.score, reflection: criterion.reflection, tip: criterion.tip })} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 text-left hover:border-primary/30 hover:shadow-lg transition-all">
-                      <div className={`size-12 rounded-lg ${criterion.bgColor} ${criterion.color} flex items-center justify-center`}>{getIcon(criterion.icon)}</div>
-                      <div className="flex-1"><p className="text-sm font-semibold mb-1">{criterion.label}</p><StarRating rating={criterion.score} /></div>
-                      <ArrowRight className="w-4 h-4 text-slate-300" />
+                    <motion.button
+                      type="button"
+                      key={criterion.key}
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={prefersReducedMotion ? { duration: 0 } : { ...listTransition, delay: idx * 0.04 }}
+                      whileHover={prefersReducedMotion ? undefined : { y: -2, scale: 1.005 }}
+                      style={{ willChange: 'transform, opacity' }}
+                      onClick={() => {
+                        setActiveCriterion({
+                          key: criterion.key,
+                          label: criterion.label,
+                          icon: criterion.icon,
+                          color: criterion.color,
+                          bgColor: criterion.bgColor,
+                          score: criterion.score,
+                          reflection: criterion.reflection,
+                          tip: criterion.tip,
+                        });
+                      }}
+                      className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 text-left hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all transform-gpu"
+                    >
+                      <div className={`size-12 rounded-lg ${criterion.bgColor} ${criterion.color} flex items-center justify-center shrink-0`}>
+                        {getIcon(criterion.icon)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold mb-1">{criterion.label}</p>
+                        <StarRating rating={criterion.score} max={globalRatingScale} />
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
                     </motion.button>
                   ))}
                 </div>
@@ -395,7 +459,13 @@ export default function DashboardPage() {
             <div className="space-y-8">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="text-sm font-bold mb-4 uppercase tracking-wider text-slate-500">Historical Growth</h3>
-                {historicalComparison.data.length > 0 ? <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} /> : <div className="h-[350px] rounded-xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">No evaluation history yet.</div>}
+                {historicalComparison.data.length > 0 ? (
+                  <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} maxValue={historicalComparison.maxValue} />
+                ) : (
+                  <div className="h-[350px] rounded-xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
+                    No evaluation history is available yet.
+                  </div>
+                )}
               </div>
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">Recent Feedback</h3><button onClick={() => navigate('/feedback')} className="text-xs text-primary font-semibold hover:underline">View All</button></div>
@@ -421,8 +491,17 @@ export default function DashboardPage() {
             <motion.div initial={{ opacity: 0, y: 18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: 0.97 }} transition={listTransition} className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
               <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
                 <div className="flex items-start gap-4">
-                  <div className={`size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color}`}>{getIcon(activeCriterion.icon)}</div>
-                  <div className="space-y-2"><p className="text-[11px] font-black uppercase tracking-widest text-primary">Current Status Detail</p><h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3><div className="flex items-center gap-3"><StarRating rating={activeCriterion.score} starClassName="w-5 h-5" /><span className="text-sm font-black text-slate-900">{activeCriterion.score}/5 Stars</span></div></div>
+                  <div className={`size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color}`}>
+                    {getIcon(activeCriterion.icon)}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Current Status Detail</p>
+                    <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
+                    <div className="flex items-center gap-3">
+                      <StarRating rating={activeCriterion.score} max={globalRatingScale} starClassName="w-5 h-5" />
+                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/{globalRatingScale} Stars</span>
+                    </div>
+                  </div>
                 </div>
                 <button onClick={() => setActiveCriterion(null)} className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center"><X className="w-5 h-5" /></button>
               </div>
