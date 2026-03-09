@@ -245,8 +245,8 @@ export default function AdminDashboardPage() {
                       <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className={cn("size-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0", user.color)}>
-                              {user.initials}
+                            <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                              <img src="http://localhost:3001/uploads/logo/star_gmail_logo.jpg" alt={user.name} className="w-full h-full object-cover" />
                             </div>
                             <div>
                               <p className="text-sm font-black text-slate-900">{user.name}</p>

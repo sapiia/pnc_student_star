@@ -382,7 +382,7 @@ export default function TeacherStudentListPage() {
                   generation: extractGeneration(user),
                   className: extractClassName(user),
                   gender: normalizeGender(user.gender),
-                  avatar: String(user.profile_image || '').trim() || `https://picsum.photos/seed/student-${user.id}/100/100`,
+                  avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
                   averageScore,
                   ratingScale,
                   latestEvaluation,

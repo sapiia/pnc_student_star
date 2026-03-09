@@ -415,7 +415,7 @@ export default function TeacherStudentProfilePage() {
   }
 
   const studentName = student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Student';
-  const avatarUrl = student.profile_image || `https://api.dicebear.com/7.x/initials/svg?seed=${studentName}`;
+  const avatarUrl = student.profile_image || "http://localhost:3001/uploads/logo/star_gmail_logo.jpg";
   const studentIdDisplay = student.student_id || student.resolved_student_id || `STU-${student.id}`;
 
   return (

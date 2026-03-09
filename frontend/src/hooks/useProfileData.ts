@@ -50,6 +50,14 @@ export function useProfileData({ defaultName = 'User', defaultPhoto = 'http://lo
     };
 
     loadProfileIdentity();
+
+    window.addEventListener('profile-updated', loadProfileIdentity);
+    window.addEventListener('profile-photo-updated', loadProfileIdentity);
+
+    return () => {
+      window.removeEventListener('profile-updated', loadProfileIdentity);
+      window.removeEventListener('profile-photo-updated', loadProfileIdentity);
+    };
   }, [defaultName]);
 
   return { profileName, profilePhoto };

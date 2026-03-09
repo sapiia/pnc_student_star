@@ -192,7 +192,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     status,
     initials,
     color: randomColor,
-    profileImage: String(apiUser.profile_image || '').trim() || undefined,
+    profileImage: String(apiUser.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
     studentId
   };
 };

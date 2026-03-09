@@ -30,7 +30,7 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole="System Admin"
-      defaultPhoto="https://picsum.photos/seed/admin/100/100"
+      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
       isSettingsEnabled={false}
       settingsItems={settingsItems}
       settingsPath="/admin/settings"

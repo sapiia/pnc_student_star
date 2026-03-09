@@ -173,7 +173,7 @@ export default function TeacherDashboardPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || `https://api.dicebear.com/7.x/initials/svg?seed=${toDisplayName(user)}`,
+                avatar: String(user.profile_image || '').trim() || `http://localhost:3001/uploads/logo/star_gmail_logo.jpg`,
                 generation: extractGeneration(user),
                 class: extractClassName(user),
                 rating: averageScore,

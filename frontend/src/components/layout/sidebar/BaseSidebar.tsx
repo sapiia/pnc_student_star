@@ -1,7 +1,7 @@
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, LogOut, AlertCircle, Settings } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BrandLogo, { PNLogoMark } from '../../ui/BrandLogo';
 
@@ -33,7 +33,7 @@ export default function BaseSidebar({
   profileName,
   profilePhoto,
   profileRole,
-  defaultPhoto = 'https://picsum.photos/seed/user/100/100',
+  defaultPhoto = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
   isSettingsEnabled = false,
   settingsItems = [],
   onSettingsClick,
@@ -44,7 +44,6 @@ export default function BaseSidebar({
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
-  const [photo, setPhoto] = useState(profilePhoto || defaultPhoto);
 
   useEffect(() => {
     if (['/profile', '/help', '/faq'].includes(location.pathname)) {
@@ -56,25 +55,6 @@ export default function BaseSidebar({
     localStorage.setItem('sidebar_collapsed', String(isCollapsed));
   }, [isCollapsed]);
 
-  useEffect(() => {
-    const refreshPhoto = () => {
-      try {
-        const raw = localStorage.getItem('auth_user');
-        if (!raw) return;
-        const authUser = JSON.parse(raw);
-        const userId = Number(authUser?.id);
-        if (!Number.isInteger(userId) || userId <= 0) return;
-        if (authUser?.profile_image) {
-          setPhoto(String(authUser.profile_image));
-        } else {
-          const savedPhoto = localStorage.getItem(`profile_photo_${userId}`);
-          if (savedPhoto) setPhoto(savedPhoto);
-        }
-      } catch { /* ignore */ }
-    };
-    window.addEventListener('profile-photo-updated', refreshPhoto);
-    return () => window.removeEventListener('profile-photo-updated', refreshPhoto);
-  }, []);
 
   const menuButtonClass = "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ease-in-out relative group origin-left";
   const profileButtonClass = "flex items-center gap-3 bg-slate-50 p-3 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all duration-300 ease-in-out group relative origin-left";
@@ -159,7 +139,7 @@ export default function BaseSidebar({
       <div className="p-4 border-t border-slate-100">
         <div className={cn("flex flex-col gap-4", isCollapsed ? "items-center" : "")}>
           <div className={cn(profileButtonClass, isCollapsed ? "justify-center p-2" : "")} style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }} onClick={() => navigate(settingsPath || '/')}>
-            <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm"><img alt={profileName} src={photo} /></div>
+            <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm"><img alt={profileName} src={profilePhoto || defaultPhoto} /></div>
             {!isCollapsed && <div className="flex-1 min-w-0"><p className="text-xs font-black text-slate-900 truncate">{profileName}</p><p className="text-[10px] text-slate-500 font-bold truncate">{profileRole}</p></div>}
             {isCollapsed && <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">Profile</div>}
           </div>

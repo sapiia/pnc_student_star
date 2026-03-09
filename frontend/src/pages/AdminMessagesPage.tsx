@@ -131,7 +131,7 @@ export default function AdminMessagesPage() {
   const [adminId, setAdminId] = useState<number | null>(null);
   const [adminName, setAdminName] = useState("Administrator");
   const [adminAvatar, setAdminAvatar] = useState(
-    "https://picsum.photos/seed/admin-self/100/100",
+    "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
   );
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
@@ -187,7 +187,7 @@ export default function AdminMessagesPage() {
           setAdminAvatar(savedPhoto);
         } else {
           setAdminAvatar(
-            `https://picsum.photos/seed/admin-${resolvedAdminId}/100/100`,
+            "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
           );
         }
       }
@@ -373,7 +373,7 @@ export default function AdminMessagesPage() {
           type: toContactType(String(user.role || "")),
           avatar:
             String(user.profile_image || "").trim() ||
-            `https://picsum.photos/seed/user-${contactId}/100/100`,
+            "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
           lastMessage,
           timestamp: contactMessages[0]?.notification?.created_at,
           unreadCount,
