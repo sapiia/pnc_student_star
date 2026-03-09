@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Bell,
   CheckCheck,
@@ -13,7 +13,7 @@ import TeacherSidebar from '../components/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Minimize2, Maximize2 } from 'lucide-react';
 
 type ApiUser = {
   id: number;
@@ -127,13 +127,16 @@ const composeDirectMessage = (payload: DirectMessage) => (
 
 export default function TeacherMessagesPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const passedState = location.state as { selectedContactId?: number, isMobileChatOpen?: boolean } | null;
+  
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [teacherName, setTeacherName] = useState('Teacher');
   const [teacherAvatar, setTeacherAvatar] = useState('https://picsum.photos/seed/teacher-self/100/100');
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(passedState?.selectedContactId || null);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(passedState?.isMobileChatOpen || !!passedState?.selectedContactId);
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -145,6 +148,7 @@ export default function TeacherMessagesPage() {
   const [replyToMessageId, setReplyToMessageId] = useState<number | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<number[]>([]);
+  const [isCompactMode, setIsCompactMode] = useState(false);
   const typingStopTimerRef = useRef<number | null>(null);
   const hasSentTypingRef = useRef(false);
 
@@ -236,6 +240,13 @@ export default function TeacherMessagesPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (passedState?.selectedContactId) {
+      // Clear state so it doesn't re-trigger if refreshed
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [passedState, navigate, location.pathname]);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -347,13 +358,16 @@ export default function TeacherMessagesPage() {
   }, [contacts, searchQuery]);
 
   useEffect(() => {
+    // ONLY override selected contact if it's currently invalid (missing entirely from filtered list) AND we have no explicit passed state
+    // We already initialized it in useState(passedState?.selectedContactId).
     if (filteredContacts.length === 0) {
       setSelectedContactId(null);
       return;
     }
 
     const exists = filteredContacts.some((contact) => contact.id === selectedContactId);
-    if (!exists) {
+    if (!exists && selectedContactId === null) {
+      // Auto-select the first contact if none is selected
       setSelectedContactId(filteredContacts[0].id);
     }
   }, [filteredContacts, selectedContactId]);
@@ -636,7 +650,7 @@ export default function TeacherMessagesPage() {
 
         <div className="flex-1 flex overflow-hidden relative">
           <div className={cn(
-            "w-full md:w-[350px] border-r border-slate-200 bg-white flex flex-col shrink-0 transition-transform duration-300 md:translate-x-0 pb-20 md:pb-0",
+            "w-full md:w-[300px] lg:w-[350px] border-r border-slate-200 bg-white flex flex-col shrink-0 transition-transform duration-300 md:translate-x-0 pb-20 md:pb-0",
             isMobileChatOpen ? "-translate-x-full absolute md:relative w-full h-full" : "translate-x-0 relative"
           )}>
             <div className="p-6">
@@ -649,6 +663,12 @@ export default function TeacherMessagesPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
+              </div>
+              <div className="flex justify-end mt-2">
+                 <button onClick={() => setIsCompactMode(!isCompactMode)} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-primary transition-colors font-medium">
+                   {isCompactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                   {isCompactMode ? 'Expand Cards' : 'Compact Cards'}
+                 </button>
               </div>
             </div>
 
@@ -664,25 +684,26 @@ export default function TeacherMessagesPage() {
                       setIsMobileChatOpen(true);
                     }}
                     className={cn(
-                      'w-full p-6 text-left border-b border-slate-50 transition-all relative group',
+                      'w-full text-left border-b border-slate-50 transition-all relative group',
+                      isCompactMode ? 'p-3' : 'p-6',
                       selectedContactId === contact.id ? 'bg-primary/5' : 'hover:bg-slate-50'
                     )}
                   >
                     {selectedContactId === contact.id ? (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
                     ) : null}
-                    <div className="flex gap-4">
-                      <div className="size-12 rounded-xl overflow-hidden shrink-0 shadow-sm bg-slate-200">
+                    <div className={cn('flex', isCompactMode ? 'gap-3' : 'gap-4')}>
+                      <div className={cn('rounded-xl overflow-hidden shrink-0 shadow-sm bg-slate-200', isCompactMode ? 'size-10' : 'size-12')}>
                         <img src={contact.avatar} alt={contact.name} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-sm font-black text-slate-900 truncate">{contact.name}</h4>
-                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap ml-2">{formatDateTime(contact.timestamp)}</span>
+                          <h4 className={cn('font-black text-slate-900 truncate', isCompactMode ? 'text-xs' : 'text-sm')}>{contact.name}</h4>
+                          <span className={cn('font-bold text-slate-400 whitespace-nowrap ml-2', isCompactMode ? 'text-[9px]' : 'text-[10px]')}>{formatDateTime(contact.timestamp)}</span>
                         </div>
-                        <p className="text-xs text-slate-500 truncate font-medium">{contact.lastMessage || 'No messages yet'}</p>
-                        <div className="mt-2 flex items-center justify-between">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{contact.role}</p>
+                        <p className={cn('text-slate-500 truncate font-medium', isCompactMode ? 'text-[10px]' : 'text-xs')}>{contact.lastMessage || 'No messages yet'}</p>
+                        <div className="mt-1 flex items-center justify-between">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{contact.role}</p>
                           {contact.unreadCount > 0 ? (
                             <span className="bg-primary text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{contact.unreadCount}</span>
                           ) : null}

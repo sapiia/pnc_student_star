@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getRealtimeSocket } from '../lib/realtime';
 import {
   ArrowRight,
   Bell,
@@ -137,9 +138,17 @@ export default function EvaluationResultPage() {
   const [quarterFeedback, setQuarterFeedback] = useState<FeedbackItem[]>([]);
   const [activeCriterion, setActiveCriterion] = useState<CriterionView | null>(null);
   const feedbackScrollRef = useRef<HTMLDivElement | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 5000);
+  };
 
   useEffect(() => {
-    const loadEvaluation = async () => {
+    const loadEvaluationAndComparison = async () => {
       if (!locationState.evaluationId) {
         setIsLoading(false);
         return;
@@ -147,20 +156,43 @@ export default function EvaluationResultPage() {
 
       try {
         const response = await fetch(`${API_BASE_URL}/evaluations/${locationState.evaluationId}`);
-        const data = await response.json().catch(() => ({}));
+        const currentData = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data?.error || 'Failed to load evaluation result.');
+          throw new Error(currentData?.error || 'Failed to load evaluation result.');
         }
-        setEvaluation(data as EvaluationRecord);
-      } catch {
+        setEvaluation(currentData as EvaluationRecord);
+
+        // Fetch user's evaluation history to find the previous one for comparison
+        const userId = Number(currentData.user_id);
+        if (userId) {
+          const historyResponse = await fetch(`${API_BASE_URL}/evaluations/user/${userId}`);
+          const historyData = await historyResponse.json().catch(() => []);
+          if (Array.isArray(historyData) && historyData.length > 1) {
+            // History is usually sorted by date descending, so current is at [0] and previous is at [1]
+            // But since we just submitted, current might be at [0]
+            const sortedHistory = [...historyData].sort((a, b) => 
+              new Date(b.submitted_at || b.created_at).getTime() - new Date(a.submitted_at || a.created_at).getTime()
+            );
+            
+            const currentIndex = sortedHistory.findIndex(h => Number(h.id) === Number(locationState.evaluationId));
+            if (currentIndex !== -1 && currentIndex < sortedHistory.length - 1) {
+              const previousEval = sortedHistory[currentIndex + 1];
+              setPreviousEvaluation(previousEval);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading evaluation for comparison:', err);
         setEvaluation(null);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadEvaluation();
+    loadEvaluationAndComparison();
   }, [locationState.evaluationId]);
+
+  const [previousEvaluation, setPreviousEvaluation] = useState<EvaluationRecord | null>(null);
 
   useEffect(() => {
     const loadQuarterFeedback = async () => {
@@ -216,6 +248,66 @@ export default function EvaluationResultPage() {
     container.scrollTop = container.scrollHeight;
   }, [quarterFeedback]);
 
+  // Real-time notifications via Socket.IO
+  useEffect(() => {
+    const raw = localStorage.getItem('auth_user');
+    const authUser = raw ? JSON.parse(raw) : null;
+    const userId = Number(authUser?.id);
+    if (!userId) return;
+
+    const socket = getRealtimeSocket();
+
+    // Feedback notifications (teacher gave/updated/deleted feedback)
+    const handleFeedbackCreated = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('🎓 Your teacher just sent you new feedback!');
+      // Refresh feedback list
+      setQuarterFeedback(prev => [...prev]); // trigger re-fetch via setEvaluation
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    const handleFeedbackUpdated = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('✏️ A teacher updated their feedback for you.');
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    const handleFeedbackDeleted = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('🗑️ A feedback message was removed.');
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    // Admin notifications (evaluation settings/criteria changed, profile updated)
+    const handleNotificationCreated = (payload: { userId?: number; notification?: { message?: string } }) => {
+      if (Number(payload?.userId) !== userId) return;
+      const message = String(payload?.notification?.message || '');
+      if (message.toLowerCase().includes('evaluation') || message.toLowerCase().includes('criteria')) {
+        showToast('⚙️ Admin updated evaluation settings. Your results may reflect the latest criteria.');
+      } else if (message.toLowerCase().includes('profile') || message.toLowerCase().includes('class') || message.toLowerCase().includes('student id')) {
+        showToast('👤 An admin updated your profile information.');
+      } else if (message) {
+        showToast(`🔔 ${message}`);
+      }
+    };
+
+    socket.emit('feedback:subscribe', { studentId: userId });
+    socket.on('feedback:created', handleFeedbackCreated);
+    socket.on('feedback:updated', handleFeedbackUpdated);
+    socket.on('feedback:deleted', handleFeedbackDeleted);
+    socket.on('notification:created', handleNotificationCreated);
+
+    return () => {
+      socket.emit('feedback:unsubscribe', { studentId: userId });
+      socket.off('feedback:created', handleFeedbackCreated);
+      socket.off('feedback:updated', handleFeedbackUpdated);
+      socket.off('feedback:deleted', handleFeedbackDeleted);
+      socket.off('notification:created', handleNotificationCreated);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const criteriaData = useMemo<CriterionView[]>(() => {
     if (evaluation?.responses?.length) {
       return evaluation.responses.map((response, index) => ({
@@ -254,13 +346,24 @@ export default function EvaluationResultPage() {
     (currentLowest, item) => (currentLowest === null || item.score < currentLowest.score ? item : currentLowest),
     null
   );
-  const radarData = criteriaData.map((item) => ({
-    subject: item.label,
-    prev: Math.max(0, item.score * 16),
-    curr: Math.max(0, item.score * (100 / ratingScale)),
-  }));
+  const radarData = criteriaData.map((item) => {
+    // Find the matching criterion in the previous evaluation
+    const prevResponse = previousEvaluation?.responses?.find(r =>
+      r.criterion_key === item.key || r.criterion_name === item.label
+    );
+    // Use raw star values — RadarChart uses domain=[0, ratingScale] for correct rings
+    const prevScore = prevResponse ? Number(prevResponse.star_value || 0) : 0;
+
+    return {
+      subject: item.label,
+      prev: Math.max(0, prevScore),
+      curr: Math.max(0, item.score),
+    };
+  });
+
+
   const radarKeys = [
-    { key: 'prev', name: 'Baseline', color: '#cbd5e1', fill: '#cbd5e1' },
+    { key: 'prev', name: previousEvaluation ? toPeriodLabel(previousEvaluation.period) : 'Baseline', color: '#cbd5e1', fill: '#cbd5e1' },
     { key: 'curr', name: toPeriodLabel(evaluation?.period || ''), color: '#5d5fef', fill: '#5d5fef' },
   ];
   const completedLabel = formatLongDate(String(evaluation?.submitted_at || evaluation?.created_at || new Date().toISOString()));
@@ -269,7 +372,7 @@ export default function EvaluationResultPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
+      <main className="relative flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
         <StudentMobileNav />
         <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
@@ -284,6 +387,29 @@ export default function EvaluationResultPage() {
             </button>
           </div>
         </header>
+
+        {/* Toast notification banner */}
+        <AnimatePresence>
+          {toastMessage ? (
+            <motion.div
+              key="toast"
+              initial={{ opacity: 0, y: -60 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -60 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute top-20 right-4 left-4 md:left-auto md:right-8 md:w-[420px] z-[200] bg-slate-900 text-white rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-3 border border-white/10"
+            >
+              <div className="flex-1 text-sm font-bold leading-snug">{toastMessage}</div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="shrink-0 p-1 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-[1200px] mx-auto flex flex-col gap-6 md:gap-8">
@@ -318,7 +444,7 @@ export default function EvaluationResultPage() {
                   </div>
 
                   {criteriaData.length > 0 ? (
-                    <RadarChart data={radarData} dataKeys={radarKeys} />
+                    <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
                   ) : (
                     <div className="h-[320px] rounded-2xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
                       {isLoading ? 'Loading evaluation result...' : 'No saved criteria data found.'}

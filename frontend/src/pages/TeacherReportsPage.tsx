@@ -248,7 +248,7 @@ export default function TeacherReportsPage() {
             </motion.div>
 
             {/* Bottom Row: Two Columns */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-8">
               {/* Criteria Distribution */}
               <motion.div 
                 initial={{ opacity: 0, x: -20 }}
@@ -337,7 +337,7 @@ export default function TeacherReportsPage() {
             </div>
 
             {/* Summary Insights */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-12">
               <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-2xl">
                 <div className="flex items-center gap-2 text-emerald-600 mb-2">
                   <TrendingUp className="w-5 h-5" />

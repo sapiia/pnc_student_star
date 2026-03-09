@@ -4,6 +4,9 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const XLSX = require('xlsx');
 const saltRounds = 10;
+const Notification = require('../models/Notification');
+const { emitNotificationEvent } = require('../src/realtime');
+
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
@@ -803,6 +806,7 @@ const createUser = async (req, res) => {
 // Update user
 const updateUser = async (req, res) => {
   const { name, email, role, class_name, student_id } = req.body;
+  const userId = req.params.id;
 
   try {
     const normalizedRole = normalizeRole(role);
@@ -814,11 +818,48 @@ const updateUser = async (req, res) => {
       return res.status(400).json({ error: "student_id is required when role is student." });
     }
 
+    // Get old user data to describe changes
+    const [oldUserRows] = await db.query("SELECT name, email, role, class as class_name, student_id FROM users WHERE id = ?", [userId]);
+    const oldUser = oldUserRows[0];
+
     const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ?, student_id = ? WHERE id = ?";
-    await db.query(sql, [name, email, normalizedRole, class_name || null, normalizedStudentId || null, req.params.id]);
+    await db.query(sql, [name, email, normalizedRole, class_name || null, normalizedStudentId || null, userId]);
+
+    // Construct notification message
+    if (oldUser) {
+      let changes = [];
+      const newClass = class_name || null;
+      const newStudentId = normalizedStudentId || null;
+      
+      if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
+      if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
+      
+      if (changes.length > 0) {
+        // Notify the updated user (e.g. the student)
+        const updateMsg = `Admin updated your profile: ${changes.join(', ')}.`;
+        const nId = await Notification.create({ user_id: userId, message: updateMsg, is_read: 0 });
+        const [nRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [nId]);
+        
+        if (nRows[0]) {
+          emitNotificationEvent({ action: 'created', notification: nRows[0] });
+        }
+
+        // Output to all teachers if the updated user is a student
+        if (normalizedRole === 'student') {
+           const [teacherRows] = await db.query("SELECT id FROM users WHERE role = 'teacher'");
+           const teacherMsg = `Admin updated profile for student ${name || oldUser.name} (${normalizedStudentId}): ${changes.join(', ')}.`;
+           for (const tRow of teacherRows) {
+               const tnId = await Notification.create({ user_id: tRow.id, message: teacherMsg, is_read: 0 });
+               const [tnRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [tnId]);
+               if (tnRows[0]) emitNotificationEvent({ action: 'created', notification: tnRows[0] });
+           }
+        }
+      }
+    }
+
     res.json({ message: "User updated successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Failed to update user:", err);
     res.status(500).json({ error: err.message });
   }
 };

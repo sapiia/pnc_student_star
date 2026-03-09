@@ -8,7 +8,7 @@ import {
 import TeacherSidebar from '../components/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 type AuthUser = {
   id: number;
@@ -317,7 +317,7 @@ export default function TeacherProfilePage() {
                   Active
                 </span>
               </div>
-                <div className="p-4 md:p-8 flex flex-col md:flex-row gap-8 md:gap-12">
+                <div className="p-4 md:p-8 flex flex-col lg:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
                       <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Teacher'} />
@@ -388,7 +388,7 @@ export default function TeacherProfilePage() {
                 <p className="text-[10px] md:text-xs text-slate-500 mt-1">Keep your account secure.</p>
               </div>
               <div className="p-4 md:p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Current Password</label>
                     <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
