@@ -11,9 +11,11 @@ import {
   X,
   CheckCircle2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import AdminSidebar from '../components/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
+import RadarChart from '../components/RadarChart';
 import React, { useEffect, useState } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
@@ -52,6 +54,12 @@ type BulkInvitedUser = {
   studentId?: string | null;
 };
 
+type BulkExistingUser = {
+  row: number;
+  name: string;
+  email: string;
+};
+
 type BulkValidatedRow = {
   row: number;
   payload: {
@@ -78,7 +86,17 @@ type ConfirmAction =
       user: UserRecord;
     }
   | {
+      kind: 'hard-delete';
+      user: UserRecord;
+    }
+  | {
       kind: 'delete-all';
+    }
+  | {
+      kind: 'disable-all';
+    }
+  | {
+      kind: 'hard-delete-all';
     };
 
 type ApiUser = {
@@ -180,6 +198,12 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
 export default function AdminUserManagementPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [selectedProfileUser, setSelectedProfileUser] = useState<UserRecord | null>(null);
+  const [profileEvaluations, setProfileEvaluations] = useState<any[]>([]);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [editStudentId, setEditStudentId] = useState('');
+  const [editClassName, setEditClassName] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
@@ -191,6 +215,8 @@ export default function AdminUserManagementPage() {
   const [isBulkCommitting, setIsBulkCommitting] = useState(false);
   const [bulkValidatedRows, setBulkValidatedRows] = useState<BulkValidatedRow[]>([]);
   const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
+  const [bulkExistingUsers, setBulkExistingUsers] = useState<BulkExistingUser[]>([]);
+  const [isInviteFinished, setIsInviteFinished] = useState(false);
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
@@ -357,7 +383,7 @@ export default function AdminUserManagementPage() {
       };
 
       setUsers([invitedUser, ...users]);
-      setIsModalOpen(false);
+      setIsInviteFinished(true);
       setNewUser(defaultNewUser);
       setSuccessMessage(data.message || 'Invitation email sent successfully.');
       setToastType(data.smtpConfigured === false ? 'warning' : 'success');
@@ -370,22 +396,77 @@ export default function AdminUserManagementPage() {
     }
   };
 
+  const handleViewUser = async (user: UserRecord) => {
+    setSelectedProfileUser(user);
+    setEditStudentId(user.studentId || '');
+    setEditClassName(user.group || ''); // Group usually acts as class for students
+    setIsProfileModalOpen(true);
+    setProfileEvaluations([]);
+    
+    if (user.role === 'Student') {
+      try {
+        const res = await fetch(`${API_BASE_URL}/evaluations/user/${user.id}`);
+        if (res.ok) {
+           const json = await res.json();
+           setProfileEvaluations(Array.isArray(json) ? json : []);
+        }
+      } catch (err) {
+        console.error("Failed to load student performance", err);
+      }
+    }
+  };
+
+  const handleUpdateStudentInfo = async () => {
+    if (!selectedProfileUser || isProfileSaving) return;
+    setIsProfileSaving(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${selectedProfileUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: selectedProfileUser.name,
+          email: selectedProfileUser.email,
+          role: selectedProfileUser.role.toLowerCase(),
+          class_name: editClassName,
+          student_id: editStudentId
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUsers(prev => prev.map(u => 
+          u.id === selectedProfileUser.id 
+            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName } 
+            : u
+        ));
+        setSuccessMessage('Student details updated.');
+        setToastType('success');
+        setShowSuccess(true);
+        setIsProfileModalOpen(false);
+      } else {
+        setFormError(data.error || 'Failed to update student info');
+      }
+    } catch {
+      setFormError('Network error while updating.');
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
+
   const toggleUserActive = (user: UserRecord) => {
     if (user.status === 'Deleted') return;
     const shouldEnable = user.status !== 'Active';
     setConfirmAction({ kind: 'toggle-active', user, shouldEnable });
   };
 
-  const deleteUser = (id: number) => {
-    const target = users.find((u) => u.id === id);
-    if (!target || target.status === 'Deleted') return;
-    setConfirmAction({ kind: 'delete', user: target });
+  const disableAllUsersAction = () => {
+    const activeUsersCount = users.filter((u) => u.status === 'Active' || u.status === 'Pending').length;
+    if (activeUsersCount === 0 || isActionSubmitting) return;
+    setConfirmAction({ kind: 'disable-all' });
   };
 
-  const deleteAllUsers = () => {
-    const deletableUsersCount = users.filter((u) => u.status !== 'Deleted').length;
-    if (deletableUsersCount === 0 || isActionSubmitting) return;
-    setConfirmAction({ kind: 'delete-all' });
+  const hardDeleteUsersAction = () => {
+    if (users.length === 0 || isActionSubmitting) return;
+    setConfirmAction({ kind: 'hard-delete-all' });
   };
 
   const executeConfirmedAction = async () => {
@@ -417,26 +498,37 @@ export default function AdminUserManagementPage() {
         setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: shouldEnable ? 'Active' : 'Inactive' } : u)));
         setSuccessMessage(data.message || 'User status updated.');
         setToastType('success');
-      } else if (confirmAction.kind === 'delete') {
+      } else if (confirmAction.kind === 'hard-delete') {
         const { user } = confirmAction;
-        const response = await fetch(`${API_BASE_URL}/users/${user.id}`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}/hard`, { method: 'DELETE' });
         const data = await getResponseData(response);
         if (!response.ok) {
-          setFormError(data.error || 'Failed to delete user.');
+          setFormError(data.error || 'Failed to permanently delete user.');
           return;
         }
-        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: 'Deleted' } : u)));
-        setSuccessMessage(data.message || 'User deleted.');
+        setUsers((prev) => prev.filter((u) => u.id !== user.id));
+        setSuccessMessage(data.message || 'User permanently removed.');
         setToastType('warning');
-      } else {
-        const response = await fetch(`${API_BASE_URL}/users`, { method: 'DELETE' });
+      } else if (confirmAction.kind === 'disable-all') {
+        const response = await fetch(`${API_BASE_URL}/users/active`, { method: 'PATCH' });
         const data = await getResponseData(response);
         if (!response.ok) {
-          setFormError(data.error || 'Failed to delete users.');
+          setFormError(data.error || 'Failed to disable users.');
           return;
         }
-        setUsers((prev) => prev.map((u) => ({ ...u, status: 'Deleted' })));
-        setSuccessMessage(data.message || 'All users deleted.');
+        setUsers((prev) => prev.map((u) => (u.status !== 'Deleted' ? { ...u, status: 'Inactive' } : u)));
+        setSuccessMessage(data.message || 'All users disabled.');
+        setToastType('warning');
+      } else if (confirmAction.kind === 'hard-delete-all') {
+        const response = await fetch(`${API_BASE_URL}/users/hard-delete`, { method: 'DELETE' });
+        const data = await getResponseData(response);
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to permanently delete users.');
+          return;
+        }
+        // Remove non-admin users from state
+        setUsers((prev) => prev.filter((u) => u.role === 'Admin'));
+        setSuccessMessage(data.message || 'Non-admin users permanently deleted.');
         setToastType('warning');
       }
 
@@ -470,7 +562,7 @@ export default function AdminUserManagementPage() {
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const generation = (invited.generation || '').trim() || undefined;
     const className = invited.className || undefined;
-    const major = invited.major === 'SNA' || invited.major === 'WEB DEV' ? invited.major : undefined;
+    const major = (invited.major || '').trim() || undefined;
     const group =
       invited.group ||
       (mappedRole === 'Student'
@@ -525,11 +617,8 @@ export default function AdminUserManagementPage() {
       const validatedRows = Array.isArray(data?.validRows) ? data.validRows : [];
 
       setBulkValidationErrorCount(failedCount);
-      if (failedCount > 0) {
-        setBulkValidatedRows([]);
-      } else {
-        setBulkValidatedRows(validatedRows);
-      }
+      setBulkExistingUsers(data.existingUsers || []);
+      setBulkValidatedRows(validatedRows);
 
       setSuccessMessage(data.message || `Validated ${validatedRows.length} users.`);
       setToastType(failedCount > 0 ? 'warning' : 'success');
@@ -551,9 +640,20 @@ export default function AdminUserManagementPage() {
   };
 
   const handleBulkCommit = async () => {
-    if (!bulkValidatedRows.length || bulkValidationErrorCount > 0) {
-      setFormError('Please import a valid Excel file with zero errors before sending invites.');
+    if (!bulkValidatedRows.length) {
+      if (bulkExistingUsers.length > 0) {
+        setFormError('All users in this file already exist in the database.');
+      } else {
+        setFormError('Please import a valid Excel file with zero errors before sending invites.');
+      }
       return;
+    }
+
+    if (bulkValidationErrorCount > 0) {
+      // Not blocking, just a sanity check if they really want to proceed
+      if (!window.confirm(`There are ${bulkValidationErrorCount} row(s) with errors which will be skipped. Do you want to proceed inviting the other ${bulkValidatedRows.length} users?`)) {
+        return;
+      }
     }
 
     setIsBulkCommitting(true);
@@ -592,8 +692,11 @@ export default function AdminUserManagementPage() {
       setTimeout(() => setShowSuccess(false), 4000);
       setBulkValidatedRows([]);
       setBulkValidationErrorCount(0);
-    } catch {
-      setFormError('Failed to send bulk invite emails.');
+      setBulkExistingUsers([]);
+      setIsInviteFinished(true);
+    } catch (err: any) {
+      console.error('Bulk commit error:', err);
+      setFormError(err.message || 'Failed to send bulk invite emails. Check the console for details.');
     } finally {
       setIsBulkCommitting(false);
     }
@@ -604,6 +707,7 @@ export default function AdminUserManagementPage() {
       <AdminSidebar />
 
       <main className="flex-1 overflow-y-auto relative">
+        <AdminMobileNav />
         {/* Success Toast */}
         <AnimatePresence>
           {showSuccess && (
@@ -630,23 +734,34 @@ export default function AdminUserManagementPage() {
           style={{ willChange: 'transform, opacity' }}
         >
           {/* Header */}
-          <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
+          <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl font-black text-slate-900">User Management</h1>
-              <p className="text-xs text-slate-500 font-bold">Manage system users, roles, and permissions.</p>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">User Management</h1>
+              <p className="text-xs text-slate-500 font-bold hidden md:block">Manage system users, roles, and permissions.</p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
               <button className="p-2 text-slate-400 hover:text-primary transition-colors">
                 <Download className="w-5 h-5" />
               </button>
-              <button
-                onClick={deleteAllUsers}
-                disabled={isActionSubmitting || users.every((u) => u.status === 'Deleted')}
-                className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20 disabled:opacity-60"
-              >
-                Delete All
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={disableAllUsersAction}
+                  disabled={isActionSubmitting || users.every((u) => u.status === 'Inactive' || u.status === 'Deleted')}
+                  className="bg-amber-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 disabled:opacity-60"
+                  title="Disable All Active Users"
+                >
+                  Disable All
+                </button>
+                <button
+                  onClick={hardDeleteUsersAction}
+                  disabled={isActionSubmitting || users.length === 0}
+                  className="bg-slate-900 text-white p-2 rounded-xl hover:bg-black transition-all shadow-lg shadow-black/20 disabled:opacity-60"
+                  title="Permanent Database Cleanup (Hard Delete)"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
               <button 
                 onClick={() => setIsModalOpen(true)}
                 className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
@@ -657,7 +772,7 @@ export default function AdminUserManagementPage() {
             </div>
           </header>
 
-          <div className="p-8 max-w-7xl mx-auto space-y-8">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           {/* Filters & Search */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="relative w-full md:w-96">
@@ -691,16 +806,16 @@ export default function AdminUserManagementPage() {
 
           {/* Users Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+            <div className="overflow-hidden">
+              <table className="w-full text-left table-fixed">
                 <thead>
                   <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                    <th className="px-6 py-4">User</th>
-                    <th className="px-6 py-4">Role</th>
-                    <th className="px-6 py-4">Class/Department</th>
-                    <th className="px-6 py-4">Student ID</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th className="px-4 md:px-6 py-4 w-[60%] sm:w-[35%] lg:w-[30%]">User</th>
+                    <th className="px-4 md:px-6 py-4 hidden sm:table-cell sm:w-[15%]">Role</th>
+                    <th className="px-6 py-4 hidden md:table-cell md:w-[25%] lg:w-[20%]">Class/Department</th>
+                    <th className="px-6 py-4 hidden lg:table-cell lg:w-[15%]">Student ID</th>
+                    <th className="px-6 py-4 hidden sm:table-cell sm:w-[15%] lg:w-[10%]">Status</th>
+                    <th className="px-4 md:px-6 py-4 text-right w-[40%] sm:w-[20%] lg:w-[10%]">Actions</th>
                   </tr>
                 </thead>
                 <AnimatePresence mode="wait" initial={false}>
@@ -714,19 +829,23 @@ export default function AdminUserManagementPage() {
                     style={{ willChange: 'transform, opacity' }}
                   >
                   {paginatedUsers.map((user, index) => (
-                    <motion.tr
-                      key={user.id}
-                      initial={{ opacity: 0, y: 6, scale: 0.998 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      whileHover={{ scale: 0.992 }}
-                      transition={{ duration: 0.3, delay: Math.min(index * 0.018, 0.16), ease: [0.16, 1, 0.3, 1] }}
-                      className="hover:bg-slate-50/50 transition-colors duration-300 group"
-                      style={{ willChange: 'transform, opacity' }}
-                    >
-                      <td className="px-6 py-4">
+                      <motion.tr
+                        key={user.id}
+                        initial={{ opacity: 0, y: 6, scale: 0.998 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        whileHover={{ scale: 0.992 }}
+                        transition={{ duration: 0.3, delay: Math.min(index * 0.018, 0.16), ease: [0.16, 1, 0.3, 1] }}
+                        className={cn(
+                          "transition-colors duration-300 group cursor-pointer relative",
+                          user.status === 'Inactive' ? "grayscale opacity-60 bg-slate-50 hover:bg-slate-100" : "hover:bg-slate-50/50"
+                        )}
+                        onClick={() => handleViewUser(user)}
+                        style={{ willChange: 'transform, opacity' }}
+                      >
+                      <td className="px-4 md:px-6 py-4">
                         <div className="flex items-center gap-3">
                           {user.profileImage ? (
-                            <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                            <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100 hidden sm:block">
                               <img src={user.profileImage} alt={user.name} className="w-full h-full object-cover" />
                             </div>
                           ) : (
@@ -734,15 +853,15 @@ export default function AdminUserManagementPage() {
                               {user.initials}
                             </div>
                           )}
-                          <div>
-                            <p className="text-sm font-black text-slate-900">
+                          <div className="min-w-0 flex-1 overflow-hidden">
+                            <p className="text-sm font-black text-slate-900 truncate" title={user.name}>
                               {user.name}
                             </p>
-                            <p className="text-[10px] font-bold text-slate-400">{user.email}</p>
+                            <p className="text-[10px] font-bold text-slate-400 truncate" title={user.email}>{user.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 md:px-6 py-4 hidden sm:table-cell">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           user.role.includes('Admin') ? "bg-orange-50 text-orange-600" :
@@ -751,13 +870,13 @@ export default function AdminUserManagementPage() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-slate-600">{user.group}</span>
+                      <td className="px-4 md:px-6 py-4 hidden md:table-cell">
+                        <div className="text-xs font-bold text-slate-600 truncate" title={user.group}>{user.group}</div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden lg:table-cell">
                         <span className="text-xs font-bold text-slate-600">{user.studentId || '-'}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 hidden sm:table-cell">
                         <span className={cn(
                           "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           user.status === 'Active'
@@ -774,7 +893,7 @@ export default function AdminUserManagementPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => toggleUserActive(user)}
+                            onClick={(e) => { e.stopPropagation(); toggleUserActive(user); }}
                             disabled={user.status === 'Deleted' || isActionSubmitting}
                             className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
                             title={user.status === 'Active' ? 'Disable user' : 'Enable user'}
@@ -782,9 +901,14 @@ export default function AdminUserManagementPage() {
                             <Power className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => deleteUser(user.id)}
-                            disabled={user.status === 'Deleted' || isActionSubmitting}
-                            className="p-2 text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-40"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const u = users.find(u => u.id === user.id);
+                              if (u) setConfirmAction({ kind: 'hard-delete', user: u });
+                            }}
+                            disabled={isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-40"
+                            title="Hard Delete (Permanent Removal)"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -804,7 +928,7 @@ export default function AdminUserManagementPage() {
               </table>
             </div>
             
-            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 Showing {filteredUsers.length === 0 ? 0 : (currentPage - 1) * USERS_PER_PAGE + 1}
                 -
@@ -858,8 +982,14 @@ export default function AdminUserManagementPage() {
               <h3 className="text-xl font-black text-slate-900 tracking-tight">
                 {confirmAction.kind === 'delete'
                   ? 'Delete User?'
+                : confirmAction.kind === 'hard-delete'
+                  ? 'Permenent User Removal?'
                   : confirmAction.kind === 'delete-all'
                     ? 'Delete All Users?'
+                  : confirmAction.kind === 'disable-all'
+                    ? 'Disable All Users?'
+                  : confirmAction.kind === 'hard-delete-all'
+                    ? 'Permanent Data Cleanup?'
                   : confirmAction.shouldEnable
                     ? 'Enable User?'
                     : 'Disable User?'}
@@ -867,8 +997,14 @@ export default function AdminUserManagementPage() {
               <p className="mt-3 text-sm text-slate-600 leading-relaxed">
                 {confirmAction.kind === 'delete'
                   ? `Are you sure you want to delete "${confirmAction.user.name}"? This keeps the record for history, but disables login and marks the user as deleted.`
+                : confirmAction.kind === 'hard-delete'
+                  ? `EXTREME ACTION: Are you sure you want to PERMANENTLY DELETE "${confirmAction.user.name}"? This will remove the user and all their associated data from the database forever. This cannot be undone.`
                   : confirmAction.kind === 'delete-all'
                     ? 'Are you sure you want to delete all users? This keeps records for history, but disables login and marks every account as deleted.'
+                  : confirmAction.kind === 'disable-all'
+                    ? 'Are you sure you want to disable all users? This will prevent everyone except admins from logging into the platform.'
+                  : confirmAction.kind === 'hard-delete-all'
+                    ? 'EXTREME ACTION: Are you sure you want to PERMANENTLY DELETE all non-admin users from the database? This action cannot be undone.'
                   : confirmAction.shouldEnable
                     ? `Are you sure you want to enable "${confirmAction.user.name}"? The user will be able to log in again.`
                     : `Are you sure you want to disable "${confirmAction.user.name}"? The user will not be able to log in.`}
@@ -888,9 +1024,11 @@ export default function AdminUserManagementPage() {
                   disabled={isActionSubmitting}
                   className={cn(
                     "px-4 py-2 rounded-xl text-white text-xs font-black uppercase tracking-widest disabled:opacity-60",
-                    confirmAction.kind === 'delete' || confirmAction.kind === 'delete-all'
+                    confirmAction.kind === 'delete' || confirmAction.kind === 'delete-all' || confirmAction.kind === 'hard-delete-all' || confirmAction.kind === 'hard-delete'
                       ? 'bg-rose-600 hover:bg-rose-700'
-                      : 'bg-primary hover:bg-primary/90'
+                      : confirmAction.kind === 'disable-all'
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-primary hover:bg-primary/90'
                   )}
                 >
                   {isActionSubmitting ? 'Processing...' : 'Confirm'}
@@ -921,275 +1059,442 @@ export default function AdminUserManagementPage() {
               <div className="flex-1 overflow-y-auto p-7">
                 <div className="flex items-center justify-between mb-5">
                   <div>
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Invite New User</h3>
-                    <p className="text-slate-500 text-sm">Send an email invite with registration link.</p>
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                      {isInviteFinished ? 'Invitation Sent' : 'Invite New User'}
+                    </h3>
+                    <p className="text-slate-500 text-sm">
+                      {isInviteFinished ? 'The invitation process has completed successfully.' : 'Send an email invite with registration link.'}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={handleBulkImport}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isBulkImporting || isSubmitting || isBulkCommitting}
-                      className="px-3 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-60"
-                    >
-                      <Upload className="w-4 h-4" />
-                      {isBulkImporting ? 'Importing...' : 'Import Excel'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBulkCommit}
-                      disabled={isBulkImporting || isSubmitting || isBulkCommitting || !bulkValidatedRows.length || bulkValidationErrorCount > 0}
-                      className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60"
-                    >
-                      {isBulkCommitting ? 'Sending...' : 'Send Invite Email'}
-                    </button>
+                    {!isInviteFinished && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={handleBulkImport}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isBulkImporting || isSubmitting || isBulkCommitting}
+                          className="px-3 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-60"
+                        >
+                          <Upload className="w-4 h-4" />
+                          {isBulkImporting ? 'Importing...' : 'Import Excel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleBulkCommit}
+                          disabled={isBulkImporting || isSubmitting || isBulkCommitting || !bulkValidatedRows.length}
+                          className="px-3 py-2 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60"
+                        >
+                          {isBulkCommitting ? 'Sending...' : 'Send Invite Email'}
+                        </button>
+                      </>
+                    )}
                     <button 
-                      onClick={() => setIsModalOpen(false)}
-                      className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                    >
-                      <X className="w-6 h-6 text-slate-400" />
-                    </button>
+                       onClick={() => {
+                         setIsModalOpen(false);
+                         setTimeout(() => {
+                           setIsInviteFinished(false);
+                           setBulkExistingUsers([]);
+                           setBulkValidatedRows([]);
+                           setBulkValidationErrorCount(0);
+                         }, 300);
+                       }}
+                       className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                     >
+                       <X className="w-6 h-6 text-slate-400" />
+                     </button>
                   </div>
                 </div>
 
-                <form onSubmit={handleAddUser} className="space-y-4">
-                  <p className="text-[10px] text-slate-400 font-bold">
-                    Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation, Major, Class, Student ID.
-                  </p>
-                  {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
-                    <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                      Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to insert users and send invites.
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
-                      <input 
-                        required
-                        type="text" 
-                        placeholder="e.g. Sokha"
-                        value={newUser.firstName}
-                        onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                {isInviteFinished ? (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className="flex flex-col items-center justify-center py-16 text-center"
+                  >
+                    <div className="size-24 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-8 shadow-inner relative">
+                      <CheckCircle2 className="w-12 h-12" />
+                      <motion.div 
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1.5, opacity: 0 }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="absolute inset-0 rounded-full border-4 border-emerald-200"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Mean"
-                        value={newUser.lastName}
-                        onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email Address</label>
-                    <input 
-                      required
-                      type="email" 
-                      placeholder="e.g. sokha.mean@pnc.edu"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                    />
-                    <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
-                      <select
-                        value={newUser.gender}
-                        onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                      >
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role</label>
-                      <select 
-                        value={newUser.role}
-                        onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                      >
-                        <option value="Student">Student</option>
-                        <option value="Teacher">Teacher</option>
-                        <option value="Admin">Admin</option>
-                      </select>
-                    </div>
-                    {newUser.role === 'Student' ? (
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Generation</label>
-                        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 border border-slate-100 px-2 py-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewUser((prev) => ({
-                                ...prev,
-                                generation: String(Math.max(2000, (Number(prev.generation) || 2026) - 1))
-                              }))
-                            }
-                            className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <input
-                            type="text"
-                            value={newUser.generation}
-                            onChange={(e) => setNewUser({...newUser, generation: e.target.value })}
-                            placeholder="e.g. 2028"
-                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-black text-slate-900 focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewUser((prev) => ({
-                                ...prev,
-                                generation: String(Math.min(2100, (Number(prev.generation) || 2026) + 1))
-                              }))
-                            }
-                            className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
+                    <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Emails Sent Successfully!</h3>
+                    <p className="text-slate-500 max-w-lg mx-auto mb-10 text-base font-medium leading-relaxed">
+                      {successMessage || "The invitation emails have been sent to the users."}
+                      <br />
+                      <span className="text-sm opacity-70">Users can now secure their accounts by following the registration link in their inbox.</span>
+                    </p>
+                    <button 
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        setTimeout(() => {
+                          setIsInviteFinished(false);
+                          setBulkExistingUsers([]);
+                          setBulkValidatedRows([]);
+                        }, 300);
+                      }}
+                      className="px-12 py-4 bg-primary text-white rounded-[20px] font-black text-xs uppercase tracking-widest shadow-2xl shadow-primary/30 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      Return to User List
+                    </button>
+                  </motion.div>
+                ) : (
+                  <form onSubmit={handleAddUser} className="space-y-4">
+                    <p className="text-[10px] text-slate-400 font-bold">
+                      Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation (e.g., 2026), Class (e.g., A), Student ID (Format: YYYY-XXX), Major.
+                    </p>
+                    
+                    {bulkExistingUsers.length > 0 && (
+                      <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                          <p className="uppercase tracking-widest text-[9px] opacity-70">Skipped (Users already exist):</p>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role Details</label>
-                        <input 
-                          disabled
-                          type="text" 
-                          value={newUser.role === 'Teacher' ? 'Teaching Staff' : 'Administration'}
-                          className="w-full px-4 py-2.5 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
-                        />
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                          {bulkExistingUsers.map((u, i) => (
+                            <span key={i} className="flex items-center gap-1.5 bg-white/50 px-2 py-0.5 rounded-lg border border-amber-200/50">
+                              <span className="text-amber-900">{u.name}</span>
+                              <span className="text-amber-600/60 font-medium">{u.email}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[10px] text-amber-600/80 italic">These users were skipped automatically as they are already in the system.</p>
                       </div>
                     )}
-                  </div>
 
-                  {newUser.role === 'Student' && (
+                    {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
+                      <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                        <p>Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to process.</p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
+                        <input 
+                          required
+                          type="text" 
+                          placeholder="e.g. Sokha"
+                          value={newUser.firstName}
+                          onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Mean"
+                          value={newUser.lastName}
+                          onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email Address</label>
+                      <input 
+                        required
+                        type="email" 
+                        placeholder="e.g. sokha.mean@pnc.edu"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      />
+                      <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2 ml-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Major</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const nextMajor = customMajorDraft.trim().toUpperCase();
-                              if (!nextMajor) return;
-                              if (!majorOptions.includes(nextMajor)) {
-                                setMajorOptions((prev) => [...prev, nextMajor]);
-                              }
-                              setNewUser((prev) => ({ ...prev, major: nextMajor }));
-                              setCustomMajorDraft('');
-                            }}
-                            className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
-                            title="Add new major"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
                         <select
-                          value={newUser.major}
-                          onChange={(e) => {
-                            const nextMajor = e.target.value.toUpperCase();
-                            setNewUser({ ...newUser, major: nextMajor as StudentMajor });
-                          }}
+                          value={newUser.gender}
+                          onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         >
-                          {majorOptions.map((major) => (
-                            <option key={major} value={major}>{major}</option>
-                          ))}
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
                         </select>
-                        <input
-                          type="text"
-                          value={customMajorDraft}
-                          onChange={(e) => setCustomMajorDraft(e.target.value)}
-                          placeholder="Add new major manually"
-                          className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                        />
                       </div>
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2 ml-1">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const nextClass = customClassDraft.trim().toUpperCase();
-                              if (!nextClass) return;
-                              if (!classOptions.includes(nextClass)) {
-                                setClassOptions((prev) => [...prev, nextClass]);
-                              }
-                              setNewUser((prev) => ({ ...prev, className: nextClass }));
-                              setCustomClassDraft('');
-                            }}
-                            className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
-                            title="Add new class"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <select
-                          value={newUser.className}
-                          onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role</label>
+                        <select 
+                          value={newUser.role}
+                          onChange={(e) => setNewUser({...newUser, role: e.target.value as UserRole})}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                         >
-                          <option value="">Select class</option>
-                          {classOptions.map((classOption) => (
-                            <option key={classOption} value={classOption}>{classOption}</option>
-                          ))}
+                          <option value="Student">Student</option>
+                          <option value="Teacher">Teacher</option>
+                          <option value="Admin">Admin</option>
                         </select>
-                        <input
-                          type="text"
-                          value={customClassDraft}
-                          onChange={(e) => setCustomClassDraft(e.target.value)}
-                          placeholder="Add new class manually"
-                          className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                        />
-                        <p className="text-[10px] text-slate-400 font-bold ml-1">Default options: WEB A, WEB B.</p>
                       </div>
+                      {newUser.role === 'Student' ? (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Generation</label>
+                          <div className="flex items-center gap-2 rounded-2xl bg-slate-50 border border-slate-100 px-2 py-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewUser((prev) => ({
+                                  ...prev,
+                                  generation: String(Math.max(2000, (Number(prev.generation) || 2026) - 1))
+                                }))
+                              }
+                              className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <input
+                              type="text"
+                              value={newUser.generation}
+                              onChange={(e) => setNewUser({...newUser, generation: e.target.value })}
+                              placeholder="e.g. 2028"
+                              className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-black text-slate-900 focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewUser((prev) => ({
+                                  ...prev,
+                                  generation: String(Math.min(2100, (Number(prev.generation) || 2026) + 1))
+                                }))
+                              }
+                              className="size-9 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 transition-colors"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Role Details</label>
+                          <input 
+                            disabled
+                            type="text" 
+                            value={newUser.role === 'Teacher' ? 'Teaching Staff' : 'Administration'}
+                            className="w-full px-4 py-2.5 bg-slate-100 border border-slate-100 rounded-2xl text-sm text-slate-500 outline-none transition-all"
+                          />
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="space-y-2 md:col-span-1">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
-                        <input
-                          type="text"
-                          placeholder={`${newUser.generation}-001`}
-                          value={newUser.studentId}
-                          onChange={(e) => setNewUser({ ...newUser, studentId: e.target.value })}
-                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                        />
-                        <p className="text-[10px] text-slate-400 font-bold ml-1">Format: YYYY-XXX (example: 2026-001)</p>
+                    {newUser.role === 'Student' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2 ml-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Major</label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextMajor = customMajorDraft.trim().toUpperCase();
+                                if (!nextMajor) return;
+                                if (!majorOptions.includes(nextMajor)) {
+                                  setMajorOptions((prev) => [...prev, nextMajor]);
+                                }
+                                setNewUser((prev) => ({ ...prev, major: nextMajor }));
+                                setCustomMajorDraft('');
+                              }}
+                              className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
+                              title="Add new major"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <select
+                            value={newUser.major}
+                            onChange={(e) => {
+                              const nextMajor = e.target.value.toUpperCase();
+                              setNewUser({ ...newUser, major: nextMajor as StudentMajor });
+                            }}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          >
+                            {majorOptions.map((major) => (
+                              <option key={major} value={major}>{major}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={customMajorDraft}
+                            onChange={(e) => setCustomMajorDraft(e.target.value)}
+                            placeholder="Add new major manually"
+                            className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2 ml-1">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextClass = customClassDraft.trim().toUpperCase();
+                                if (!nextClass) return;
+                                if (!classOptions.includes(nextClass)) {
+                                  setClassOptions((prev) => [...prev, nextClass]);
+                                }
+                                setNewUser((prev) => ({ ...prev, className: nextClass }));
+                                setCustomClassDraft('');
+                              }}
+                              className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
+                              title="Add new class"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <select
+                            value={newUser.className}
+                            onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          >
+                            <option value="">Select class</option>
+                            {classOptions.map((classOption) => (
+                              <option key={classOption} value={classOption}>{classOption}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={customClassDraft}
+                            onChange={(e) => setCustomClassDraft(e.target.value)}
+                            placeholder="Add new class manually"
+                            className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold ml-1">Default options: WEB A, WEB B.</p>
+                        </div>
+
+                        <div className="space-y-2 md:col-span-1">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Student ID</label>
+                          <input
+                            type="text"
+                            placeholder={`${newUser.generation}-001`}
+                            value={newUser.studentId}
+                            onChange={(e) => setNewUser({ ...newUser, studentId: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold ml-1">Format: YYYY-XXX (example: 2026-001)</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {formError && (
-                    <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
-                      {formError}
-                    </div>
-                  )}
+                    {formError && (
+                      <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                        {formError}
+                      </div>
+                    )}
 
-                  <div className="pt-2">
-                    <button 
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
-                    >
-                      {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
-                    </button>
-                  </div>
-                </form>
+                    <div className="pt-2">
+                      <button 
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
+                      >
+                        {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isProfileModalOpen && selectedProfileUser && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsProfileModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-3xl relative z-10 max-h-[90vh] flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <h3 className="text-xl font-black text-slate-900 px-2 tracking-tight">User Profile</h3>
+                <button 
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="p-8 overflow-y-auto">
+                 <div className="flex items-start gap-6 mb-8">
+                   {selectedProfileUser.profileImage ? (
+                     <img src={selectedProfileUser.profileImage} alt={selectedProfileUser.name} className="size-24 rounded-2xl object-cover" />
+                   ) : (
+                     <div className={cn("size-24 rounded-2xl flex items-center justify-center text-3xl font-black shrink-0", selectedProfileUser.color)}>
+                       {selectedProfileUser.initials}
+                     </div>
+                   )}
+                   <div>
+                     <h2 className="text-2xl font-black text-slate-900 mb-1">{selectedProfileUser.name}</h2>
+                     <p className="text-sm font-bold text-slate-500 mb-4">{selectedProfileUser.email}</p>
+                     <div className="flex gap-2">
+                       <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black uppercase tracking-widest">{selectedProfileUser.role}</span>
+                       <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs font-black uppercase tracking-widest shrink-0">{selectedProfileUser.status}</span>
+                     </div>
+                   </div>
+                 </div>
+
+                 {selectedProfileUser.role === 'Student' && (
+                   <div className="grid md:grid-cols-2 gap-8 border-t border-slate-100 pt-8 mt-4">
+                      <div>
+                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Edit Details</h4>
+                         <div className="space-y-4">
+                           <div>
+                             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Student ID</label>
+                             <input type="text" value={editStudentId} onChange={e => setEditStudentId(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
+                           </div>
+                           <div>
+                             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Class</label>
+                             <input type="text" value={editClassName} onChange={e => setEditClassName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
+                           </div>
+                           <button onClick={handleUpdateStudentInfo} disabled={isProfileSaving} className="w-full py-3 mt-2 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-60">
+                             {isProfileSaving ? 'Saving...' : 'Save Changes'}
+                           </button>
+                         </div>
+                      </div>
+                      
+                      <div>
+                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Performance Overview</h4>
+                         {profileEvaluations.length > 0 ? (
+                           <div className="bg-slate-50 rounded-3xl p-6 h-[320px] border border-slate-100 shadow-inner flex items-center justify-center relative overflow-hidden">
+                              <RadarChart 
+                                data={profileEvaluations[0]?.responses?.map((r: any) => ({ subject: r.criterion_name || r.criterion_key, score: Number(r.star_value) * 20 })) || []}
+                                dataKeys={[ { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' } ]}
+                              />
+                           </div>
+                         ) : (
+                           <div className="h-[320px] flex items-center justify-center bg-slate-50 rounded-3xl border border-slate-100 shadow-inner">
+                             <div className="text-center w-full px-6">
+                               <div className="size-16 rounded-full bg-slate-200/50 mx-auto mb-4 flex items-center justify-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                               </div>
+                               <h3 className="font-black text-slate-800 text-lg mb-2">No Performance Data</h3>
+                               <p className="text-sm text-slate-500 font-medium">This student hasn't received any evaluations yet.</p>
+                             </div>
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                 )}
               </div>
             </motion.div>
           </div>

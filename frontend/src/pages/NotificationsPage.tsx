@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, ChevronRight, Home, Trash2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Bell, CheckCheck, ChevronRight, Home, Trash2, MessageSquare, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '../lib/utils';
 import Sidebar from '../components/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {
@@ -98,6 +100,7 @@ export default function NotificationsPage() {
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   const loadNotifications = useCallback(async () => {
     if (!studentId) return;
@@ -256,45 +259,39 @@ export default function NotificationsPage() {
     }
   };
 
+  const filteredAndVisibleNotifications = visibleNotifications.filter(n =>
+    filter === 'all' ? true : Number(n.is_read) !== 1
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
 
-      <main className="flex-1 overflow-y-auto">
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-500 text-sm">
-            <button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 hover:text-primary">
-              <Home className="w-4 h-4" />
-              Dashboard
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-8">
+        <StudentMobileNav />
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 sticky top-0 z-[110]">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] md:text-sm">
+            <button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-2 hover:text-primary transition-colors">
+              <Home className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              <span className="font-semibold text-slate-900">Dashboard</span>
             </button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-medium text-slate-900">Notifications</span>
+            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 opacity-30" />
+            <span className="font-semibold text-slate-900">Notifications</span>
           </div>
           <button
             type="button"
             onClick={handleMarkAllRead}
             disabled={isMarkingAllRead || unreadCount === 0}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+            className="text-sm font-bold text-primary hover:underline disabled:opacity-60 transition-all"
           >
-            <CheckCheck className="w-4 h-4" />
             {isMarkingAllRead ? 'Marking...' : 'Mark All Read'}
           </button>
         </header>
 
-        <div className="max-w-4xl mx-auto p-8 space-y-6">
-          <div className="rounded-3xl bg-white border border-slate-200 shadow-sm p-6 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">Student Alerts</p>
-              <h1 className="mt-2 text-2xl font-black text-slate-900">Notifications</h1>
-            </div>
-            <div className="size-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center relative">
-              <Bell className="w-7 h-7" />
-              {unreadCount > 0 ? (
-                <span className="absolute -top-1 -right-1 min-w-6 h-6 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              ) : null}
-            </div>
+        <div className="max-w-[800px] mx-auto p-4 md:p-8 space-y-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Notifications</h1>
+            <p className="text-slate-500 mt-2 text-sm md:text-base">Stay updated with feedback and alerts from your teachers and admin.</p>
           </div>
 
           {error ? (
@@ -303,94 +300,154 @@ export default function NotificationsPage() {
             </div>
           ) : null}
 
+          {/* Filter Tabs */}
+          <div className="flex gap-3 md:gap-4 mb-6">
+            <button 
+              onClick={() => setFilter('all')}
+              className={cn(
+                "px-4 md:px-6 py-2 rounded-xl text-xs md:text-sm font-bold transition-all",
+                filter === 'all' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
+              )}
+            >
+              All Notifications
+            </button>
+            <button 
+              onClick={() => setFilter('unread')}
+              className={cn(
+                "px-4 md:px-6 py-2 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center gap-2",
+                filter === 'unread' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
+              )}
+            >
+              Unread
+              {unreadCount > 0 && (
+                <span className={cn(
+                  "size-5 rounded-full flex items-center justify-center text-[10px]",
+                  filter === 'unread' ? "bg-white text-primary" : "bg-primary text-white"
+                )}>
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          </div>
+
           {isLoading ? (
             <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">
               Loading notifications...
             </div>
-          ) : visibleNotifications.length > 0 ? (
-            <div className="space-y-4">
-              {visibleNotifications.map((notification, index) => {
-                const isRead = Number(notification.is_read) === 1;
-                const teacherFeedbackNotice = parseTeacherFeedbackNotification(notification.message);
-                const teacherName = teacherFeedbackNotice?.teacherName || 'Teacher';
-                const visibleMessage = teacherFeedbackNotice?.text || notification.message;
+          ) : filteredAndVisibleNotifications.length > 0 ? (
+            <div className="space-y-3">
+              <AnimatePresence mode="popLayout">
+                {filteredAndVisibleNotifications.map((notification, index) => {
+                  const isRead = Number(notification.is_read) === 1;
+                  const teacherFeedbackNotice = parseTeacherFeedbackNotification(notification.message);
+                  
+                  const type = teacherFeedbackNotice ? 'message' : 'alert';
+                  const senderName = teacherFeedbackNotice?.teacherName || (teacherFeedbackNotice ? 'Teacher' : 'System');
+                  const senderRole = teacherFeedbackNotice ? 'Teacher' : 'Admin';
+                  const senderAvatar = teacherFeedbackNotice?.teacherProfile || null;
+                  const content = teacherFeedbackNotice?.text || notification.message;
 
-                return (
-                  <motion.div
-                    key={notification.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.04 }}
-                    onClick={() => setSelectedNotification(notification)}
-                    className={`rounded-3xl border p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-colors ${isRead ? 'bg-white border-slate-200' : 'bg-primary/5 border-primary/20'}`}
-                  >
-                    <div className="flex items-start gap-4">
-                      {teacherFeedbackNotice?.teacherProfile ? (
-                        <div className="size-12 rounded-2xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
-                          <img src={teacherFeedbackNotice.teacherProfile} alt={teacherName} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className={`size-12 rounded-2xl flex items-center justify-center shrink-0 ${isRead ? 'bg-slate-100 text-slate-500' : 'bg-primary text-white'}`}>
-                          <Bell className="w-5 h-5" />
-                        </div>
+                  return (
+                    <motion.div
+                      key={notification.id}
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      onClick={() => setSelectedNotification(notification)}
+                      className={cn(
+                        "bg-white p-4 rounded-2xl border transition-all group relative cursor-pointer",
+                        isRead ? "border-slate-200 opacity-75" : "border-primary/20 shadow-sm ring-1 ring-primary/5"
                       )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4">
-                          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-                            {isRead ? 'Read' : 'Unread'} • {formatDateTime(notification.created_at)}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            {!isRead ? (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleMarkAsRead(notification.id);
-                                }}
-                                disabled={activeId === notification.id}
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-60"
-                              >
-                                {activeId === notification.id ? 'Saving...' : 'Mark Read'}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleDelete(notification.id);
-                              }}
-                              disabled={activeId === notification.id}
-                              className="rounded-xl bg-rose-500 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white inline-flex items-center gap-1 disabled:opacity-60"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              {activeId === notification.id ? 'Deleting...' : 'Delete'}
-                            </button>
+                    >
+                      <div className="flex gap-4">
+                        <div className="relative shrink-0">
+                          {senderAvatar ? (
+                            <div className="size-10 md:size-12 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                              <img src={senderAvatar} alt={senderName} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="size-10 md:size-12 rounded-full flex items-center justify-center border-2 border-white shadow-sm bg-slate-100 text-slate-500">
+                              <Bell className="w-4 h-4 md:w-5 md:h-5" />
+                            </div>
+                          )}
+                          <div className={cn(
+                            "absolute -bottom-1 -right-1 size-5 md:size-6 rounded-full flex items-center justify-center border-2 border-white shadow-sm",
+                            type === 'message' ? "bg-primary text-white" : "bg-rose-500 text-white"
+                          )}>
+                            {type === 'message' ? <MessageSquare className="w-2.5 h-2.5 md:w-3 md:h-3" /> : <ShieldCheck className="w-2.5 h-2.5 md:w-3 md:h-3" />}
                           </div>
                         </div>
-                        <p className="mt-3 text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                          {visibleMessage}
-                        </p>
-                        {teacherFeedbackNotice?.periodLabel ? (
-                          <p className="mt-1 text-[11px] font-bold text-slate-500">
-                            Quarter: {teacherFeedbackNotice.periodLabel}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900">{senderName}</span>
+                              <span className={cn(
+                                "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md",
+                                senderRole === 'Teacher' ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+                              )}>
+                                {senderRole}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatDateTime(notification.created_at)}
+                              </span>
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                {!isRead && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); void handleMarkAsRead(notification.id); }}
+                                    className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); void handleDelete(notification.id); }}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          <p className={cn(
+                            "text-sm leading-relaxed",
+                            isRead ? "text-slate-500" : "text-slate-700 font-medium"
+                          )}>
+                            {content}
                           </p>
-                        ) : null}
+                          {teacherFeedbackNotice?.periodLabel ? (
+                            <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                              <span className="text-[10px] font-bold text-slate-500">Evaluation: {teacherFeedbackNotice.periodLabel}</span>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                      {!isRead && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-2xl" />
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
           ) : (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
-              <p className="text-lg font-black text-slate-900">No notifications yet</p>
-              <p className="mt-2 text-sm text-slate-500">
-                Teacher feedback alerts and evaluation reminders will appear here.
-              </p>
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+              <div className="size-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Bell className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">No notifications</h3>
+              <p className="text-slate-500 text-sm mt-1">You're all caught up! Check back later for updates.</p>
             </div>
           )}
         </div>
       </main>
+
 
       {selectedNotification ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">

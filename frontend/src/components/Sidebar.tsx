@@ -199,6 +199,11 @@ export default function Sidebar({ className }: SidebarProps) {
     { icon: Info, label: 'FAQ', path: '/faq' },
   ];
 
+  // Smooth animation presets for consistent, fluid transitions
+  const smoothTransition = { duration: 0.35, ease: [0.4, 0, 0.2, 1] as const };
+  const quickTransition = { duration: 0.2, ease: [0.4, 0, 0.2, 1] as const };
+  const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
+
   return (
     <motion.aside 
       animate={{ width: isCollapsed ? 80 : 256 }}
