@@ -32,7 +32,6 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
     { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
-    { icon: Calendar, label: 'Evaluation Periods', path: '/admin/evaluations' },
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];

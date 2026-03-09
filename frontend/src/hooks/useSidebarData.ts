@@ -9,7 +9,7 @@ export function useSidebarData() {
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
 
   // Load profile identity
   useEffect(() => {

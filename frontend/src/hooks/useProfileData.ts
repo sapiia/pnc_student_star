@@ -10,7 +10,7 @@ interface ProfileData {
   profilePhoto: string;
 }
 
-export function useProfileData({ defaultName = 'User', defaultPhoto = 'https://picsum.photos/seed/user/100/100' }: UseProfileDataOptions = {}): ProfileData {
+export function useProfileData({ defaultName = 'User', defaultPhoto = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg' }: UseProfileDataOptions = {}): ProfileData {
   const [profileName, setProfileName] = useState(defaultName);
   const [profilePhoto, setProfilePhoto] = useState(defaultPhoto);
 
