@@ -5,7 +5,7 @@ import {
   BellRing, 
   ChevronRight
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 

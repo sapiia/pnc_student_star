@@ -21,9 +21,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import StarRating from '../components/StarRating';
-import RadarChart from '../components/RadarChart';
-import Sidebar from '../components/Sidebar';
+import StarRating from '../components/ui/StarRating';
+import RadarChart from '../components/ui/RadarChart';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import Footer from '../components/layout/Footer';
 import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 
 type EvaluationResponse = {
@@ -712,6 +713,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <Footer />
       </main>
 
       <AnimatePresence>

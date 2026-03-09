@@ -23,9 +23,9 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import StarRating from '../components/StarRating';
-import RadarChart from '../components/RadarChart';
-import Sidebar from '../components/Sidebar';
+import StarRating from '../components/ui/StarRating';
+import RadarChart from '../components/ui/RadarChart';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 
 type EvaluationResponse = {
   criterion_id?: string | null;

@@ -9,7 +9,7 @@ import {
   Send,
   Settings,
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
 

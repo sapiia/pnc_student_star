@@ -12,7 +12,7 @@ import {
   Settings
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 
 const CATEGORIES = [
   { id: 'academics', label: 'Academics', count: 45, checked: true },

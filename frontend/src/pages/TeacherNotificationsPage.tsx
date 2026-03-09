@@ -11,7 +11,7 @@ import {
   Clock,
   Trash2
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';

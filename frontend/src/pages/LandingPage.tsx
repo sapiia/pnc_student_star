@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, FormEvent } from 'react';
-import BrandLogo, { PNLogoMark } from '../components/BrandLogo';
+import BrandLogo, { PNLogoMark } from '../components/ui/BrandLogo';
 
 export default function LandingPage() {
   const navigate = useNavigate();

@@ -21,8 +21,8 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
-import StarRating from '../components/StarRating';
-import Sidebar from '../components/Sidebar';
+import StarRating from '../components/ui/StarRating';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 
 type EvaluationResponse = {
   criterion_key: string;

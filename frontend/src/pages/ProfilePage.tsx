@@ -8,7 +8,7 @@ import {
   ClipboardList,
   ChevronRight
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';

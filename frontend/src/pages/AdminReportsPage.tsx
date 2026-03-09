@@ -39,7 +39,7 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import { cn } from '../lib/utils';
 import { CRITERIA } from '../constants';
 

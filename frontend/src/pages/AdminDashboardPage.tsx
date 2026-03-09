@@ -15,7 +15,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import { cn } from '../lib/utils';
 
 const STUDENT_STATS = {

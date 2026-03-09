@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, Search, Send, Settings, Trash2, Users, X } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 

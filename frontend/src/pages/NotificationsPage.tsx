@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Home, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {

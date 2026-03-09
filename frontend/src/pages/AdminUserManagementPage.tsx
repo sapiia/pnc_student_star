@@ -12,7 +12,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import { cn } from '../lib/utils';
 import React, { useEffect, useState } from 'react';
 
