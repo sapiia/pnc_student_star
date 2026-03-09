@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { HelpCircle, ChevronDown, ChevronUp, Search, ArrowRight } from 'lucide-react';
-import Sidebar from '../components/layout/sidebar/student/Sidebar';
-import StudentMobileNav from '../components/common/StudentMobileNav';
+import Sidebar from '../../components/layout/sidebar/student/Sidebar';
+import StudentMobileNav from '../../components/common/StudentMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 

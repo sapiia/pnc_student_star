@@ -24,19 +24,3 @@ export interface EvaluationData {
   reflections: Record<CriterionKey, string>;
 }
 
-export interface Feedback {
-  id: string;
-  author: string;
-  authorRole: string;
-  avatar: string;
-  date: string;
-  content: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  cohort: string;
-}

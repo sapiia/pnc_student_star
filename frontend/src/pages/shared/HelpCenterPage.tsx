@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
-import Sidebar from '../components/layout/sidebar/student/Sidebar';
-import StudentMobileNav from '../components/common/StudentMobileNav';
+import Sidebar from '../../components/layout/sidebar/student/Sidebar';
+import StudentMobileNav from '../../components/common/StudentMobileNav';
 
 
 const CATEGORIES = [

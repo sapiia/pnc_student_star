@@ -14,11 +14,11 @@ import {
   X,
 } from 'lucide-react';
 
-import Sidebar from '../components/layout/sidebar/student/Sidebar';
-import StudentMobileNav from '../components/common/StudentMobileNav';
+import Sidebar from '../../components/layout/sidebar/student/Sidebar';
+import StudentMobileNav from '../../components/common/StudentMobileNav';
 
-import { cn } from '../lib/utils';
-import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
+import { cn } from '../../lib/utils';
+import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../../lib/realtime';
 
 type ApiUser = {
   id: number;
