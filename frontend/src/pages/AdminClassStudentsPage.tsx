@@ -24,7 +24,7 @@ import {
   Radar,
   Tooltip
 } from 'recharts';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import { CRITERIA } from '../constants';
@@ -135,11 +135,11 @@ export default function AdminClassStudentsPage() {
                     <thead className="sticky top-0 bg-slate-50 z-10">
                       <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                         <th className="px-4 md:px-6 py-4">Student</th>
-                    <th className="px-6 py-4 hidden md:table-cell">Gender</th>
-                    <th className="px-6 py-4 hidden md:table-cell">GPA</th>
-                    <th className="px-6 py-4 hidden sm:table-cell">Attendance</th>
-                    <th className="px-6 py-4 hidden sm:table-cell">Status</th>
-                    <th className="px-4 md:px-6 py-4 text-right">Actions</th>
+                        <th className="px-6 py-4 hidden md:table-cell">Gender</th>
+                        <th className="px-6 py-4 hidden md:table-cell">GPA</th>
+                        <th className="px-6 py-4 hidden sm:table-cell">Attendance</th>
+                        <th className="px-6 py-4 hidden sm:table-cell">Status</th>
+                        <th className="px-4 md:px-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -156,13 +156,13 @@ export default function AdminClassStudentsPage() {
                               </div>
                             </div>
                           </td>
-                        <td className="px-6 py-4 hidden md:table-cell">
+                          <td className="px-6 py-4 hidden md:table-cell">
                             <span className="text-xs font-bold text-slate-600">{student.gender}</span>
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-xs font-bold text-slate-600">{student.gpa}</span>
                           </td>
-                        <td className="px-6 py-4 hidden sm:table-cell">
+                          <td className="px-6 py-4 hidden sm:table-cell">
                             <span className="text-xs font-bold text-slate-600">{student.attendance}</span>
                           </td>
                           <td className="px-6 py-4">
@@ -367,3 +367,4 @@ export default function AdminClassStudentsPage() {
     </div>
   );
 }
+

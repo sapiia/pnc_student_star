@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import { useEffect, useRef, useState } from 'react';

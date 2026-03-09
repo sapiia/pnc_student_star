@@ -9,8 +9,10 @@ import {
   Send,
   Settings,
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
+
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload, type TypingRealtimePayload } from '../lib/realtime';
 import { ChevronLeft, Minimize2, Maximize2 } from 'lucide-react';
@@ -918,4 +920,6 @@ export default function TeacherMessagesPage() {
     </div>
   );
 }
+
+
 

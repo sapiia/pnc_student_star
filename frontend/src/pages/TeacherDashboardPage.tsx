@@ -11,8 +11,10 @@ import {
   Bell,
   ChevronLeft
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
+
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
@@ -588,3 +590,5 @@ export default function TeacherDashboardPage() {
     </div>
   );
 }
+
+

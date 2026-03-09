@@ -13,8 +13,10 @@ import {
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
+
 import { motion } from 'motion/react';
 import { 
   LineChart, 
@@ -375,3 +377,5 @@ export default function TeacherReportsPage() {
     </div>
   );
 }
+
+

@@ -9,7 +9,7 @@ import {
   MessageSquare,
   ArrowLeft
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import TeacherMobileNav from '../components/TeacherMobileNav';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';

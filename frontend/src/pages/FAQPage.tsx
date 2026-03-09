@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { HelpCircle, ChevronDown, ChevronUp, Search, ArrowRight } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState } from 'react';
@@ -143,3 +143,5 @@ export default function FAQPage() {
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
+
+
