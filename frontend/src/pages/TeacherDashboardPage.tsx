@@ -1,21 +1,20 @@
-﻿import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { 
-  Star, 
-  TrendingUp, 
-  AlertCircle, 
-  Smile, 
-  Search, 
-  Filter, 
-  ChevronRight, 
+import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Star,
+  TrendingUp,
+  AlertCircle,
+  Smile,
+  Search,
+  Filter,
+  ChevronRight,
   Bell,
-  MoreHorizontal,
-  ArrowUpRight,
-  ChevronLeft
+  ChevronLeft,
 } from 'lucide-react';
 import TeacherSidebar from '../components/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { useTeacherUnreadNotifications } from '../lib/useTeacherUnreadNotifications';
 
 const STATS = [
   { label: 'Class Avg Stars', value: '4.2', total: '/5.0', trend: '+2.4%', icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
@@ -25,38 +24,75 @@ const STATS = [
 ];
 
 const STUDENTS = [
-  { id: '2026-012', name: 'Dany Chan', rating: 2.1, status: 'Action Needed', lastEval: 'Yesterday, 04:15 PM', avatar: 'https://picsum.photos/seed/dany/100/100', generation: 'Gen 2026', class: 'WEB A' },
-  { id: '2026-001', name: 'Sokha Mean', rating: 4.5, status: 'Healthy', lastEval: 'Today, 08:30 AM', avatar: 'https://picsum.photos/seed/sokha/100/100', generation: 'Gen 2026', class: 'WEB A' },
-  { id: '2026-045', name: 'Leakna Roeun', rating: 4.0, status: 'Healthy', lastEval: 'Today, 08:45 AM', avatar: 'https://picsum.photos/seed/leakna/100/100', generation: 'Gen 2026', class: 'WEB B' },
-  { id: '2026-025', name: 'Borey Van', rating: null, status: 'No Data Today', lastEval: 'Oct 23, 09:00 AM', avatar: 'https://picsum.photos/seed/borey/100/100', generation: 'Gen 2026', class: 'MOBILE A' },
-  { id: '2025-001', name: 'Vicheka Long', rating: 4.8, status: 'Healthy', lastEval: 'Today, 09:00 AM', avatar: 'https://picsum.photos/seed/vicheka/100/100', generation: 'Gen 2025', class: 'WEB A' },
-  { id: '2025-015', name: 'Piseth Keo', rating: 3.2, status: 'Healthy', lastEval: 'Yesterday, 02:00 PM', avatar: 'https://picsum.photos/seed/piseth/100/100', generation: 'Gen 2025', class: 'WEB A' },
+  { id: '2026-012', name: 'Dany Chan', rating: 2.1, status: 'Action Needed', lastEval: 'Yesterday, 04:15 PM', avatar: 'https://picsum.photos/seed/dany/100/100', generation: 'Gen 2026', class: 'WebA' },
+  { id: '2026-001', name: 'Sokha Mean', rating: 4.5, status: 'Healthy', lastEval: 'Today, 08:30 AM', avatar: 'https://picsum.photos/seed/sokha/100/100', generation: 'Gen 2026', class: 'WebA' },
+  { id: '2026-045', name: 'Leakna Roeun', rating: 4.0, status: 'Healthy', lastEval: 'Today, 08:45 AM', avatar: 'https://picsum.photos/seed/leakna/100/100', generation: 'Gen 2026', class: 'WebB' },
+  { id: '2026-030', name: 'Nary Touch', rating: 3.6, status: 'Healthy', lastEval: 'Today, 09:40 AM', avatar: 'https://picsum.photos/seed/nary/100/100', generation: 'Gen 2026', class: 'WebC' },
+  { id: '2026-034', name: 'Sreynich Kim', rating: 3.2, status: 'Healthy', lastEval: 'Today, 09:25 AM', avatar: 'https://picsum.photos/seed/sreynich/100/100', generation: 'Gen 2026', class: 'WebC' },
+  { id: '2027-003', name: 'Panha Koeun', rating: 4.2, status: 'Healthy', lastEval: 'Today, 10:05 AM', avatar: 'https://picsum.photos/seed/panha/100/100', generation: 'Gen 2027', class: 'ClassA' },
+  { id: '2027-017', name: 'Sophea Sophorn', rating: 3.7, status: 'Healthy', lastEval: 'Today, 11:10 AM', avatar: 'https://picsum.photos/seed/sophea/100/100', generation: 'Gen 2027', class: 'ClassB' },
+  { id: '2027-021', name: 'Piset Nea', rating: null, status: 'No Data Today', lastEval: 'Oct 23, 09:00 AM', avatar: 'https://picsum.photos/seed/piset/100/100', generation: 'Gen 2027', class: 'ClassA' },
+  { id: '2027-024', name: 'Malis Thon', rating: 4.8, status: 'Healthy', lastEval: 'Today, 10:58 AM', avatar: 'https://picsum.photos/seed/malis/100/100', generation: 'Gen 2027', class: 'ClassC' },
+  { id: '2027-031', name: 'Chanrith Oun', rating: 2.6, status: 'Action Needed', lastEval: 'Today, 09:50 AM', avatar: 'https://picsum.photos/seed/chanrith/100/100', generation: 'Gen 2027', class: 'ClassD' },
 ];
+
+const GENERATION_CLASSES: Record<string, string[]> = {
+  'Gen 2026': ['WebA', 'WebB', 'WebC'],
+  'Gen 2027': ['ClassA', 'ClassB', 'ClassC', 'ClassD'],
+};
 
 export default function TeacherDashboardPage() {
   const navigate = useNavigate();
+  const unreadNotificationCount = useTeacherUnreadNotifications();
   const [selectedGen, setSelectedGen] = useState('Gen 2026');
-  const [selectedClass, setSelectedClass] = useState('WEB A');
+  const [selectedClass, setSelectedClass] = useState('WebA');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDropdown, setActiveDropdown] = useState<'gen' | 'class' | null>(null);
 
-  const gens = ['Gen 2026', 'Gen 2025', 'Gen 2024'];
-  const classes = ['WEB A', 'WEB B', 'MOBILE A', 'MOBILE B'];
+  const gens = Object.keys(GENERATION_CLASSES);
+  const classes = GENERATION_CLASSES[selectedGen] ?? [];
 
-  const filteredStudents = STUDENTS.filter(student => {
+  useEffect(() => {
+    if (!classes.includes(selectedClass)) {
+      setSelectedClass(classes[0] ?? '');
+    }
+  }, [classes, selectedClass]);
+
+  const classSummary = useMemo(() => {
+    return classes.map((className) => {
+      const studentsInClass = STUDENTS.filter(
+        (student) => student.generation === selectedGen && student.class === className
+      );
+      const ratedStudents = studentsInClass.filter((student) => student.rating !== null);
+      const avg =
+        ratedStudents.length > 0
+          ? ratedStudents.reduce((acc, student) => acc + (student.rating ?? 0), 0) / ratedStudents.length
+          : 0;
+      const needsAttention = studentsInClass.filter((student) => student.status === 'Action Needed').length;
+
+      return {
+        className,
+        avg,
+        studentsCount: studentsInClass.length,
+        needsAttention,
+      };
+    });
+  }, [classes, selectedGen]);
+
+  const filteredStudents = STUDENTS.filter((student) => {
     const matchesGen = student.generation === selectedGen;
     const matchesClass = student.class === selectedClass;
-    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         student.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      student.id.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesGen && matchesClass && matchesSearch;
   });
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
-      
+
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <div>
             <h1 className="text-xl font-bold text-slate-900">Teacher Overview</h1>
@@ -64,29 +100,31 @@ export default function TeacherDashboardPage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl relative">
-              {/* GEN Filter */}
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setActiveDropdown(activeDropdown === 'gen' ? null : 'gen')}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg shadow-sm text-xs font-bold transition-all",
-                    activeDropdown === 'gen' ? "bg-primary text-white" : "bg-white text-primary"
+                    'px-3 py-1.5 rounded-lg shadow-sm text-xs font-bold transition-all',
+                    activeDropdown === 'gen' ? 'bg-primary text-white' : 'bg-white text-primary'
                   )}
                 >
                   GEN: {selectedGen}
                 </button>
                 <AnimatePresence>
                   {activeDropdown === 'gen' && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
                     >
-                      {gens.map(gen => (
-                        <button 
+                      {gens.map((gen) => (
+                        <button
                           key={gen}
-                          onClick={() => { setSelectedGen(gen); setActiveDropdown(null); }}
+                          onClick={() => {
+                            setSelectedGen(gen);
+                            setActiveDropdown(null);
+                          }}
                           className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors"
                         >
                           {gen}
@@ -97,29 +135,31 @@ export default function TeacherDashboardPage() {
                 </AnimatePresence>
               </div>
 
-              {/* CLASS Filter */}
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setActiveDropdown(activeDropdown === 'class' ? null : 'class')}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                    activeDropdown === 'class' ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-white/50"
+                    'px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
+                    activeDropdown === 'class' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:bg-white/50'
                   )}
                 >
                   CLASS: {selectedClass}
                 </button>
                 <AnimatePresence>
                   {activeDropdown === 'class' && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       className="absolute top-full left-0 mt-2 w-32 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
                     >
-                      {classes.map(cls => (
-                        <button 
+                      {classes.map((cls) => (
+                        <button
                           key={cls}
-                          onClick={() => { setSelectedClass(cls); setActiveDropdown(null); }}
+                          onClick={() => {
+                            setSelectedClass(cls);
+                            setActiveDropdown(null);
+                          }}
                           className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-primary transition-colors"
                         >
                           {cls}
@@ -130,22 +170,24 @@ export default function TeacherDashboardPage() {
                 </AnimatePresence>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => navigate('/teacher/notifications')}
+              title="Notifications"
               className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              ) : null}
             </button>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-[1200px] mx-auto space-y-8">
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {STATS.map((stat, idx) => (
-                <motion.div 
+                <motion.div
                   key={stat.label}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -153,10 +195,10 @@ export default function TeacherDashboardPage() {
                   className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200"
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div className={cn("p-2 rounded-xl", stat.bg, stat.color)}>
+                    <div className={cn('p-2 rounded-xl', stat.bg, stat.color)}>
                       <stat.icon className="w-6 h-6" />
                     </div>
-                    <span className={cn("text-xs font-bold", stat.color)}>{stat.trend}</span>
+                    <span className={cn('text-xs font-bold', stat.color)}>{stat.trend}</span>
                   </div>
                   <p className="text-xs font-medium text-slate-500 mb-1">{stat.label}</p>
                   <h3 className="text-2xl font-black text-slate-900">
@@ -167,8 +209,7 @@ export default function TeacherDashboardPage() {
               ))}
             </div>
 
-            {/* Urgent Alert */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-rose-50 border border-rose-100 p-6 rounded-2xl flex items-center justify-between"
@@ -187,16 +228,43 @@ export default function TeacherDashboardPage() {
               </button>
             </motion.div>
 
-            {/* Student Performance List */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-900">Class AVG Overview</h3>
+                <p className="text-xs text-slate-500">{selectedGen}</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                {classSummary.map((item) => (
+                  <button
+                    key={item.className}
+                    onClick={() => setSelectedClass(item.className)}
+                    className={cn(
+                      'text-left p-4 rounded-xl border transition-all',
+                      selectedClass === item.className
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-slate-200 hover:border-primary/40 hover:bg-slate-50'
+                    )}
+                  >
+                    <p className="text-sm font-bold text-slate-900">{item.className}</p>
+                    <p className="text-xs text-slate-500 mt-1">{item.studentsCount} students</p>
+                    <div className="mt-3 flex items-end justify-between">
+                      <p className="text-2xl font-black text-primary">{item.avg.toFixed(1)}</p>
+                      <p className="text-[11px] font-bold text-rose-500">{item.needsAttention} need help</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-slate-900">Student Performance List</h3>
+                <h3 className="text-lg font-bold text-slate-900">Student Performance List - {selectedGen} / {selectedClass}</h3>
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="Search students..." 
+                    <input
+                      type="text"
+                      placeholder="Search students..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none w-64"
@@ -207,7 +275,7 @@ export default function TeacherDashboardPage() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
@@ -238,7 +306,10 @@ export default function TeacherDashboardPage() {
                             <div className="flex flex-col">
                               <div className="flex text-amber-400">
                                 {[...Array(5)].map((_, i) => (
-                                  <Star key={i} className={cn("w-3 h-3 fill-current", i >= Math.floor(student.rating) && "text-slate-200 fill-slate-200")} />
+                                  <Star
+                                    key={i}
+                                    className={cn('w-3 h-3 fill-current', i >= Math.floor(student.rating) && 'text-slate-200 fill-slate-200')}
+                                  />
                                 ))}
                               </div>
                               <span className="text-xs font-bold text-slate-900 mt-1">{student.rating}</span>
@@ -248,28 +319,33 @@ export default function TeacherDashboardPage() {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={cn(
-                            "text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider",
-                            student.status === 'Healthy' ? "bg-emerald-100 text-emerald-600" : 
-                            student.status === 'Action Needed' ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"
-                          )}>
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider',
+                              student.status === 'Healthy'
+                                ? 'bg-emerald-100 text-emerald-600'
+                                : student.status === 'Action Needed'
+                                  ? 'bg-rose-100 text-rose-600'
+                                  : 'bg-slate-100 text-slate-500'
+                            )}
+                          >
                             {student.status}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-xs text-slate-500">{student.lastEval}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button 
+                            <button
                               onClick={() => navigate('/teacher/students')}
                               className="px-4 py-1.5 text-xs font-bold text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-colors"
                             >
                               View Profile
                             </button>
-                            <button 
+                            <button
                               onClick={() => navigate('/teacher/messages')}
                               className={cn(
-                                "px-4 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all",
-                                student.status === 'Action Needed' ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-800 hover:bg-slate-900"
+                                'px-4 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all',
+                                student.status === 'Action Needed' ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-100' : 'bg-slate-800 hover:bg-slate-900'
                               )}
                             >
                               Intervene
@@ -290,11 +366,11 @@ export default function TeacherDashboardPage() {
                   </button>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3].map((page) => (
-                      <button 
+                      <button
                         key={page}
                         className={cn(
-                          "size-8 rounded-lg text-xs font-bold transition-all",
-                          page === 1 ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-500 hover:bg-slate-100"
+                          'size-8 rounded-lg text-xs font-bold transition-all',
+                          page === 1 ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-500 hover:bg-slate-100'
                         )}
                       >
                         {page}

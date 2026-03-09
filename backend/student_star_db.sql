@@ -31,6 +31,10 @@ CREATE TABLE `evaluations` (
   `id` int(10) UNSIGNED NOT NULL,
   `user_id` int(10) UNSIGNED NOT NULL,
   `period` varchar(50) NOT NULL,
+  `rating_scale` int(11) NOT NULL DEFAULT 5,
+  `criteria_count` int(11) NOT NULL DEFAULT 0,
+  `average_score` decimal(5,2) NOT NULL DEFAULT 0.00,
+  `submitted_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `living_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
   `job_study_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
   `human_support_stars` tinyint(3) UNSIGNED NOT NULL DEFAULT 0,
@@ -47,19 +51,47 @@ CREATE TABLE `evaluations` (
 -- Dumping data for table `evaluations`
 --
 
-INSERT INTO `evaluations` (`id`, `user_id`, `period`, `living_stars`, `job_study_stars`, `human_support_stars`, `health_stars`, `feeling_stars`, `choice_behavior_stars`, `money_payment_stars`, `life_skill_stars`, `created_at`, `updated_at`) VALUES
-(1, 5, '2026-Q1', 4, 5, 4, 5, 4, 5, 4, 4, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
-(2, 5, '2026-Q2', 5, 5, 5, 4, 5, 5, 5, 5, '2026-05-15 03:30:00', '2026-05-15 03:30:00'),
-(3, 6, '2026-Q1', 3, 4, 4, 3, 4, 3, 4, 3, '2026-02-16 04:00:00', '2026-02-16 04:00:00'),
-(4, 6, '2026-Q2', 4, 4, 5, 4, 4, 4, 4, 4, '2026-05-16 07:15:00', '2026-05-16 07:15:00'),
-(5, 7, '2026-Q1', 5, 5, 5, 5, 5, 5, 5, 5, '2026-02-17 02:30:00', '2026-02-17 02:30:00'),
-(6, 7, '2026-Q2', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-17 03:45:00', '2026-05-17 03:45:00'),
-(7, 8, '2026-Q1', 4, 3, 4, 4, 3, 4, 3, 4, '2026-02-18 06:00:00', '2026-02-18 06:00:00'),
-(8, 8, '2026-Q2', 4, 4, 4, 5, 4, 4, 4, 4, '2026-05-18 08:30:00', '2026-05-18 08:30:00'),
-(9, 9, '2026-Q1', 5, 5, 4, 5, 5, 4, 5, 5, '2026-02-19 04:15:00', '2026-02-19 04:15:00'),
-(10, 9, '2026-Q2', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-19 02:45:00', '2026-05-19 02:45:00'),
-(11, 10, '2026-Q1', 4, 4, 4, 4, 4, 4, 4, 4, '2026-02-20 07:00:00', '2026-02-20 07:00:00'),
-(12, 10, '2026-Q2', 5, 4, 5, 4, 5, 5, 4, 5, '2026-05-20 09:30:00', '2026-05-20 09:30:00');
+INSERT INTO `evaluations` (`id`, `user_id`, `period`, `rating_scale`, `criteria_count`, `average_score`, `submitted_at`, `living_stars`, `job_study_stars`, `human_support_stars`, `health_stars`, `feeling_stars`, `choice_behavior_stars`, `money_payment_stars`, `life_skill_stars`, `created_at`, `updated_at`) VALUES
+(1, 5, '2026-Q1', 5, 8, 4.38, '2026-02-15 02:00:00', 4, 5, 4, 5, 4, 5, 4, 4, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(2, 5, '2026-Q2', 5, 8, 4.88, '2026-05-15 03:30:00', 5, 5, 5, 4, 5, 5, 5, 5, '2026-05-15 03:30:00', '2026-05-15 03:30:00'),
+(3, 6, '2026-Q1', 5, 8, 3.50, '2026-02-16 04:00:00', 3, 4, 4, 3, 4, 3, 4, 3, '2026-02-16 04:00:00', '2026-02-16 04:00:00'),
+(4, 6, '2026-Q2', 5, 8, 4.13, '2026-05-16 07:15:00', 4, 4, 5, 4, 4, 4, 4, 4, '2026-05-16 07:15:00', '2026-05-16 07:15:00'),
+(5, 7, '2026-Q1', 5, 8, 5.00, '2026-02-17 02:30:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-02-17 02:30:00', '2026-02-17 02:30:00'),
+(6, 7, '2026-Q2', 5, 8, 5.00, '2026-05-17 03:45:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-17 03:45:00', '2026-05-17 03:45:00'),
+(7, 8, '2026-Q1', 5, 8, 3.63, '2026-02-18 06:00:00', 4, 3, 4, 4, 3, 4, 3, 4, '2026-02-18 06:00:00', '2026-02-18 06:00:00'),
+(8, 8, '2026-Q2', 5, 8, 4.13, '2026-05-18 08:30:00', 4, 4, 4, 5, 4, 4, 4, 4, '2026-05-18 08:30:00', '2026-05-18 08:30:00'),
+(9, 9, '2026-Q1', 5, 8, 4.75, '2026-02-19 04:15:00', 5, 5, 4, 5, 5, 4, 5, 5, '2026-02-19 04:15:00', '2026-02-19 04:15:00'),
+(10, 9, '2026-Q2', 5, 8, 5.00, '2026-05-19 02:45:00', 5, 5, 5, 5, 5, 5, 5, 5, '2026-05-19 02:45:00', '2026-05-19 02:45:00'),
+(11, 10, '2026-Q1', 5, 8, 4.00, '2026-02-20 07:00:00', 4, 4, 4, 4, 4, 4, 4, 4, '2026-02-20 07:00:00', '2026-02-20 07:00:00'),
+(12, 10, '2026-Q2', 5, 8, 4.63, '2026-05-20 09:30:00', 5, 4, 5, 4, 5, 5, 4, 5, '2026-05-20 09:30:00', '2026-05-20 09:30:00');
+
+--
+-- Table structure for table `evaluation_responses`
+--
+
+CREATE TABLE `evaluation_responses` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `evaluation_id` int(10) UNSIGNED NOT NULL,
+  `criterion_id` varchar(20) DEFAULT NULL,
+  `criterion_key` varchar(120) NOT NULL,
+  `criterion_name` varchar(120) NOT NULL,
+  `criterion_icon` varchar(120) DEFAULT NULL,
+  `star_value` int(11) NOT NULL DEFAULT 0,
+  `reflection` text DEFAULT NULL,
+  `tip_snapshot` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `evaluation_responses`
+--
+
+INSERT INTO `evaluation_responses` (`id`, `evaluation_id`, `criterion_id`, `criterion_key`, `criterion_name`, `criterion_icon`, `star_value`, `reflection`, `tip_snapshot`, `created_at`, `updated_at`) VALUES
+(1, 1, NULL, 'living', 'Living', 'Home', 4, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(2, 1, NULL, 'jobStudy', 'Job & Study', 'Briefcase', 5, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(3, 1, NULL, 'humanSupport', 'Human & Support', 'Users2', 4, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00'),
+(4, 1, NULL, 'health', 'Health', 'Heart', 5, NULL, NULL, '2026-02-15 02:00:00', '2026-02-15 02:00:00');
 
 -- --------------------------------------------------------
 
@@ -199,6 +231,104 @@ INSERT INTO `settings` (`id`, `key`, `value`, `created_at`, `updated_at`) VALUES
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `evaluation_criteria`
+--
+
+CREATE TABLE `evaluation_criteria` (
+  `id` varchar(20) NOT NULL,
+  `name` varchar(120) NOT NULL,
+  `icon` varchar(120) NOT NULL,
+  `description` text NOT NULL,
+  `status` enum('Active','Draft') NOT NULL DEFAULT 'Active',
+  `display_order` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `evaluation_criteria`
+--
+
+INSERT INTO `evaluation_criteria` (`id`, `name`, `icon`, `description`, `status`, `display_order`, `created_at`, `updated_at`) VALUES
+('CRIT-001', 'Living', 'Home', 'Focus on your living environment, cleanliness of housing, and overall organization of daily chores.', 'Active', 1, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-002', 'Job and Study', 'Briefcase', 'Reflect on your academic performance, attendance, internship dedication, and continuous learning efforts.', 'Active', 2, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-003', 'Human and Support', 'Users2', 'Interpersonal relationships, teamwork skills, and the strength of your social support network.', 'Active', 3, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-004', 'Health', 'Heart', 'Assessment of physical health, sleep patterns, nutrition, and exercise.', 'Active', 4, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-005', 'Your Feeling', 'Smile', 'Self-reflection on happiness, stress management, and emotional stability.', 'Active', 5, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-006', 'Choice and Behavior', 'Brain', 'Evaluating the maturity of your decisions and the responsibility taken for personal actions.', 'Active', 6, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-007', 'Money and Payment', 'CreditCard', 'Financial management, budgeting skills, and meeting financial obligations.', 'Active', 7, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-008', 'Life Skill', 'Wrench', 'Practical skills including time management, problem-solving, and self-sufficiency.', 'Active', 8, '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+('CRIT-009', 'Communication', 'MessageCircle', 'Clarity of expression, active listening, respectful dialogue, and constructive participation.', 'Active', 9, '2026-03-06 00:00:00', '2026-03-06 00:00:00');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `evaluation_criterion_star_descriptions`
+--
+
+CREATE TABLE `evaluation_criterion_star_descriptions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `criterion_id` varchar(20) NOT NULL,
+  `star_value` int(11) NOT NULL,
+  `description` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `evaluation_criterion_star_descriptions`
+--
+
+INSERT INTO `evaluation_criterion_star_descriptions` (`id`, `criterion_id`, `star_value`, `description`, `created_at`, `updated_at`) VALUES
+(1, 'CRIT-001', 1, 'Needs significant support in living, with frequent gaps that require close coaching.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(2, 'CRIT-001', 2, 'Shows early progress in living, but performance is still inconsistent and needs regular follow-up.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(3, 'CRIT-001', 3, 'Meets the expected baseline in living with steady but still improvable habits.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(4, 'CRIT-001', 4, 'Performs well in living and demonstrates reliable, above-average behavior in most situations.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(5, 'CRIT-001', 5, 'Consistently excels in living and models outstanding behavior with minimal guidance.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(6, 'CRIT-002', 1, 'Needs significant support in job and study habits, with major gaps in consistency and commitment.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(7, 'CRIT-002', 2, 'Shows early progress in job and study habits, but still needs regular guidance to stay on track.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(8, 'CRIT-002', 3, 'Meets the baseline expectations in job and study with acceptable consistency.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(9, 'CRIT-002', 4, 'Performs well in job and study and demonstrates reliable learning discipline.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(10, 'CRIT-002', 5, 'Consistently excels in job and study with strong ownership, discipline, and continuous improvement.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(11, 'CRIT-003', 1, 'Needs significant support in relationships and teamwork, with frequent conflict or withdrawal.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(12, 'CRIT-003', 2, 'Shows some positive interactions but still struggles to build stable support and collaboration.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(13, 'CRIT-003', 3, 'Maintains acceptable relationships and participates in teamwork at a basic level.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(14, 'CRIT-003', 4, 'Works well with others and contributes positively to a supportive environment.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(15, 'CRIT-003', 5, 'Builds strong relationships, supports peers consistently, and elevates team dynamics.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(16, 'CRIT-004', 1, 'Health habits need urgent improvement, with clear risk factors in sleep, nutrition, or physical care.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(17, 'CRIT-004', 2, 'Some healthy behaviors exist, but routines are still weak and inconsistent.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(18, 'CRIT-004', 3, 'Maintains a basic acceptable level of health habits, though improvement is still needed.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(19, 'CRIT-004', 4, 'Demonstrates solid health routines and generally takes good care of physical well-being.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(20, 'CRIT-004', 5, 'Shows excellent health habits and maintains a strong, disciplined wellness routine.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(21, 'CRIT-005', 1, 'Emotional well-being is under strain and requires significant support and attention.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(22, 'CRIT-005', 2, 'Shows some ability to manage feelings, but stress and emotional balance remain unstable.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(23, 'CRIT-005', 3, 'Maintains a generally acceptable emotional state with room for healthier coping habits.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(24, 'CRIT-005', 4, 'Demonstrates good emotional awareness and handles stress in constructive ways.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(25, 'CRIT-005', 5, 'Shows strong emotional balance, resilience, and healthy self-awareness consistently.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(26, 'CRIT-006', 1, 'Choices and behavior often create problems and need close supervision and reflection.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(27, 'CRIT-006', 2, 'Some responsible choices are visible, but behavior is still inconsistent.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(28, 'CRIT-006', 3, 'Demonstrates acceptable judgment and takes basic responsibility for actions.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(29, 'CRIT-006', 4, 'Usually makes thoughtful decisions and behaves responsibly in most situations.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(30, 'CRIT-006', 5, 'Consistently makes mature choices and models responsible behavior for others.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(31, 'CRIT-007', 1, 'Financial habits need major improvement, with frequent difficulty managing obligations.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(32, 'CRIT-007', 2, 'Shows some awareness of budgeting, but financial decisions remain unstable.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(33, 'CRIT-007', 3, 'Handles basic financial responsibilities at an acceptable level.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(34, 'CRIT-007', 4, 'Demonstrates good budgeting habits and manages financial obligations well.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(35, 'CRIT-007', 5, 'Shows excellent financial discipline, planning, and consistent responsibility.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(36, 'CRIT-008', 1, 'Needs significant development in practical life skills and daily self-management.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(37, 'CRIT-008', 2, 'Shows some practical ability, but still depends heavily on guidance.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(38, 'CRIT-008', 3, 'Demonstrates an acceptable level of life skills for daily functioning.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(39, 'CRIT-008', 4, 'Handles practical tasks well and shows growing independence.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(40, 'CRIT-008', 5, 'Demonstrates strong life skills, initiative, and self-sufficiency consistently.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(41, 'CRIT-009', 1, 'Communication needs significant improvement, with frequent misunderstandings or lack of clarity.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(42, 'CRIT-009', 2, 'Shows some communication effort, but clarity and listening remain inconsistent.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(43, 'CRIT-009', 3, 'Communicates at a basic acceptable level and listens with moderate consistency.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(44, 'CRIT-009', 4, 'Communicates clearly, listens actively, and participates constructively most of the time.', '2026-03-06 00:00:00', '2026-03-06 00:00:00'),
+(45, 'CRIT-009', 5, 'Communicates with confidence, clarity, empathy, and strong constructive impact.', '2026-03-06 00:00:00', '2026-03-06 00:00:00');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -301,7 +431,16 @@ INSERT INTO `students` (`user_id`, `student_no`, `grade_level`, `section`, `crea
 --
 ALTER TABLE `evaluations`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_evaluations_user_period` (`user_id`,`period`);
+  ADD UNIQUE KEY `uq_evaluations_user_period` (`user_id`,`period`),
+  ADD KEY `idx_evaluations_submitted_at` (`submitted_at`);
+
+--
+-- Indexes for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_evaluation_criterion_key` (`evaluation_id`,`criterion_key`),
+  ADD KEY `idx_evaluation_responses_criterion_id` (`criterion_id`);
 
 --
 -- Indexes for table `feedbacks`
@@ -339,6 +478,19 @@ ALTER TABLE `settings`
   ADD UNIQUE KEY `key` (`key`);
 
 --
+-- Indexes for table `evaluation_criteria`
+--
+ALTER TABLE `evaluation_criteria`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `evaluation_criterion_star_descriptions`
+--
+ALTER TABLE `evaluation_criterion_star_descriptions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_criterion_star` (`criterion_id`,`star_value`);
+
+--
 -- Indexes for table `students`
 --
 ALTER TABLE `students`
@@ -372,6 +524,12 @@ ALTER TABLE `evaluations`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
+-- AUTO_INCREMENT for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
 -- AUTO_INCREMENT for table `feedbacks`
 --
 ALTER TABLE `feedbacks`
@@ -402,6 +560,12 @@ ALTER TABLE `settings`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
+-- AUTO_INCREMENT for table `evaluation_criterion_star_descriptions`
+--
+ALTER TABLE `evaluation_criterion_star_descriptions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=46;
+
+--
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
@@ -415,7 +579,13 @@ ALTER TABLE `users`
 -- Constraints for table `evaluations`
 --
 ALTER TABLE `evaluations`
-  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `students` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_evaluations_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `evaluation_responses`
+--
+ALTER TABLE `evaluation_responses`
+  ADD CONSTRAINT `fk_evaluation_responses_evaluation` FOREIGN KEY (`evaluation_id`) REFERENCES `evaluations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `feedbacks`
@@ -430,6 +600,12 @@ ALTER TABLE `feedbacks`
 --
 ALTER TABLE `notifications`
   ADD CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `evaluation_criterion_star_descriptions`
+--
+ALTER TABLE `evaluation_criterion_star_descriptions`
+  ADD CONSTRAINT `fk_criterion_star_descriptions_criterion` FOREIGN KEY (`criterion_id`) REFERENCES `evaluation_criteria` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `students`

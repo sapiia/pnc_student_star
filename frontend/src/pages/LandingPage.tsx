@@ -1,6 +1,5 @@
 ﻿import { useNavigate } from 'react-router-dom';
 import { 
-  Star, 
   X, 
   Send, 
   MessageCircle, 
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, FormEvent } from 'react';
+import BrandLogo, { PNLogoMark } from '../components/BrandLogo';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -74,12 +74,7 @@ export default function LandingPage() {
     <div className="relative min-h-screen flex flex-col bg-slate-50">
       {/* Navigation */}
       <nav className="sticky top-0 z-50 w-full border-b border-primary/10 bg-white/70 backdrop-blur-md px-6 lg:px-20 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary p-1.5 rounded-lg">
-            <Star className="w-6 h-6 text-white fill-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-slate-900">PNC Student Star</span>
-        </div>
+        <BrandLogo titleClassName="text-xl font-bold tracking-tight" markClassName="size-11" />
         <div className="flex items-center gap-6">
           <button 
             onClick={() => setShowSupportModal(true)}
@@ -201,7 +196,7 @@ export default function LandingPage() {
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               className="absolute -top-6 -right-6 w-16 h-16 bg-white rounded-lg shadow-lg flex items-center justify-center"
             >
-              <Star className="w-8 h-8 text-primary fill-primary" />
+              <PNLogoMark className="size-10" />
             </motion.div>
           </motion.div>
         </section>
@@ -212,12 +207,7 @@ export default function LandingPage() {
       <footer className="px-6 lg:px-20 py-12 border-t border-slate-100 bg-white">
         <div className="flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-2 items-center md:items-start">
-            <div className="flex items-center gap-2">
-              <div className="bg-primary/20 p-1 rounded">
-                <Star className="w-4 h-4 text-primary fill-primary" />
-              </div>
-              <span className="font-bold text-slate-900">PNC Student Star</span>
-            </div>
+            <BrandLogo className="gap-2" markClassName="size-8" titleClassName="text-base font-bold" />
             <p className="text-sm text-slate-500">© 2024 Passerelles numériques Cambodia. All rights reserved.</p>
           </div>
           <div className="flex flex-wrap gap-8 justify-center">

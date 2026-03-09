@@ -8,6 +8,7 @@ import EvaluationResultPage from './pages/EvaluationResultPage';
 import EvaluationHistoryPage from './pages/EvaluationHistoryPage';
 import HelpCenterPage from './pages/HelpCenterPage';
 import FeedbackPage from './pages/FeedbackPage';
+import NotificationsPage from './pages/NotificationsPage';
 import ProfilePage from './pages/ProfilePage';
 import FAQPage from './pages/FAQPage';
 import MeetingPage from './pages/MeetingPage';
@@ -37,9 +38,11 @@ export default function App() {
         <Route path="/history" element={<EvaluationHistoryPage />} />
         <Route path="/help" element={<HelpCenterPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/faq" element={<FAQPage />} />
-        <Route path="/meeting" element={<MeetingPage />} />
+        <Route path="/messages" element={<MeetingPage />} />
+        <Route path="/meeting" element={<Navigate to="/messages" replace />} />
         
         {/* Teacher Portal Routes */}
         <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />

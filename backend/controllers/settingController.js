@@ -1,4 +1,5 @@
 const Setting = require('../models/Setting');
+const CriterionConfig = require('../models/CriterionConfig');
 
 const getAllSettings = async (req, res) => {
   try {
@@ -104,6 +105,32 @@ const deleteSettingByKey = async (req, res) => {
   }
 };
 
+const getEvaluationCriteriaConfig = async (_req, res) => {
+  try {
+    const config = await CriterionConfig.getConfig();
+    res.json(config);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Failed to load evaluation criteria configuration.' });
+  }
+};
+
+const saveEvaluationCriteriaConfig = async (req, res) => {
+  try {
+    const config = await CriterionConfig.saveConfig({
+      ratingScale: req.body?.ratingScale,
+      criteria: req.body?.criteria
+    });
+    res.json({
+      message: 'Evaluation criteria configuration updated successfully',
+      ...config
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Failed to save evaluation criteria configuration.' });
+  }
+};
+
 module.exports = {
   getAllSettings,
   getSettingById,
@@ -112,5 +139,7 @@ module.exports = {
   updateSetting,
   updateSettingByKey,
   deleteSetting,
-  deleteSettingByKey
+  deleteSettingByKey,
+  getEvaluationCriteriaConfig,
+  saveEvaluationCriteriaConfig
 };

@@ -1,0 +1,357 @@
+{
+  "rootFolder": "c:\\Users\\SOPHY.MOEURN\\Desktop\\pnc_student_star",
+  "analyzedAt": "2026-03-07T07:28:42.452Z",
+  "rootStructure": [
+    {
+      "name": "backend",
+      "type": "dir"
+    },
+    {
+      "name": "frontend",
+      "type": "dir"
+    },
+    {
+      "name": "node_modules",
+      "type": "dir"
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file",
+      "size": 39061,
+      "lines": 1081
+    },
+    {
+      "name": "package.json",
+      "type": "file",
+      "size": 160,
+      "lines": 10
+    },
+    {
+      "name": "test-dashboard.html",
+      "type": "file",
+      "size": 850,
+      "lines": 17
+    }
+  ],
+  "rootFileSnippets": {
+    "package-lock.json": [
+      "{",
+      "\"name\": \"pnc_student_star\",",
+      "\"lockfileVersion\": 3,",
+      "\"requires\": true,",
+      "\"packages\": {",
+      "\"\": {",
+      "\"dependencies\": {",
+      "\"axios\": \"^1.13.6\",",
+      "\"cors\": \"^2.8.6\",",
+      "\"dotenv\": \"^17.3.1\","
+    ],
+    "package.json": [
+      "{",
+      "\"dependencies\": {",
+      "\"axios\": \"^1.13.6\",",
+      "\"cors\": \"^2.8.6\",",
+      "\"dotenv\": \"^17.3.1\",",
+      "\"express\": \"^5.2.1\",",
+      "\"nodemailer\": \"^8.0.1\"",
+      "}",
+      "}",
+      ""
+    ],
+    "test-dashboard.html": [
+      "��<\u0000!\u0000D\u0000O\u0000C\u0000T\u0000Y\u0000P\u0000E\u0000 \u0000h\u0000t\u0000m\u0000l\u0000>\u0000",
+      "\u0000<\u0000h\u0000t\u0000m\u0000l\u0000>\u0000",
+      "\u0000<\u0000h\u0000e\u0000a\u0000d\u0000>\u0000",
+      "\u0000 \u0000 \u0000 \u0000 \u0000<\u0000t\u0000i\u0000t\u0000l\u0000e\u0000>\u0000D\u0000a\u0000s\u0000h\u0000b\u0000o\u0000a\u0000r\u0000d\u0000 \u0000T\u0000e\u0000s\u0000t\u0000<\u0000/\u0000t\u0000i\u0000t\u0000l\u0000e\u0000>\u0000",
+      "\u0000<\u0000/\u0000h\u0000e\u0000a\u0000d\u0000>\u0000",
+      "\u0000<\u0000b\u0000o\u0000d\u0000y\u0000>\u0000",
+      "\u0000 \u0000 \u0000 \u0000 \u0000<\u0000h\u00001\u0000>\u0000T\u0000e\u0000s\u0000t\u0000i\u0000n\u0000g\u0000 \u0000D\u0000a\u0000s\u0000h\u0000b\u0000o\u0000a\u0000r\u0000d\u0000 \u0000A\u0000c\u0000c\u0000e\u0000s\u0000s\u0000<\u0000/\u0000h\u00001\u0000>\u0000",
+      "\u0000 \u0000 \u0000 \u0000 \u0000<\u0000p\u0000>\u0000T\u0000r\u0000y\u0000 \u0000l\u0000o\u0000g\u0000g\u0000i\u0000n\u0000g\u0000 \u0000i\u0000n\u0000 \u0000w\u0000i\u0000t\u0000h\u0000:\u0000<\u0000/\u0000p\u0000>\u0000",
+      "\u0000 \u0000 \u0000 \u0000 \u0000<\u0000u\u0000l\u0000>\u0000",
+      "\u0000 \u0000 \u0000 \u0000 \u0000 \u0000 \u0000 \u0000 \u0000<\u0000l\u0000i\u0000>\u0000S\u0000t\u0000u\u0000d\u0000e\u0000n\u0000t\u0000:\u0000 \u0000e\u0000m\u0000i\u0000l\u0000y\u0000.\u0000d\u0000a\u0000v\u0000i\u0000s\u0000@\u0000s\u0000t\u0000u\u0000d\u0000e\u0000n\u0000t\u0000.\u0000s\u0000c\u0000h\u0000o\u0000o\u0000l\u0000.\u0000e\u0000d\u0000u\u0000 \u0000/\u0000 \u0000p\u0000a\u0000s\u0000s\u0000w\u0000o\u0000r\u0000d\u00001\u00002\u00003\u0000<\u0000/\u0000l\u0000i\u0000>\u0000"
+    ]
+  },
+  "importantFolders": [
+    {
+      "path": "backend",
+      "category": "backend",
+      "fileCount": 42,
+      "primaryLanguage": "JavaScript"
+    },
+    {
+      "path": "backend\\config",
+      "category": "config",
+      "fileCount": 1,
+      "primaryLanguage": "JavaScript"
+    },
+    {
+      "path": "backend\\examples",
+      "category": "examples",
+      "fileCount": 2,
+      "primaryLanguage": "JavaScript"
+    },
+    {
+      "path": "backend\\routes",
+      "category": "build",
+      "fileCount": 7,
+      "primaryLanguage": "JavaScript"
+    },
+    {
+      "path": "frontend",
+      "category": "frontend",
+      "fileCount": 48,
+      "primaryLanguage": "TypeScript"
+    },
+    {
+      "path": "frontend\\src\\components",
+      "category": "frontend",
+      "fileCount": 6,
+      "primaryLanguage": "TypeScript"
+    },
+    {
+      "path": "frontend\\src\\lib",
+      "category": "core",
+      "fileCount": 1,
+      "primaryLanguage": "TypeScript"
+    }
+  ],
+  "readmeParagraphs": {
+    "backend": "# My Node Project\r\n\r\nA structured Node.js Express application following MVC pattern with MySQL database for Student Star Database system.\r",
+    "frontend": "<div align=\"center\">\r\n<img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6\" />\r\n</div>\r"
+  },
+  "totals": {
+    "numFiles": 93,
+    "numDirs": 20,
+    "totalSizeBytes": 6223196,
+    "totalLinesOfCode": 18704
+  },
+  "fileCategories": {
+    "other": 16,
+    "source": 65,
+    "config": 8,
+    "documentation": 3,
+    "test": 1
+  },
+  "linesOfCodePerLanguage": {
+    "JavaScript": 4833,
+    "TypeScript": 13871
+  },
+  "filesPerLanguage": {
+    "JavaScript": 27,
+    "TypeScript": 38
+  },
+  "projectTypes": [
+    "JavaScript/Node.js"
+  ],
+  "frameworks": [
+    "React",
+    "Vite"
+  ],
+  "entryPoints": [
+    "backend\\src\\server.js"
+  ],
+  "ciCdTools": [],
+  "packageManagers": [
+    "npm/yarn"
+  ],
+  "topLevelDirectories": [
+    {
+      "name": "frontend",
+      "numFiles": 48,
+      "totalLoc": 13871,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "backend",
+      "numFiles": 42,
+      "totalLoc": 4833,
+      "dominantLanguage": "JavaScript"
+    }
+  ],
+  "detailedDirectories": [
+    {
+      "path": "frontend",
+      "name": "frontend",
+      "level": 1,
+      "numFiles": 48,
+      "totalLoc": 13871,
+      "dominantLanguage": "TypeScript",
+      "category": "Web/UI",
+      "description": "<div align=\"center\">\r",
+      "subdirectories": [
+        {
+          "path": "frontend\\src",
+          "name": "src",
+          "level": 2,
+          "numFiles": 39,
+          "totalLoc": 13846,
+          "dominantLanguage": "TypeScript",
+          "category": "General",
+          "description": "General module with 39 files (TypeScript)",
+          "subdirectories": [
+            {
+              "path": "frontend\\src\\pages",
+              "name": "pages",
+              "level": 3,
+              "numFiles": 26,
+              "totalLoc": 12478,
+              "dominantLanguage": "TypeScript",
+              "category": "General",
+              "description": "General module with 26 files (TypeScript)",
+              "subdirectories": []
+            },
+            {
+              "path": "frontend\\src\\components",
+              "name": "components",
+              "level": 3,
+              "numFiles": 6,
+              "totalLoc": 1167,
+              "dominantLanguage": "TypeScript",
+              "category": "General",
+              "description": "General module with 6 files (TypeScript)",
+              "subdirectories": []
+            },
+            {
+              "path": "frontend\\src\\lib",
+              "name": "lib",
+              "level": 3,
+              "numFiles": 1,
+              "totalLoc": 7,
+              "dominantLanguage": "TypeScript",
+              "category": "Library",
+              "description": "Library module with 1 files (TypeScript)",
+              "subdirectories": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "backend",
+      "name": "backend",
+      "level": 1,
+      "numFiles": 42,
+      "totalLoc": 4833,
+      "dominantLanguage": "JavaScript",
+      "category": "General",
+      "description": "# My Node Project\r",
+      "subdirectories": [
+        {
+          "path": "backend\\controllers",
+          "name": "controllers",
+          "level": 2,
+          "numFiles": 7,
+          "totalLoc": 2336,
+          "dominantLanguage": "JavaScript",
+          "category": "Controllers",
+          "description": "Controllers module with 7 files (JavaScript)",
+          "subdirectories": []
+        },
+        {
+          "path": "backend\\models",
+          "name": "models",
+          "level": 2,
+          "numFiles": 8,
+          "totalLoc": 1439,
+          "dominantLanguage": "JavaScript",
+          "category": "Models/Entities",
+          "description": "Models/Entities module with 8 files (JavaScript)",
+          "subdirectories": []
+        },
+        {
+          "path": "backend\\examples",
+          "name": "examples",
+          "level": 2,
+          "numFiles": 2,
+          "totalLoc": 545,
+          "dominantLanguage": "JavaScript",
+          "category": "General",
+          "description": "General module with 2 files (JavaScript)",
+          "subdirectories": []
+        },
+        {
+          "path": "backend\\config",
+          "name": "config",
+          "level": 2,
+          "numFiles": 1,
+          "totalLoc": 18,
+          "dominantLanguage": "JavaScript",
+          "category": "Configuration",
+          "description": "Configuration module with 1 files (JavaScript)",
+          "subdirectories": []
+        },
+        {
+          "path": "backend\\migrations",
+          "name": "migrations",
+          "level": 2,
+          "numFiles": 2,
+          "totalLoc": 0,
+          "category": "General",
+          "description": "General module with 2 files",
+          "subdirectories": []
+        }
+      ]
+    }
+  ],
+  "architecturalInsights": {
+    "coreApplications": [],
+    "entryPointDetails": [
+      {
+        "path": "..\\..\\AppData\\Local\\Programs\\Microsoft VS Code\\backend\\src\\server.js",
+        "type": "Unknown",
+        "description": ""
+      }
+    ],
+    "serviceArchitecture": {
+      "microservices": [],
+      "monoliths": [],
+      "libraries": []
+    },
+    "layeredArchitecture": {
+      "presentation": [],
+      "business": [],
+      "data": [],
+      "infrastructure": []
+    }
+  },
+  "largeFiles": [
+    {
+      "path": "backend\\uploads\\profiles\\user_29_1772778211685.jpg",
+      "sizeMb": 1.73
+    },
+    {
+      "path": "backend\\uploads\\profiles\\user_34_1772776548051.jpg",
+      "sizeMb": 1.73
+    },
+    {
+      "path": "backend\\uploads\\profiles\\user_34_1772776507258.png",
+      "sizeMb": 1.1
+    }
+  ],
+  "dependencies": {
+    "production": [
+      "axios",
+      "cors",
+      "dotenv",
+      "express",
+      "nodemailer"
+    ],
+    "development": [],
+    "total": 5
+  },
+  "complexity": {
+    "averageFileSize": 201.11827956989248,
+    "maxFileSize": 18140.3648,
+    "nestedDepth": 0,
+    "estimatedComplexity": "medium"
+  },
+  "gitRepo": {
+    "firstCommitDate": "2026-03-07",
+    "totalCommits": 21,
+    "numContributors": 0,
+    "currentBranch": "master",
+    "remoteUrls": [
+      "https://github.com/sapiia/pnc_student_star.git"
+    ]
+  }
+}

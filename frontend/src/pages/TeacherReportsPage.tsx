@@ -31,6 +31,7 @@ import {
   Legend
 } from 'recharts';
 import { cn } from '../lib/utils';
+import { useTeacherUnreadNotifications } from '../lib/useTeacherUnreadNotifications';
 
 const TREND_DATA = [
   { name: 'Week 1', avg: 3.2, completion: 65 },
@@ -115,6 +116,7 @@ const DATA_BY_GEN = {
 
 export default function TeacherReportsPage() {
   const navigate = useNavigate();
+  const unreadNotificationCount = useTeacherUnreadNotifications();
   const [selectedGen, setSelectedGen] = useState('ALL Gen');
   const [selectedClass, setSelectedClass] = useState('WEB Class A');
 
@@ -141,7 +143,9 @@ export default function TeacherReportsPage() {
               className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              ) : null}
             </button>
           </div>
         </header>

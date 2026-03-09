@@ -15,6 +15,7 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import { cn } from '../lib/utils';
 import RadarChart from '../components/RadarChart';
+import { useTeacherUnreadNotifications } from '../lib/useTeacherUnreadNotifications';
 
 const STUDENTS = [
   { id: '2026-012', name: 'Sokhea Mean', score: '4.8 / 5.0', avatar: 'https://picsum.photos/seed/sokhea/100/100', generation: 'Gen 2026', class: 'WEB A' },
@@ -47,6 +48,7 @@ const RADAR_KEYS = [
 
 export default function TeacherStudentListPage() {
   const navigate = useNavigate();
+  const unreadNotificationCount = useTeacherUnreadNotifications();
   const [selectedId, setSelectedId] = useState('2026-012');
   const [selectedGen, setSelectedGen] = useState('Gen 2026');
   const [selectedClass, setSelectedClass] = useState('All Classes');
@@ -101,7 +103,9 @@ export default function TeacherStudentListPage() {
               className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              {unreadNotificationCount > 0 ? (
+                <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+              ) : null}
             </button>
           </div>
         </header>
