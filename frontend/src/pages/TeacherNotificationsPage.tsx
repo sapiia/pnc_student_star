@@ -38,7 +38,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     sender: {
       name: 'Dany Chan',
       role: 'Student',
-      avatar: 'https://picsum.photos/seed/dany/100/100'
+      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
     },
     content: 'sent you a message: "Teacher, I have a question about my evaluation results."',
     time: '2 mins ago',
@@ -50,7 +50,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     sender: {
       name: 'Admin Sarah',
       role: 'Admin',
-      avatar: 'https://picsum.photos/seed/sarah/100/100'
+      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
     },
     content: 'sent you a message: "Please review the Q4 evaluation schedule for Gen 2026."',
     time: '1 hour ago',
@@ -62,7 +62,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     sender: {
       name: 'Teacher Sokha',
       role: 'Teacher',
-      avatar: 'https://picsum.photos/seed/sokha/100/100'
+      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
     },
     content: 'sent you a message: "Can we discuss the student performance in WEB A?"',
     time: '3 hours ago',
@@ -74,7 +74,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     sender: {
       name: 'System',
       role: 'Admin',
-      avatar: 'https://picsum.photos/seed/system/100/100'
+      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
     },
     content: 'New urgent alert: 3 students in Gen 2026 need immediate attention.',
     time: '5 hours ago',
@@ -86,7 +86,7 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     sender: {
       name: 'Leakna Roeun',
       role: 'Student',
-      avatar: 'https://picsum.photos/seed/leakna/100/100'
+      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
     },
     content: 'sent you a message: "Thank you for the feedback, teacher!"',
     time: 'Yesterday',

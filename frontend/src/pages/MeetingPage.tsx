@@ -121,7 +121,7 @@ export default function MeetingPage() {
   const navigate = useNavigate();
   const [studentId, setStudentId] = useState<number | null>(null);
   const [studentName, setStudentName] = useState('Student');
-  const [studentAvatar, setStudentAvatar] = useState('https://picsum.photos/seed/student-self/100/100');
+  const [studentAvatar, setStudentAvatar] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
@@ -163,7 +163,7 @@ export default function MeetingPage() {
         if (savedPhoto) {
           setStudentAvatar(savedPhoto);
         } else {
-          setStudentAvatar(`https://picsum.photos/seed/student-${resolvedStudentId}/100/100`);
+          setStudentAvatar(`http://localhost:3001/uploads/logo/star_gmail_logo.jpg`);
         }
       }
     } catch {
@@ -312,7 +312,7 @@ export default function MeetingPage() {
         name: toDisplayName(user),
         role: toRoleLabel(String(user.role || '')),
         type: toContactType(String(user.role || '')),
-        avatar: String(user.profile_image || '').trim() || `https://picsum.photos/seed/user-${contactId}/100/100`,
+        avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
         lastMessage,
         timestamp: contactMessages[0]?.notification?.created_at,
         unreadCount,

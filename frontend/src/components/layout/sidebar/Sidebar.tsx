@@ -29,7 +29,7 @@ export default function Sidebar({ className }: SidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole={studentId ? `Student ID: ${studentId}` : 'Student'}
-      defaultPhoto="https://picsum.photos/seed/alex/100/100"
+      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
       isSettingsEnabled={true}
       settingsItems={settingsItems}
       settingsPath="/profile"

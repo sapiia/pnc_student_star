@@ -7,7 +7,7 @@ interface TeacherSidebarProps {
 }
 
 export default function TeacherSidebar({ className }: TeacherSidebarProps) {
-  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Teacher', defaultPhoto: 'https://picsum.photos/seed/sarah/100/100' });
+  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Teacher', defaultPhoto: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg' });
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
@@ -31,7 +31,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole="Lead Instructor"
-      defaultPhoto="https://picsum.photos/seed/sarah/100/100"
+      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
       isSettingsEnabled={true}
       settingsItems={settingsItems}
       settingsPath="/teacher/settings"

@@ -39,7 +39,7 @@ export default function TeacherMobileNav() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Teacher');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/teacher/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
 
   useEffect(() => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';

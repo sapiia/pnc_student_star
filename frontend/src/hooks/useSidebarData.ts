@@ -9,7 +9,7 @@ export function useSidebarData() {
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
 
   // Load profile identity
   useEffect(() => {
@@ -122,8 +122,37 @@ export function useSidebarData() {
         }
       } catch { /* ignore */ }
     };
+
+    const loadProfileIdentity = async () => {
+      try {
+        const raw = localStorage.getItem('auth_user');
+        if (!raw) return;
+        const authUser = JSON.parse(raw);
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) return;
+
+        const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+        const data = await response.json();
+        if (!response.ok) return;
+
+        setProfileName(
+          String(data?.name || '').trim() ||
+          [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() ||
+          String(authUser?.name || 'Student')
+        );
+        setStudentId(String(data?.student_id || data?.resolved_student_id || authUser?.student_id || '').trim());
+        const resolvedPhoto = String(data?.profile_image || authUser?.profile_image || '').trim();
+        if (resolvedPhoto) setProfilePhoto(resolvedPhoto);
+      } catch { /* silent fallback */ }
+    };
+
     window.addEventListener('profile-photo-updated', refreshPhoto);
-    return () => window.removeEventListener('profile-photo-updated', refreshPhoto);
+    window.addEventListener('profile-updated', loadProfileIdentity);
+
+    return () => {
+      window.removeEventListener('profile-photo-updated', refreshPhoto);
+      window.removeEventListener('profile-updated', loadProfileIdentity);
+    };
   }, []);
 
   return { profileName, studentId, authUserId, unreadNotificationCount, unreadMessageCount, profilePhoto };

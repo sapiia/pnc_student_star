@@ -147,8 +147,8 @@ export default function AdminClassStudentsPage() {
                         <tr key={student.id} className="hover:bg-slate-50 transition-colors group">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-xs font-black">
-                                {student.name.split(' ').map((n: string) => n[0]).join('')}
+                              <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100">
+                                <img src="http://localhost:3001/uploads/logo/star_gmail_logo.jpg" alt={student.name} className="w-full h-full object-cover" />
                               </div>
                               <div>
                                 <p className="text-sm font-black text-slate-900">{student.name}</p>
@@ -222,8 +222,8 @@ export default function AdminClassStudentsPage() {
                 <div className="flex-1 overflow-y-auto p-6 space-y-8">
                   {/* Profile Header */}
                   <div className="text-center">
-                    <div className="size-24 rounded-3xl bg-primary/10 text-primary flex items-center justify-center text-2xl font-black mx-auto mb-4">
-                      {selectedStudent.name.split(' ').map((n: string) => n[0]).join('')}
+                    <div className="size-24 rounded-3xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100 mx-auto mb-4">
+                      <img src="http://localhost:3001/uploads/logo/star_gmail_logo.jpg" alt={selectedStudent.name} className="w-full h-full object-cover" />
                     </div>
                     <h4 className="text-xl font-black text-slate-900">{selectedStudent.name}</h4>
                     <p className="text-xs font-bold text-primary uppercase tracking-widest mt-1">{generation} - {className}</p>

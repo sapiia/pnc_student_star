@@ -253,7 +253,7 @@ export default function AdminSettingsPage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/admin/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
   const filteredCriterionIconOptions = CRITERION_ICON_OPTIONS.filter((option) => {
@@ -624,7 +624,7 @@ export default function AdminSettingsPage() {
 
         const savedPhoto = String(data.profile_image || authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'https://picsum.photos/seed/admin/200/200';
+          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
         const resolvedFirstName = String(data.first_name || '').trim();
         const resolvedLastName = String(data.last_name || '').trim();
         const fallbackName = splitNameParts(String(data.name || authUser.name || ''));
@@ -640,7 +640,7 @@ export default function AdminSettingsPage() {
       } catch (error) {
         const fallbackPhoto = String(authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'https://picsum.photos/seed/admin/200/200';
+          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
         const fallbackName = splitNameParts(authUser.name || '');
         setProfileForm((prev) => ({
           ...prev,
@@ -1985,7 +1985,7 @@ export default function AdminSettingsPage() {
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-3xl overflow-hidden border-4 border-slate-50 shadow-inner relative group">
                       <img
-                        src={profileForm.photoUrl || 'https://picsum.photos/seed/admin/200/200'}
+                        src={profileForm.photoUrl || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
                         alt={`${profileForm.firstName} ${profileForm.lastName}`.trim() || 'Admin'}
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">

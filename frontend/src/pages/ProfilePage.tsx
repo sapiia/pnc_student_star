@@ -62,7 +62,7 @@ export default function ProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/student/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 

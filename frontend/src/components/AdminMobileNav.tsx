@@ -28,7 +28,6 @@ const drawerMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
   { icon: Users, label: 'User Management', path: '/admin/users' },
   { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
-  { icon: Calendar, label: 'Evaluation Periods', path: '/admin/evaluations' },
   { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
   { icon: Settings, label: 'System Settings', path: '/admin/settings' },
 ];
@@ -39,7 +38,7 @@ export default function AdminMobileNav() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Administrator');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/admin/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
 
   useEffect(() => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
