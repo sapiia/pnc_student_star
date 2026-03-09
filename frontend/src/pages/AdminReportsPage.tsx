@@ -39,7 +39,7 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import { CRITERIA } from '../constants';
@@ -466,3 +466,4 @@ export default function AdminReportsPage() {
     </div>
   );
 }
+

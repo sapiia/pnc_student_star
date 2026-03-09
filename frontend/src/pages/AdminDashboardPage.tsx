@@ -15,8 +15,10 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import AdminMobileNav from '../components/AdminMobileNav';
+
 import { cn } from '../lib/utils';
 
 const STUDENT_STATS = {
@@ -352,3 +354,5 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+

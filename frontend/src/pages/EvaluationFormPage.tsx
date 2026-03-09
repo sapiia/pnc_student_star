@@ -20,9 +20,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CRITERIA } from '../constants';
-import StarRating from '../components/StarRating';
+import StarRating from '../components/ui/StarRating';
 import { cn } from '../lib/utils';
-import BrandLogo from '../components/BrandLogo';
+import BrandLogo from '../components/ui/BrandLogo';
 
 type EvaluationCriterion = {
   id?: string;

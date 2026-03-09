@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, User, Lock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
-import BrandLogo from '../components/BrandLogo';
+import BrandLogo from '../components/ui/BrandLogo';
 
 type InvitePayload = {
   email: string;

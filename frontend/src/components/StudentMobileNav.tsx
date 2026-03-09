@@ -16,7 +16,7 @@ import {
 import { cn } from '../lib/utils';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import BrandLogo, { PNLogoMark } from './BrandLogo';
+import BrandLogo, { PNLogoMark } from './ui/BrandLogo';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Home', path: '/dashboard' },

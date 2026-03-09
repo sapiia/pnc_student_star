@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ChevronRight, Home, Trash2, MessageSquare, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
+import { cn } from '../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationItem = {
@@ -489,3 +489,5 @@ export default function NotificationsPage() {
     </div>
   );
 }
+
+

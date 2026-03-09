@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Mail, LockKeyhole, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
-import BrandLogo from '../components/BrandLogo';
+import BrandLogo from '../components/ui/BrandLogo';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();

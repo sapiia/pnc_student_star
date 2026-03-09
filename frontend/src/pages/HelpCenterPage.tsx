@@ -14,9 +14,10 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import Sidebar from '../components/Sidebar';
-import StudentMobileNav from '../components/StudentMobileNav';
 import { useState } from 'react';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
+
 
 const CATEGORIES = [
   { id: 'all', label: 'All Articles', count: 89 },
@@ -271,3 +272,5 @@ export default function HelpCenterPage() {
 function cn(...classes: any[]) {
   return classes.filter(Boolean).join(' ');
 }
+
+

@@ -11,11 +11,13 @@ import {
   X,
   CheckCircle2
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+
+import { motion, AnimatePresence } from 'motion/react';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
 import AdminMobileNav from '../components/AdminMobileNav';
+
 import { cn } from '../lib/utils';
-import RadarChart from '../components/RadarChart';
+import RadarChart from '../components/ui/RadarChart';
 import React, { useEffect, useState } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
@@ -1504,4 +1506,5 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
+
 

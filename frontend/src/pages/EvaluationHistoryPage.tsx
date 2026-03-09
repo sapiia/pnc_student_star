@@ -21,9 +21,11 @@ import {
   CartesianGrid,
   Tooltip
 } from 'recharts';
-import StarRating from '../components/StarRating';
-import Sidebar from '../components/Sidebar';
+
+import StarRating from '../components/ui/StarRating';
+import Sidebar from '../components/layout/sidebar/Sidebar';
 import StudentMobileNav from '../components/StudentMobileNav';
+
 
 type EvaluationResponse = {
   criterion_key: string;
@@ -449,3 +451,5 @@ export default function EvaluationHistoryPage() {
     </div>
   );
 }
+
+
