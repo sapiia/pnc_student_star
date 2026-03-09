@@ -1,4 +1,4 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+﻿import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Star, 
   LayoutDashboard, 
@@ -6,16 +6,10 @@ import {
   BarChart3, 
   Settings,
   LogOut,
-<<<<<<< HEAD
-  Plus,
-  ChevronLeft,
-  ChevronRight
-=======
   ChevronLeft,
   ChevronRight,
   MessageSquare,
   Bell
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState } from 'react';
@@ -33,11 +27,8 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
     { icon: Users, label: 'Student List', path: '/teacher/students' },
-<<<<<<< HEAD
-=======
     { icon: Bell, label: 'Notifications', path: '/teacher/notifications' },
     { icon: MessageSquare, label: 'Message Admin', path: '/teacher/messages' },
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
     { icon: BarChart3, label: 'Reports', path: '/teacher/reports' },
     { icon: Settings, label: 'Settings', path: '/teacher/settings' },
   ];
@@ -115,25 +106,6 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
         })}
       </nav>
 
-<<<<<<< HEAD
-      {/* Action Button */}
-      <div className="px-4 mb-6">
-        <button className={cn(
-          "w-full flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all group relative",
-          isCollapsed ? "px-0" : ""
-        )}>
-          <Plus className="w-5 h-5 shrink-0" />
-          {!isCollapsed && <span>New Evaluation</span>}
-          {isCollapsed && (
-            <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              New Evaluation
-            </div>
-          )}
-        </button>
-      </div>
-
-=======
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
       {/* Teacher Profile Section */}
       <div className="p-4 border-t border-slate-100">
         <div className={cn(

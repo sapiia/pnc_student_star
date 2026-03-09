@@ -1,11 +1,4 @@
-import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
-import { Star, School } from 'lucide-react';
-import { motion } from 'motion/react';
-
-export default function LandingPage() {
-  const navigate = useNavigate();
-=======
+﻿import { useNavigate } from 'react-router-dom';
 import { 
   Star, 
   X, 
@@ -76,7 +69,6 @@ export default function LandingPage() {
       setIsLoggingIn(false);
     }
   };
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   return (
     <div className="relative min-h-screen flex flex-col bg-slate-50">
@@ -89,14 +81,10 @@ export default function LandingPage() {
           <span className="text-xl font-bold tracking-tight text-slate-900">PNC Student Star</span>
         </div>
         <div className="flex items-center gap-6">
-<<<<<<< HEAD
-          <button className="hidden md:block text-sm font-medium text-slate-600 hover:text-primary transition-colors">
-=======
           <button 
             onClick={() => setShowSupportModal(true)}
             className="hidden md:block text-sm font-medium text-slate-600 hover:text-primary transition-colors"
           >
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
             Contact Support
           </button>
           <button 
@@ -161,22 +149,15 @@ export default function LandingPage() {
                 <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>
                 <p className="text-slate-500 text-sm mt-1">Please enter your details to access your dashboard.</p>
               </div>
-<<<<<<< HEAD
-              <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); navigate('/dashboard'); }}>
-=======
               <form className="space-y-5" onSubmit={handleLoginSubmit}>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
                   <input 
                     className="w-full px-4 py-3.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-slate-400" 
                     placeholder="name@student.pnc.edu" 
                     type="email"
-<<<<<<< HEAD
-=======
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     required
                   />
                 </div>
@@ -195,28 +176,6 @@ export default function LandingPage() {
                     className="w-full px-4 py-3.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" 
                     placeholder="••••••••" 
                     type="password"
-<<<<<<< HEAD
-                    required
-                  />
-                </div>
-                <button 
-                  type="submit"
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
-                >
-                  Login to Account
-                </button>
-                <div className="relative my-8">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-medium">Alternative access</span></div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => navigate('/teacher/dashboard')}
-                  className="w-full border border-slate-200 flex items-center justify-center gap-3 py-3.5 rounded-lg text-slate-700 font-semibold hover:bg-slate-50 transition-all"
-                >
-                  <School className="w-5 h-5 text-primary" />
-                  Login as teacher
-=======
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -233,7 +192,6 @@ export default function LandingPage() {
                   className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70"
                 >
                   {isLoggingIn ? 'Logging in...' : 'Login to Account'}
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                 </button>
               </form>
             </div>
@@ -248,41 +206,6 @@ export default function LandingPage() {
           </motion.div>
         </section>
 
-<<<<<<< HEAD
-        {/* Features Brief */}
-        <section className="px-6 lg:px-20 py-20 bg-white">
-          <div className="grid md:grid-cols-3 gap-12">
-            <div className="flex flex-col gap-4 p-6 rounded-xl hover:bg-slate-50 transition-colors group">
-              <div className="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary transition-colors">
-                <Star className="w-8 h-8 text-primary group-hover:text-white" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Self-Evaluation</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Understand your strengths through guided assessments that cover academic, social, and personal growth areas.
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 p-6 rounded-xl hover:bg-slate-50 transition-colors group">
-              <div className="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary transition-colors">
-                <Star className="w-8 h-8 text-primary group-hover:text-white" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Progress Tracking</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Visualize your growth journey over time with interactive charts and real-time data visualizations of your star profile.
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 p-6 rounded-xl hover:bg-slate-50 transition-colors group">
-              <div className="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary transition-colors">
-                <Star className="w-8 h-8 text-primary group-hover:text-white" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Teacher Feedback</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Receive direct insights, qualitative feedback, and mentorship from your educators to help guide your development.
-              </p>
-            </div>
-          </div>
-        </section>
-=======
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
       </main>
 
       {/* Footer */}
@@ -300,22 +223,16 @@ export default function LandingPage() {
           <div className="flex flex-wrap gap-8 justify-center">
             <a className="text-sm font-medium text-slate-500 hover:text-primary transition-colors" href="#">Privacy Policy</a>
             <a className="text-sm font-medium text-slate-500 hover:text-primary transition-colors" href="#">Terms of Service</a>
-<<<<<<< HEAD
-            <a className="text-sm font-medium text-slate-500 hover:text-primary transition-colors" href="#">Help Center</a>
-=======
             <button 
               onClick={() => setShowSupportModal(true)}
               className="text-sm font-medium text-slate-500 hover:text-primary transition-colors"
             >
               Help Center
             </button>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
             <a className="text-sm font-medium text-slate-500 hover:text-primary transition-colors" href="#">Resources</a>
           </div>
         </div>
       </footer>
-<<<<<<< HEAD
-=======
 
       {/* Contact Support Modal */}
       <AnimatePresence>
@@ -455,7 +372,6 @@ export default function LandingPage() {
           </div>
         )}
       </AnimatePresence>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { 
   User, 
   Mail, 
@@ -11,33 +11,23 @@ import {
   Plus,
   Search,
   Settings,
-<<<<<<< HEAD
-  Camera
-} from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
-import { motion } from 'motion/react';
-=======
   Camera,
   CheckCircle2
 } from 'lucide-react';
 import TeacherSidebar from '../components/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 import { useState } from 'react';
 import { cn } from '../lib/utils';
 
 export default function TeacherProfilePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('profile');
-<<<<<<< HEAD
-=======
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSave = () => {
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
   };
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   const tabs = [
     { id: 'profile', label: 'Profile Information', icon: User },
@@ -50,9 +40,6 @@ export default function TeacherProfilePage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
       
-<<<<<<< HEAD
-      <main className="flex-1 flex flex-col overflow-hidden">
-=======
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Success Toast */}
         <AnimatePresence>
@@ -69,7 +56,6 @@ export default function TeacherProfilePage() {
           )}
         </AnimatePresence>
 
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
         {/* Header */}
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4 flex-1">
@@ -83,14 +69,10 @@ export default function TeacherProfilePage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-<<<<<<< HEAD
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
-=======
             <button 
               onClick={() => navigate('/teacher/notifications')}
               className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
             >
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
@@ -300,14 +282,10 @@ export default function TeacherProfilePage() {
                   <button className="px-8 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all">
                     Discard
                   </button>
-<<<<<<< HEAD
-                  <button className="px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center gap-2">
-=======
                   <button 
                     onClick={handleSave}
                     className="px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center gap-2"
                   >
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     <Save className="w-5 h-5" />
                     Save Changes
                   </button>

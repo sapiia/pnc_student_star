@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { useNavigate } from 'react-router-dom';
-=======
-import { useNavigate, useLocation } from 'react-router-dom';
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
+﻿import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Star, 
   History, 
@@ -30,25 +26,6 @@ import StarRating from '../components/StarRating';
 import RadarChart from '../components/RadarChart';
 import Sidebar from '../components/Sidebar';
 
-<<<<<<< HEAD
-const RADAR_DATA = [
-  { subject: 'Living', prev: 60, curr: 80 },
-  { subject: 'Study', prev: 70, curr: 95 },
-  { subject: 'Human', prev: 75, curr: 75 },
-  { subject: 'Health', prev: 80, curr: 85 },
-  { subject: 'Money', prev: 75, curr: 70 },
-  { subject: 'Feeling', prev: 70, curr: 65 },
-  { subject: 'Skill', prev: 80, curr: 80 },
-];
-
-const RADAR_KEYS = [
-  { key: 'prev', name: 'Q3 2024', color: '#94a3b8', fill: '#94a3b8' },
-  { key: 'curr', name: 'Q4 2024', color: '#5d5fef', fill: '#5d5fef' },
-];
-
-export default function EvaluationResultPage() {
-  const navigate = useNavigate();
-=======
 export default function EvaluationResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +42,6 @@ export default function EvaluationResultPage() {
     { key: 'prev', name: 'Previous Quarter', color: '#94a3b8', fill: '#94a3b8' },
     { key: 'curr', name: 'Current Quarter', color: '#5d5fef', fill: '#5d5fef' },
   ];
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
   const getIcon = (iconName: string, className?: string) => {
     switch (iconName) {
@@ -138,11 +114,7 @@ export default function EvaluationResultPage() {
                     </div>
                   </div>
                   
-<<<<<<< HEAD
-                  <RadarChart data={RADAR_DATA} dataKeys={RADAR_KEYS} />
-=======
                   <RadarChart data={radarData} dataKeys={radarKeys} />
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 
                   <div className="mt-8 flex items-center justify-center gap-8">
                     <div className="text-center">
@@ -239,11 +211,7 @@ export default function EvaluationResultPage() {
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800">{criterion.label}</h4>
-<<<<<<< HEAD
-                        <StarRating rating={idx % 2 === 0 ? 4 : 5} className="mt-1" />
-=======
                         <StarRating rating={scores ? scores[criterion.key] : (idx % 2 === 0 ? 4 : 5)} className="mt-1" />
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                       </div>
                     </motion.div>
                   );

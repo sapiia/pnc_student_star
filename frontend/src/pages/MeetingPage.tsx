@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { 
   Calendar, 
   Clock, 
@@ -47,11 +47,6 @@ const MEETINGS = [
 export default function MeetingPage() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState('1');
-<<<<<<< HEAD
-
-  const selectedMeeting = MEETINGS.find(m => m.id === selectedId);
-
-=======
   const [acceptedIds, setAcceptedIds] = useState<string[]>([]);
 
   const selectedMeeting = MEETINGS.find(m => m.id === selectedId);
@@ -62,7 +57,6 @@ export default function MeetingPage() {
 
   const isAccepted = acceptedIds.includes(selectedId);
 
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
@@ -198,18 +192,12 @@ export default function MeetingPage() {
                     </div>
                   </div>
 
-<<<<<<< HEAD
-                  {selectedMeeting.status === 'Pending' && (
-                    <div className="flex gap-4 pt-10 border-t border-slate-100">
-                      <button className="flex-1 bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-=======
                   {selectedMeeting.status === 'Pending' && !isAccepted ? (
                     <div className="flex gap-4 pt-10 border-t border-slate-100">
                       <button 
                         onClick={() => handleAccept(selectedMeeting.id)}
                         className="flex-1 bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
                       >
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                         <CheckCircle2 className="w-5 h-5" />
                         Accept Meeting
                       </button>
@@ -218,8 +206,6 @@ export default function MeetingPage() {
                         Reschedule
                       </button>
                     </div>
-<<<<<<< HEAD
-=======
                   ) : (
                     <div className="pt-10 border-t border-slate-100">
                        <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl flex items-center gap-4 text-emerald-700">
@@ -230,7 +216,6 @@ export default function MeetingPage() {
                           </div>
                        </div>
                     </div>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                   )}
                 </motion.div>
               </div>

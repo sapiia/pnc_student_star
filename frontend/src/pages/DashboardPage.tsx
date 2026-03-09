@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { 
   Star, 
   Bell, 
@@ -59,22 +59,6 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   
   // Mocking the next evaluation date (3 months cycle)
-<<<<<<< HEAD
-  // Let's say the next one is in 45 days for the general countdown
-  // But for the "3 days before" notification demo, we can toggle it
-  const [daysLeft, setDaysLeft] = useState(82); // 3 months is ~90 days
-  const [showUrgentNotification, setShowUrgentNotification] = useState(false);
-
-  useEffect(() => {
-    // Logic to simulate being close to the date
-    // In a real app, this would be calculated from the last evaluation date in DB
-    const timer = setTimeout(() => {
-      if (daysLeft <= 3) {
-        setShowUrgentNotification(true);
-      }
-    }, 1000);
-    return () => clearTimeout(timer);
-=======
   const [daysLeft, setDaysLeft] = useState(82); 
   const [showUrgentNotification, setShowUrgentNotification] = useState(false);
 
@@ -89,7 +73,6 @@ export default function DashboardPage() {
     } else {
       setShowUrgentNotification(false);
     }
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
   }, [daysLeft]);
 
   const getIcon = (iconName: string) => {
@@ -121,15 +104,12 @@ export default function DashboardPage() {
             <span className="font-medium text-slate-900">Student Dashboard</span>
           </div>
           <div className="flex items-center gap-4">
-<<<<<<< HEAD
-=======
             <button 
               onClick={toggleUrgent}
               className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary transition-colors"
             >
               Demo: Toggle Urgent
             </button>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
             <button className="size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />

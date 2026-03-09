@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Star, 
@@ -14,35 +14,12 @@ import {
   Brain,
   CreditCard,
   Wrench,
-<<<<<<< HEAD
-  ClipboardList
-=======
   ClipboardList,
   FileText
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CRITERIA } from '../constants';
 import StarRating from '../components/StarRating';
-<<<<<<< HEAD
-
-export default function EvaluationFormPage() {
-  const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [scores, setScores] = useState<Record<string, number>>({});
-  const [reflections, setReflections] = useState<Record<string, string>>({});
-
-  const criterion = CRITERIA[currentStep];
-
-  const handleNext = () => {
-    if (currentStep < CRITERIA.length - 1) {
-      setCurrentStep(currentStep + 1);
-    } else {
-      navigate('/results');
-    }
-  };
-
-=======
 import { cn } from '../lib/utils';
 
 export default function EvaluationFormPage() {
@@ -78,7 +55,6 @@ export default function EvaluationFormPage() {
     }, 1500);
   };
 
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
   const handleBack = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
@@ -113,13 +89,6 @@ export default function EvaluationFormPage() {
             <h1 className="text-xl font-bold tracking-tight text-primary">PNC Student Star</h1>
           </div>
           <div className="flex items-center gap-4">
-<<<<<<< HEAD
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold leading-none text-slate-900">Sokha Mean</p>
-              <p className="text-xs text-slate-500 mt-1">Student ID: 2024-0892</p>
-            </div>
-            <div className="size-10 rounded-full border-2 border-primary/20 bg-cover bg-center" style={{ backgroundImage: "url('https://picsum.photos/seed/sokha/100/100')" }} />
-=======
             <button 
               onClick={() => navigate('/dashboard')}
               className="text-xs font-bold text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest"
@@ -131,7 +100,6 @@ export default function EvaluationFormPage() {
               <p className="text-xs text-slate-500 mt-1">Student ID: STU-2024-001</p>
             </div>
             <div className="size-10 rounded-full border-2 border-primary/20 bg-cover bg-center" style={{ backgroundImage: "url('https://picsum.photos/seed/alex/100/100')" }} />
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
           </div>
         </div>
       </header>
@@ -151,11 +119,7 @@ export default function EvaluationFormPage() {
                   }`}>
                     {isCompleted ? <Check className="w-5 h-5" /> : idx + 1}
                   </div>
-<<<<<<< HEAD
-                  <span className={`text-xs font-bold transition-colors ${isActive ? 'text-primary' : 'text-slate-400'}`}>
-=======
                   <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-primary' : 'text-slate-400'}`}>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
                     {c.label}
                   </span>
                   {idx < CRITERIA.length - 1 && (
@@ -164,8 +128,6 @@ export default function EvaluationFormPage() {
                 </div>
               );
             })}
-<<<<<<< HEAD
-=======
             {/* Summary Step */}
             <div className="flex flex-col items-center gap-2 flex-1 relative">
               <div className={`size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all ${
@@ -178,98 +140,11 @@ export default function EvaluationFormPage() {
               </span>
               <div className={`absolute top-5 -left-1/2 w-full h-[2px] transition-colors ${currentStep === CRITERIA.length ? 'bg-primary' : 'bg-slate-200'}`} />
             </div>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
           </div>
         </div>
 
         {/* Evaluation Form Content */}
         <AnimatePresence mode="wait">
-<<<<<<< HEAD
-          <motion.div 
-            key={criterion.key}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="bg-white border border-primary/10 rounded-xl shadow-xl overflow-hidden"
-          >
-            {/* Form Header */}
-            <div className="p-8 border-b border-primary/5">
-              <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider rounded-full mb-4">
-                Step {currentStep + 1} of {CRITERIA.length}
-              </span>
-              <h2 className="text-4xl font-bold text-slate-900 mb-2">{criterion.label}</h2>
-              <p className="text-slate-600 max-w-2xl leading-relaxed">
-                Reflect on your {criterion.label.toLowerCase()} this quarter. What is going well? What could be improved? This assessment helps us understand your development.
-              </p>
-            </div>
-
-            {/* Form Fields */}
-            <div className="p-8 space-y-10">
-              {/* Rating Component */}
-              <div className="space-y-4">
-                <label className="block text-lg font-semibold text-slate-800">
-                  How would you rate yourself?
-                </label>
-                <StarRating 
-                  readonly={false}
-                  rating={scores[criterion.key] || 0}
-                  onRate={(r) => setScores({ ...scores, [criterion.key]: r })}
-                  starClassName="w-10 h-10"
-                />
-              </div>
-
-              {/* Reflection Component */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-lg font-semibold text-slate-800" htmlFor="reflection">
-                    Self-Reflection & Details
-                  </label>
-                  <span className="text-xs text-slate-400">Minimum 50 characters</span>
-                </div>
-                <textarea 
-                  className="w-full rounded-lg border-slate-200 bg-slate-50 focus:border-primary focus:ring-primary placeholder:text-slate-400 p-4" 
-                  id="reflection" 
-                  placeholder={`Describe your ${criterion.label.toLowerCase()} situation this quarter...`}
-                  rows={6}
-                  value={reflections[criterion.key] || ''}
-                  onChange={(e) => setReflections({ ...reflections, [criterion.key]: e.target.value })}
-                />
-              </div>
-
-              {/* Tip Box */}
-              <div className="flex items-start gap-4 p-5 bg-primary/5 rounded-lg border border-primary/10">
-                <div className="text-primary mt-0.5">
-                  <Lightbulb className="w-5 h-5" />
-                </div>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  <strong className="text-primary">Tip:</strong> Be honest with yourself. This reflection helps your mentors provide better support and understand any external challenges you might be facing.
-                </p>
-              </div>
-            </div>
-
-            {/* Form Footer */}
-            <div className="bg-slate-50 p-6 flex items-center justify-between">
-              <button 
-                onClick={handleBack}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-slate-500 hidden sm:block">Answers are autosaved</span>
-                <button 
-                  onClick={handleNext}
-                  disabled={!scores[criterion.key]}
-                  className="bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-primary/25 transition-all flex items-center gap-2"
-                >
-                  {currentStep === CRITERIA.length - 1 ? 'Finish' : 'Next Area'}
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-=======
           {currentStep === -1 ? (
             <motion.div 
               key="welcome"
@@ -469,7 +344,6 @@ export default function EvaluationFormPage() {
               </div>
             </motion.div>
           )}
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
         </AnimatePresence>
 
         {/* Support Section */}
@@ -477,8 +351,6 @@ export default function EvaluationFormPage() {
           <p>Need help with your evaluation? <button className="text-primary hover:underline font-medium">Contact your Mentor</button></p>
         </div>
       </main>
-<<<<<<< HEAD
-=======
 
       {/* Confirmation Modal */}
       <AnimatePresence>
@@ -545,7 +417,6 @@ export default function EvaluationFormPage() {
           </div>
         )}
       </AnimatePresence>
->>>>>>> a3e2dfeb7c5c4820d4486e41acd8e74c95f114f9
     </div>
   );
 }
