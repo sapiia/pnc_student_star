@@ -32,7 +32,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
       profilePhoto={profilePhoto}
       profileRole="Lead Instructor"
       defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
-      isSettingsEnabled={true}
+      isSettingsEnabled={false}
       settingsItems={settingsItems}
       settingsPath="/teacher/settings"
     />

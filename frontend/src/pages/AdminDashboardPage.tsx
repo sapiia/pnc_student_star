@@ -22,10 +22,27 @@ import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import { useEffect, useState } from 'react';
 
-const STATS = [
-  { label: 'Evaluation Period', value: 'Oct 01 - Dec 15', trend: 'Active', icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50' },
-  { label: 'System Health', value: '99.9%', trend: 'Online', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-];
+const extractGeneration = (user: any) => {
+  const genValue = String(user.generation || '').trim();
+  const classValue = String(user.class || '').trim();
+  const studentId = String(user.student_id || user.resolved_student_id || '').trim();
+
+  // Try to find 4 digits in generation field
+  const genMatch = genValue.match(/\d{4}/);
+  if (genMatch) return genMatch[0];
+
+  // Try to find "Gen XXXX" or just years in class field
+  const classMatch = classValue.match(/gen\s*(\d{4})/i) || classValue.match(/20\d{2}/);
+  if (classMatch) return classMatch[1] || classMatch[0];
+
+  // Try student ID prefix
+  const idMatch = studentId.match(/^(\d{4})-/);
+  if (idMatch) return idMatch[1];
+
+  return 'Unknown Gen';
+};
+
+const STATS: any[] = [];
 
 const SYSTEM_ACTIVITY = [
   { id: 1, type: 'success', message: 'Evaluation period opened', time: '2 hours ago', icon: CheckCircle2 },
@@ -51,7 +68,7 @@ export default function AdminDashboardPage() {
           
           const genStats: Record<string, any> = {};
           students.forEach(s => {
-             const gen = s.generation || 'Unknown Gen';
+             const gen = extractGeneration(s);
              const cls = s.class || s.major || 'Unknown Class';
              if (!genStats[gen]) genStats[gen] = { total: 0, classesMap: {} };
              genStats[gen].total += 1;
@@ -141,7 +158,7 @@ export default function AdminDashboardPage() {
 
         <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 lg:space-y-8 pb-24 md:pb-8">
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Total Students Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -170,7 +187,9 @@ export default function AdminDashboardPage() {
                     return (
                       <div key={key} className="p-3 bg-slate-50 rounded-xl">
                         <div className="flex justify-between items-center mb-2">
-                          <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{gen.title === 'Unknown Gen' ? 'Other' : `Gen ${gen.title}`}</p>
+                          <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
+                            {gen.title === 'Unknown Gen' ? 'Other' : (gen.title.toLowerCase().startsWith('gen') ? gen.title : `Gen ${gen.title}`)}
+                          </p>
                           <p className="text-xs font-black text-blue-600">{gen.total}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
