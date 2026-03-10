@@ -1,3 +1,4 @@
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search,
   Trash2,
@@ -200,6 +201,8 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
 };
 
 export default function AdminUserManagementPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -267,6 +270,24 @@ export default function AdminUserManagementPage() {
     loadUsers();
     loadCriteriaConfig();
   }, []);
+
+  useEffect(() => {
+    const state = location.state as { openInvite?: boolean; prefillClass?: string; prefillGen?: string };
+    if (state?.openInvite) {
+      setIsModalOpen(true);
+      const prefillClass = state.prefillClass || '';
+      if (prefillClass && !classOptions.includes(prefillClass)) {
+        setClassOptions(prev => Array.from(new Set([...prev, prefillClass])));
+      }
+      setNewUser(prev => ({
+        ...prev,
+        className: prefillClass || prev.className,
+        generation: state.prefillGen || prev.generation
+      }));
+      // Clear state so it doesn't reopen on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]); // Removed classOptions from dependencies to avoid loop, using functional check inside if needed or just relying on state update
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
