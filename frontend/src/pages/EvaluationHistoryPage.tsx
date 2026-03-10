@@ -281,7 +281,7 @@ export default function EvaluationHistoryPage() {
                     <span className="text-5xl font-black text-slate-900">
                       {latestEvaluation ? latestEvaluation.rating.toFixed(1) : '0.0'}
                     </span>
-                    <span className="text-slate-400 text-lg font-medium">/ 5.0</span>
+                    <span className="text-slate-400 text-lg font-medium">/ {globalRatingScale.toFixed(1)}</span>
                     <div className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold">
                       <TrendingUp className="w-3 h-3" />
                       {historyItems.length} Records
@@ -305,7 +305,7 @@ export default function EvaluationHistoryPage() {
                           tick={{ fill: '#94a3b8', fontSize: 10 }}
                           dy={10}
                         />
-                        <YAxis hide domain={[0, 5]} />
+                        <YAxis hide domain={[0, globalRatingScale]} />
                         <Tooltip 
                           contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} 
                         />
