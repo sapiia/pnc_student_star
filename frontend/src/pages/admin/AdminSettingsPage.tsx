@@ -244,6 +244,8 @@ export default function AdminSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingCriteria, setIsLoadingCriteria] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
+  const [photoJustUploaded, setPhotoJustUploaded] = useState(false);
   const [profileForm, setProfileForm] = useState({
     firstName: '',
     lastName: '',
@@ -608,6 +610,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     const loadProfile = async () => {
       if (!authUser?.id) return;
+      if (photoJustUploaded) return; // Skip loading if photo was just uploaded
       setErrorMessage('');
 
       try {
@@ -655,7 +658,7 @@ export default function AdminSettingsPage() {
     };
 
     loadProfile();
-  }, [authUser]);
+  }, [authUser, photoJustUploaded]);
 
   const handleSave = async () => {
     setErrorMessage('');
@@ -1214,11 +1217,16 @@ export default function AdminSettingsPage() {
         localStorage.setItem('auth_user', JSON.stringify(updatedUser));
         localStorage.setItem(`profile_photo_${authUser.id}`, updatedPhoto);
         setProfileForm((prev) => ({ ...prev, photoUrl: updatedPhoto }));
+        setPhotoTimestamp(Date.now()); // Update timestamp to force image refresh
+        setPhotoJustUploaded(true); // Mark as just uploaded
         window.dispatchEvent(new Event('profile-photo-updated'));
         window.dispatchEvent(new Event('profile-updated'));
         setSuccessMessage('Profile photo updated.');
         setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
+        setTimeout(() => {
+          setShowSuccess(false);
+          setPhotoJustUploaded(false); // Reset flag after showing success message
+        }, 3000);
       })
       .catch((error) => {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to update profile image.');
@@ -1985,7 +1993,7 @@ export default function AdminSettingsPage() {
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-3xl overflow-hidden border-4 border-slate-50 shadow-inner relative group">
                       <img
-                        src={profileForm.photoUrl || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
+                        src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
                         alt={`${profileForm.firstName} ${profileForm.lastName}`.trim() || 'Admin'}
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">

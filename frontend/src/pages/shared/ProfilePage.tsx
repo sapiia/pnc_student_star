@@ -51,6 +51,8 @@ export default function ProfilePage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
+  const [photoJustUploaded, setPhotoJustUploaded] = useState(false);
   const [profileForm, setProfileForm] = useState({
     firstName: '',
     lastName: '',
@@ -181,6 +183,7 @@ export default function ProfilePage() {
   useEffect(() => {
     const loadProfile = async () => {
       if (!authUser?.id) return;
+      if (photoJustUploaded) return; // Skip loading if photo was just uploaded
       setErrorMessage('');
       try {
         const response = await fetch(`${API_BASE_URL}/users/${authUser.id}/profile`);
@@ -216,7 +219,7 @@ export default function ProfilePage() {
       }
     };
     loadProfile();
-  }, [authUser]);
+  }, [authUser, photoJustUploaded]);
 
   const handlePhotoPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -263,10 +266,15 @@ export default function ProfilePage() {
       localStorage.setItem(`profile_photo_${authUser.id}`, updatedPhoto);
       setAuthUser(updatedAuth);
       setProfileForm((prev) => ({ ...prev, photoUrl: updatedPhoto }));
+      setPhotoTimestamp(Date.now()); // Update timestamp to force image refresh
+      setPhotoJustUploaded(true); // Mark as just uploaded
       window.dispatchEvent(new Event('profile-photo-updated'));
       setSuccessMessage('Profile photo updated.');
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setPhotoJustUploaded(false); // Reset flag after showing success message
+      }, 3000);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to update profile image.');
     } finally {
@@ -344,7 +352,7 @@ export default function ProfilePage() {
                 <div className="p-4 md:p-8 flex flex-col md:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-24 md:size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner shrink-0 bg-slate-100">
-                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Student'} className="w-full h-full object-cover" />
+                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'} alt={profileForm.fullName || 'Student'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}

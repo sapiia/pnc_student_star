@@ -34,20 +34,20 @@ const upload = multer({
 const profileImageUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      const destinationPath = path.join(__dirname, '..', 'uploads', 'profiles');
+      const destinationPath = path.join(__dirname, '..', '..', 'uploads', 'profiles');
       fs.mkdirSync(destinationPath, { recursive: true });
       cb(null, destinationPath);
     },
     filename: (req, file, cb) => {
       const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-      cb(null, `user_${req.params.id}_${Date.now()}${extension}`);
+      const filename = `user_${req.params.id}_${Date.now()}${extension}`;
+      cb(null, filename);
     }
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-      cb(new Error('Only image files are allowed.'));
-      return;
+      return cb(new Error('Only image files are allowed.'));
     }
     cb(null, true);
   }
@@ -96,9 +96,24 @@ router.put('/:id/profile', updateUserProfile);
 router.patch(
   '/:id/profile-image',
   (req, res, next) => {
+    console.log('📤 Upload started for user:', req.params.id);
+    
     profileImageUpload.single('image')(req, res, (err) => {
-      if (!err) return next();
-      return res.status(400).json({ error: err.message || 'Failed to upload image.' });
+      if (err) {
+        console.error('❌ Multer error:', err);
+        return res.status(400).json({ error: err.message || 'Failed to upload image.' });
+      }
+      
+      if (!req.file) {
+        console.log('❌ No file received');
+        return res.status(400).json({ error: 'No file uploaded.' });
+      }
+      
+      console.log('✅ File saved:', req.file.filename);
+      console.log('✅ File path:', req.file.path);
+      console.log('✅ File size:', req.file.size);
+      
+      next();
     });
   },
   updateUserProfileImage

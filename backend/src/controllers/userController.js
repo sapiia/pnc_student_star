@@ -1479,6 +1479,7 @@ const updateUserProfile = async (req, res) => {
 // Update profile image for a specific user
 const updateUserProfileImage = async (req, res) => {
   const userId = Number(req.params.id);
+  
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(400).json({ error: "Invalid user id." });
   }

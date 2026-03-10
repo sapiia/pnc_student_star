@@ -44,6 +44,7 @@ export default function StudentMobileNav() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Student');
   const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
+  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
   const [studentId, setStudentId] = useState('');
 
   useEffect(() => {
@@ -113,6 +114,17 @@ export default function StudentMobileNav() {
     return () => {
       window.removeEventListener('profile-photo-updated', refreshIdentity);
       window.removeEventListener('profile-updated', refreshIdentity);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePhotoUpdate = () => {
+      setPhotoTimestamp(Date.now());
+    };
+
+    window.addEventListener('profile-photo-updated', handlePhotoUpdate);
+    return () => {
+      window.removeEventListener('profile-photo-updated', handlePhotoUpdate);
     };
   }, []);
 
@@ -206,7 +218,7 @@ export default function StudentMobileNav() {
                   }}
                 >
                   <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
-                    <img alt={profileName} src={profilePhoto} className="w-full h-full object-cover" />
+                    <img alt={profileName} src={profilePhoto ? `${profilePhoto}?t=${photoTimestamp}` : profilePhoto} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-black text-slate-900 truncate">{profileName}</p>

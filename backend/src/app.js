@@ -12,7 +12,7 @@ const db = require('./config/database');
 
 const app = express();
 
-// Middleware to parse JSON bodies
+// Middleware to parse JSON bodies and form data
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
