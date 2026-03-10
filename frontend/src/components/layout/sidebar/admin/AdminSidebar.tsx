@@ -7,13 +7,12 @@ interface AdminSidebarProps {
 }
 
 export default function AdminSidebar({ className }: AdminSidebarProps) {
-  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Administrator', defaultPhoto: 'https://picsum.photos/seed/admin/100/100' });
+  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Administrator', defaultPhoto: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg' });
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
     { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
-    { icon: Calendar, label: 'Evaluation Periods', path: '/admin/evaluations' },
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];
@@ -31,8 +30,8 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole="System Admin"
-      defaultPhoto="https://picsum.photos/seed/admin/100/100"
-      isSettingsEnabled={true}
+      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
+      isSettingsEnabled={false}
       settingsItems={settingsItems}
       settingsPath="/admin/settings"
     />

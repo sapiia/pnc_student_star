@@ -134,7 +134,7 @@ export default function TeacherMessagesPage() {
   
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [teacherName, setTeacherName] = useState('Teacher');
-  const [teacherAvatar, setTeacherAvatar] = useState('https://picsum.photos/seed/teacher-self/100/100');
+  const [teacherAvatar, setTeacherAvatar] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(passedState?.selectedContactId || null);
@@ -171,13 +171,13 @@ export default function TeacherMessagesPage() {
       }
       const resolvedPhoto = String(authUser?.profile_image || '').trim();
       if (resolvedPhoto) {
-        setTeacherAvatar(resolveAvatarUrl(resolvedPhoto, `https://picsum.photos/seed/teacher-${resolvedTeacherId || 'self'}/100/100`));
+        setTeacherAvatar(resolveAvatarUrl(resolvedPhoto, `http://localhost:3001/uploads/logo/star_gmail_logo.jpg`));
       } else if (Number.isInteger(resolvedTeacherId) && resolvedTeacherId > 0) {
         const savedPhoto = localStorage.getItem(`profile_photo_${resolvedTeacherId}`);
         if (savedPhoto) {
-          setTeacherAvatar(resolveAvatarUrl(savedPhoto, `https://picsum.photos/seed/teacher-${resolvedTeacherId}/100/100`));
+          setTeacherAvatar(resolveAvatarUrl(savedPhoto, `http://localhost:3001/uploads/logo/star_gmail_logo.jpg`));
         } else {
-          setTeacherAvatar(`https://picsum.photos/seed/teacher-${resolvedTeacherId}/100/100`);
+          setTeacherAvatar(`http://localhost:3001/uploads/logo/star_gmail_logo.jpg`);
         }
       }
     } catch {
@@ -335,7 +335,7 @@ export default function TeacherMessagesPage() {
         type: toContactType(String(user.role || '')),
         avatar: resolveAvatarUrl(
           String(user.profile_image || '').trim(),
-          `https://picsum.photos/seed/user-${contactId}/100/100`,
+          'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
         ),
         lastMessage,
         timestamp: contactMessages[0]?.notification?.created_at,

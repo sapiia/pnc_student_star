@@ -1,3 +1,4 @@
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search,
   Trash2,
@@ -118,6 +119,7 @@ type ApiUser = {
   is_registered?: number | boolean | null;
   account_status?: string;
   registration_status?: string;
+  gender?: string | null;
 };
 
 const defaultNewUser = {
@@ -192,12 +194,15 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     status,
     initials,
     color: randomColor,
-    profileImage: String(apiUser.profile_image || '').trim() || undefined,
-    studentId
+    profileImage: String(apiUser.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+    studentId,
+    gender: apiUser.gender === 'male' || apiUser.gender === 'female' ? apiUser.gender as Gender : undefined
   };
 };
 
 export default function AdminUserManagementPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -206,6 +211,7 @@ export default function AdminUserManagementPage() {
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [editStudentId, setEditStudentId] = useState('');
   const [editClassName, setEditClassName] = useState('');
+  const [editGender, setEditGender] = useState<Gender | ''>('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
@@ -228,6 +234,8 @@ export default function AdminUserManagementPage() {
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -245,8 +253,41 @@ export default function AdminUserManagementPage() {
         setFormError('Failed to load users.');
       }
     };
+    
+    const loadCriteriaConfig = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/settings/evaluation-criteria`);
+        if (response.ok) {
+          const data = await response.json();
+          setGlobalRatingScale(Math.max(1, Number(data?.ratingScale || 5)));
+          setGlobalCriteria(Array.isArray(data?.criteria) ? data.criteria : []);
+        }
+      } catch (err) {
+        console.error("Failed to load global criteria config", err);
+      }
+    };
+
     loadUsers();
+    loadCriteriaConfig();
   }, []);
+
+  useEffect(() => {
+    const state = location.state as { openInvite?: boolean; prefillClass?: string; prefillGen?: string };
+    if (state?.openInvite) {
+      setIsModalOpen(true);
+      const prefillClass = state.prefillClass || '';
+      if (prefillClass && !classOptions.includes(prefillClass)) {
+        setClassOptions(prev => Array.from(new Set([...prev, prefillClass])));
+      }
+      setNewUser(prev => ({
+        ...prev,
+        className: prefillClass || prev.className,
+        generation: state.prefillGen || prev.generation
+      }));
+      // Clear state so it doesn't reopen on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]); // Removed classOptions from dependencies to avoid loop, using functional check inside if needed or just relying on state update
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -402,6 +443,7 @@ export default function AdminUserManagementPage() {
     setSelectedProfileUser(user);
     setEditStudentId(user.studentId || '');
     setEditClassName(user.group || ''); // Group usually acts as class for students
+    setEditGender(user.gender || '');
     setIsProfileModalOpen(true);
     setProfileEvaluations([]);
     
@@ -430,14 +472,15 @@ export default function AdminUserManagementPage() {
           email: selectedProfileUser.email,
           role: selectedProfileUser.role.toLowerCase(),
           class_name: editClassName,
-          student_id: editStudentId
+          student_id: editStudentId,
+          gender: editGender || undefined
         })
       });
       const data = await res.json();
       if (res.ok) {
         setUsers(prev => prev.map(u => 
           u.id === selectedProfileUser.id 
-            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName } 
+            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName, gender: editGender || undefined } 
             : u
         ));
         setSuccessMessage('Student details updated.');
@@ -1451,6 +1494,9 @@ export default function AdminUserManagementPage() {
                      <div className="flex gap-2">
                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black uppercase tracking-widest">{selectedProfileUser.role}</span>
                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs font-black uppercase tracking-widest shrink-0">{selectedProfileUser.status}</span>
+                       {selectedProfileUser.gender && (
+                         <span className="px-3 py-1 bg-sky-50 text-sky-600 rounded-lg text-xs font-black uppercase tracking-widest shrink-0">{selectedProfileUser.gender}</span>
+                       )}
                      </div>
                    </div>
                  </div>
@@ -1468,20 +1514,41 @@ export default function AdminUserManagementPage() {
                              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Class</label>
                              <input type="text" value={editClassName} onChange={e => setEditClassName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
                            </div>
+                           <div>
+                             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Gender</label>
+                             <select value={editGender} onChange={e => setEditGender(e.target.value as Gender | '')} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all">
+                               <option value="">Select Gender</option>
+                               <option value="male">Male</option>
+                               <option value="female">Female</option>
+                             </select>
+                           </div>
                            <button onClick={handleUpdateStudentInfo} disabled={isProfileSaving} className="w-full py-3 mt-2 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-60">
                              {isProfileSaving ? 'Saving...' : 'Save Changes'}
                            </button>
                          </div>
                       </div>
-                      
+
                       <div>
                          <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Performance Overview</h4>
                          {profileEvaluations.length > 0 ? (
                            <div className="bg-slate-50 rounded-3xl p-6 h-[320px] border border-slate-100 shadow-inner flex items-center justify-center relative overflow-hidden">
-                              <RadarChart 
-                                data={profileEvaluations[0]?.responses?.map((r: any) => ({ subject: r.criterion_name || r.criterion_key, score: Number(r.star_value) * 20 })) || []}
-                                dataKeys={[ { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' } ]}
-                              />
+                              <RadarChart
+                                 data={globalCriteria
+                                   .filter(c => String(c.status).toLowerCase() === 'active')
+                                   .map((criterion, idx) => {
+                                     const response = (profileEvaluations[0]?.responses || []).find((r: any) =>
+                                       String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+                                       String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+                                     );
+                                     return {
+                                       subject: String(criterion.name || `Criterion ${idx + 1}`),
+                                       score: response ? Number(response.star_value || 0) : 0
+                                     };
+                                   })
+                                 }
+                                 dataKeys={[ { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' } ]}
+                                 maxValue={globalRatingScale}
+                               />
                            </div>
                          ) : (
                            <div className="h-[320px] flex items-center justify-center bg-slate-50 rounded-3xl border border-slate-100 shadow-inner">

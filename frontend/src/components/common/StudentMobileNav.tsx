@@ -43,7 +43,7 @@ export default function StudentMobileNav() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Student');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/student/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [studentId, setStudentId] = useState('');
 
   useEffect(() => {

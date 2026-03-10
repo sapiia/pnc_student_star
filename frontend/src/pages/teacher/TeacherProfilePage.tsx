@@ -49,7 +49,7 @@ export default function TeacherProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/student/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -322,7 +322,7 @@ export default function TeacherProfilePage() {
                 <div className="p-4 md:p-8 flex flex-col lg:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
-                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Teacher'} />
+                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}

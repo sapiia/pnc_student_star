@@ -222,15 +222,31 @@ const getIcon = (iconName?: string | null, className = 'w-5 h-5') => {
   }
 };
 
-const buildRadarData = (student: StudentRecord | null) => {
-  if (!student?.latestEvaluation?.responses?.length) return { data: [], maxValue: 5 };
+const buildRadarData = (student: StudentRecord | null, globalCriteria: any[], globalRatingScale: number) => {
+  const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+  if (activeGlobal.length === 0) {
+    if (!student?.latestEvaluation?.responses?.length) return { data: [], maxValue: globalRatingScale };
+    
+    const data = student.latestEvaluation.responses.map((response) => ({
+      subject: String(response.criterion_name || response.criterion_key || 'Criterion'),
+      score: Math.max(0, Number(response.star_value || 0)),
+    }));
+    return { data, maxValue: student.latestEvaluation.rating_scale || globalRatingScale };
+  }
 
-  const ratingScale = Math.max(1, Number(student.latestEvaluation.rating_scale || student.ratingScale || 5));
-  const data = student.latestEvaluation.responses.map((response) => ({
-    subject: String(response.criterion_name || response.criterion_key || 'Criterion'),
-    score: Math.max(0, Number(response.star_value || 0)),
-  }));
-  return { data, maxValue: ratingScale };
+  const data = activeGlobal.map((criterion, index) => {
+    const response = (student?.latestEvaluation?.responses || []).find((r: any) => 
+      String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+      String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+    );
+    
+    return {
+      subject: String(criterion.name || `Criterion ${index + 1}`),
+      score: response ? Math.max(0, Number(response.star_value || 0)) : 0,
+    };
+  });
+
+  return { data, maxValue: globalRatingScale };
 };
 
 const parseStudentReplyNotification = (notification: NotificationRecord): StudentReplyRecord | null => {
@@ -277,6 +293,7 @@ export default function TeacherStudentListPage() {
   const [pendingDeleteFeedbackId, setPendingDeleteFeedbackId] = useState<number | null>(null);
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const [globalRatingScale, setGlobalRatingScale] = useState(5);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
 
   useEffect(() => {
     try {
@@ -351,6 +368,7 @@ export default function TeacherStudentListPage() {
 
         const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
         setGlobalRatingScale(nextRatingScale);
+        setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
 
         const latestEvaluationByUser = new Map<number, EvaluationRecord>();
         if (Array.isArray(evaluationsData)) {
@@ -382,7 +400,7 @@ export default function TeacherStudentListPage() {
                   generation: extractGeneration(user),
                   className: extractClassName(user),
                   gender: normalizeGender(user.gender),
-                  avatar: String(user.profile_image || '').trim() || `https://picsum.photos/seed/student-${user.id}/100/100`,
+                  avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
                   averageScore,
                   ratingScale,
                   latestEvaluation,
@@ -553,7 +571,7 @@ export default function TeacherStudentListPage() {
   }, [filteredStudents, selectedId]);
 
   const selectedStudent = filteredStudents.find((student) => student.id === selectedId) || filteredStudents[0] || null;
-  const radarData = buildRadarData(selectedStudent);
+  const radarData = useMemo(() => buildRadarData(selectedStudent, globalCriteria, globalRatingScale), [selectedStudent, globalCriteria, globalRatingScale]);
   const selectedCriteria = selectedStudent?.latestEvaluation?.responses || [];
   const latestTeacherFeedback = useMemo(() => {
     if (!selectedStudent || !teacherId) return null;

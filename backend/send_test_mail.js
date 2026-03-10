@@ -35,7 +35,7 @@ async function sendTestEmail() {
       text: 'If you see this, your email configuration is working perfectly!',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; text-align: center;">
-          <img src="cid:star_gmail_logo" style="width: 80px; height: 80px; border-radius: 50%;" alt="Logo" />
+<img src="cid:star_gmail_logo" style="width: 80px; height: 80px; border-radius: 50%;" alt="Logo" />
           <h2 style="color: #0f172a;">Real Email Test Successful!</h2>
           <p>If you see this and the logo above, your email configuration is working perfectly!</p>
         </div>

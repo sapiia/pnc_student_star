@@ -129,7 +129,7 @@ export default function LandingPage() {
                   <div 
                     key={i}
                     className="w-10 h-10 rounded-full border-2 border-white bg-slate-200 bg-cover"
-                    style={{ backgroundImage: `url(https://picsum.photos/seed/${i + 10}/100/100)` }}
+                    style={{ backgroundImage: `url(http://localhost:3001/uploads/logo/star_gmail_logo.jpg)` }}
                   />
                 ))}
               </div>
