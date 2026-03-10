@@ -1,3 +1,4 @@
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Bell, 
@@ -8,9 +9,9 @@ import {
   ClipboardList,
   ChevronRight
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/utils';
 
 type AuthUser = {
@@ -61,7 +62,7 @@ export default function ProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/student/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -277,7 +278,8 @@ export default function ProfilePage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
       
-      <main className="flex-1 flex flex-col overflow-hidden relative">
+      <main className="flex-1 flex flex-col overflow-hidden relative pb-24 md:pb-0">
+        <StudentMobileNav />
         {/* Success Toast */}
         <AnimatePresence>
           {showSuccess && (
@@ -285,41 +287,40 @@ export default function ProfilePage() {
               initial={{ opacity: 0, y: -20, x: '-50%' }}
               animate={{ opacity: 1, y: 20, x: '-50%' }}
               exit={{ opacity: 0, y: -20, x: '-50%' }}
-              className="fixed top-0 left-1/2 z-[100] bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold"
+              className="fixed top-0 left-1/2 z-[150] bg-emerald-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl shadow-2xl flex items-center gap-2 md:gap-3 font-bold text-xs md:text-sm whitespace-nowrap"
             >
-              <BellRing className="w-5 h-5" />
+              <BellRing className="w-4 md:w-5 h-4 md:h-5" />
               {successMessage}
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <nav className="flex items-center gap-2 text-sm text-slate-500">
-            <button onClick={() => navigate('/dashboard')} className="hover:text-primary">Dashboard</button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-semibold text-slate-900">Settings</span>
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
+          <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500 uppercase tracking-widest font-black">
+            <button onClick={() => navigate('/dashboard')} className="hover:text-primary transition-colors">Dashboard</button>
+            <ChevronRight className="w-3.5 h-3.5 opacity-30" />
+            <span className="text-slate-900">Settings</span>
           </nav>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <div className="flex items-center justify-end gap-3 md:gap-4">
+            <button className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
             <button 
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-primary text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
+              className="flex-1 md:flex-none bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-xs md:text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70 uppercase tracking-widest"
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-4xl mx-auto space-y-8 pb-20">
             <header>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
-              <p className="text-slate-500 mt-2">Update your profile, security credentials, and stay notified.</p>
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
+              <p className="text-sm md:text-base text-slate-500 mt-2">Manage your profile and preferences.</p>
             </header>
 
             {errorMessage && (
@@ -340,10 +341,10 @@ export default function ProfilePage() {
                   Active Student
                 </span>
               </div>
-                <div className="p-8 flex flex-col md:flex-row gap-12">
+                <div className="p-4 md:p-8 flex flex-col md:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
-                    <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
-                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Student'} />
+                    <div className="size-24 md:size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner shrink-0 bg-slate-100">
+                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Student'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}
@@ -352,52 +353,48 @@ export default function ProfilePage() {
                       className="hidden"
                       onChange={handlePhotoPick}
                     />
-                    <button onClick={() => photoInputRef.current?.click()} className="text-sm font-bold text-primary hover:underline">Change Photo</button>
+                    <button onClick={() => photoInputRef.current?.click()} className="text-xs md:text-sm font-bold text-primary hover:underline uppercase tracking-widest">Update Photo</button>
                   </div>
                 
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">First Name</label>
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">First Name</label>
                     <input
                       type="text"
                       value={profileForm.firstName}
                       onChange={(e) => setProfileForm((prev) => ({ ...prev, firstName: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                      className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Last Name</label>
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Last Name</label>
                     <input
                       type="text"
                       value={profileForm.lastName}
                       onChange={(e) => setProfileForm((prev) => ({ ...prev, lastName: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                      className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Email Address</label>
                     <input
                       type="email"
                       value={profileForm.email}
                       onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                      className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Student ID</label>
-                    <input type="text" value={profileForm.studentId || 'N/A'} disabled className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-medium" />
-                    <p className="text-[10px] text-slate-400 italic">Student ID cannot be changed</p>
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Student ID</label>
+                    <input type="text" value={profileForm.studentId || 'N/A'} disabled className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-bold text-sm" />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Generation</label>
-                    <div className="relative">
-                      <input type="text" value={profileForm.generation} disabled className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-medium" />
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Generation</label>
+                    <input type="text" value={profileForm.generation} disabled className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-bold text-sm" />
                   </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Class</label>
-                    <input type="text" value={profileForm.className || 'N/A'} disabled className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-medium" />
+                  <div className="space-y-1.5 md:space-y-2 md:col-span-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Class</label>
+                    <input type="text" value={profileForm.className || 'N/A'} disabled className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed outline-none font-bold text-sm" />
                   </div>
                 </div>
               </div>
@@ -414,19 +411,19 @@ export default function ProfilePage() {
                 <h2 className="font-bold text-slate-900">Account Security</h2>
                 <p className="text-xs text-slate-500 mt-1">Ensure your account is using a long, random password to stay secure.</p>
               </div>
-              <div className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Password</label>
-                    <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+              <div className="p-4 md:p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Current Password</label>
+                    <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">New Password</label>
-                    <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">New Password</label>
+                    <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Confirm New Password</label>
-                    <input type="password" value={profileForm.confirmPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+                  <div className="space-y-1.5 md:space-y-2">
+                    <label className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">Confirm New</label>
+                    <input type="password" value={profileForm.confirmPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -497,7 +494,7 @@ export default function ProfilePage() {
             </motion.section>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-end gap-4 pt-4">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-end gap-3 md:gap-4 pt-4">
               <button
                 onClick={() => {
                   setProfileForm((prev) => ({
@@ -508,14 +505,14 @@ export default function ProfilePage() {
                   }));
                   setErrorMessage('');
                 }}
-                className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors"
+                className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-widest"
               >
-                Discard Changes
+                Discard
               </button>
               <button 
                 onClick={handleSave}
                 disabled={isSaving}
-                className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
+                className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70 uppercase tracking-widest"
               >
                 {isSaving ? 'Saving...' : 'Save Preferences'}
               </button>
@@ -526,3 +523,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+

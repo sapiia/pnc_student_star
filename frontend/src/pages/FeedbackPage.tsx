@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, Search, Send, Settings, Trash2, Users, X } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, Search, Send, Settings, Trash2, Users, X, ArrowLeft } from 'lucide-react';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 import { cn } from '../lib/utils';
 import { getRealtimeSocket, type FeedbackRealtimePayload } from '../lib/realtime';
 
@@ -93,6 +94,7 @@ export default function FeedbackPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const [seenByTeacher, setSeenByTeacher] = useState<Record<string, string>>({});
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
   const loadFeedbacks = useCallback(async () => {
     if (!studentId) {
@@ -445,7 +447,8 @@ export default function FeedbackPage() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <StudentMobileNav />
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between shrink-0">
           <div className="flex-1 max-w-xl relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -453,22 +456,22 @@ export default function FeedbackPage() {
               placeholder="Search teacher..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none"
             />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 ml-4">
             <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
-              <Settings className="w-5 h-5" />
-            </button>
           </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden">
-          <aside className="w-96 border-r border-slate-200 bg-white flex flex-col shrink-0">
+        <div className="flex-1 flex overflow-hidden relative">
+          <aside className={cn(
+            "w-full md:w-96 border-r border-slate-200 bg-white flex flex-col shrink-0 transition-all duration-300 md:translate-x-0 pb-24 md:pb-0",
+            isMobileChatOpen ? "-translate-x-full md:translate-x-0 hidden md:flex" : "translate-x-0"
+          )}>
             <div className="p-6 border-b border-slate-50">
               <h2 className="text-xl font-bold text-slate-900">Teachers</h2>
               <p className="text-xs text-slate-500 mt-1">{filteredTeachers.length} profiles</p>
@@ -485,7 +488,10 @@ export default function FeedbackPage() {
               ) : filteredTeachers.map((teacher) => (
                 <button
                   key={teacher.teacherId}
-                  onClick={() => setSelectedTeacherId(teacher.teacherId)}
+                  onClick={() => {
+                    setSelectedTeacherId(teacher.teacherId);
+                    setIsMobileChatOpen(true);
+                  }}
                   className={cn(
                     'w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative',
                     selectedTeacherId === teacher.teacherId && 'bg-slate-50'
@@ -525,11 +531,20 @@ export default function FeedbackPage() {
             </div>
           </aside>
 
-          <section className="flex-1 flex flex-col bg-white overflow-hidden">
+          <section className={cn(
+            "flex-1 flex flex-col bg-white overflow-hidden transition-all duration-300 pb-24 md:pb-0",
+            isMobileChatOpen ? "translate-x-0" : "translate-x-full md:translate-x-0 hidden md:flex"
+          )}>
             {selectedTeacher ? (
               <>
-                <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-4">
-                  <div className="size-12 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center">
+                <div className="px-4 md:px-8 py-3 md:py-6 border-b border-slate-100 flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsMobileChatOpen(false)}
+                    className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div className="size-10 md:size-12 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     {selectedTeacher.teacherProfileImage ? (
                       <img src={selectedTeacher.teacherProfileImage} alt={selectedTeacher.teacherName} className="w-full h-full object-cover" />
                     ) : (
@@ -537,12 +552,12 @@ export default function FeedbackPage() {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-slate-900">{selectedTeacher.teacherName}</h3>
-                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">All feedback from this teacher</p>
+                    <h3 className="text-sm md:text-lg font-black text-slate-900 leading-tight">{selectedTeacher.teacherName}</h3>
+                    <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400 mt-0.5 md:mt-1">Conversation</p>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4 bg-slate-50">
+                <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 bg-slate-50">
                   {isLoadingReplies ? (
                     <div className="text-sm font-medium text-slate-500">Loading conversation...</div>
                   ) : chatEntries.length > 0 ? chatEntries.map((entry) => (
@@ -551,7 +566,7 @@ export default function FeedbackPage() {
                       className={cn('flex', entry.kind === 'student' ? 'justify-end' : 'justify-start')}
                     >
                       <div className={cn(
-                        'max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border',
+                        'max-w-[85%] md:max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border',
                         entry.kind === 'student'
                           ? 'bg-primary text-white border-primary/30'
                           : 'bg-white text-slate-700 border-slate-200'
@@ -707,3 +722,5 @@ export default function FeedbackPage() {
     </div>
   );
 }
+
+

@@ -20,9 +20,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CRITERIA } from '../constants';
-import StarRating from '../components/StarRating';
+import StarRating from '../components/ui/StarRating';
 import { cn } from '../lib/utils';
-import BrandLogo from '../components/BrandLogo';
+import BrandLogo from '../components/ui/BrandLogo';
 
 type EvaluationCriterion = {
   id?: string;
@@ -149,22 +149,26 @@ export default function EvaluationFormPage() {
           return;
         }
 
-        const nextRatingScale = Math.max(1, Number(data.ratingScale || 5));
-        const normalizedCriteria = data.criteria.map((item: { id?: string; name?: string; icon?: string; description?: string; starDescriptions?: string[] }, index: number) => {
+        const activeCriteria = data.criteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
+        if (activeCriteria.length === 0) return;
+
+        const nextRatingScale = Math.max(1, Number(data?.ratingScale || 5));
+        setRatingScale(nextRatingScale);
+        
+        const mappedCriteria = activeCriteria.map((c: any, index: number) => {
           const style = CRITERION_STYLES[index % CRITERION_STYLES.length];
           return {
-            id: String(item.id || '').trim() || undefined,
-            key: toCriterionKey(String(item.name || item.id || `criterion${index + 1}`)),
-            label: String(item.name || `Criterion ${index + 1}`),
-            icon: String(item.icon || 'Star'),
-            description: String(item.description || '').trim(),
-            starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(item.starDescriptions?.[starIndex] || '').trim()),
+            id: String(c.id || '').trim() || undefined,
+            key: c.key || String(c.id || c.name || `criterion${index + 1}`),
+            label: String(c.name || `Criterion ${index + 1}`),
+            icon: String(c.icon || 'Star'),
+            description: String(c.description || '').trim(),
+            starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(c.starDescriptions?.[starIndex] || '').trim()),
             ...style,
           };
         });
 
-        setRatingScale(nextRatingScale);
-        setCriteria(normalizedCriteria);
+        setCriteria(mappedCriteria);
       } catch {
         // keep fallback criteria so the student can still evaluate
       }
@@ -273,18 +277,17 @@ export default function EvaluationFormPage() {
       <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <BrandLogo titleClassName="text-xl font-bold tracking-tight text-primary" markClassName="size-8" />
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => navigate('/dashboard')}
-              className="text-xs font-bold text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest"
+              className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest whitespace-nowrap"
             >
               Cancel
             </button>
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold leading-none text-slate-900">Alex Johnson</p>
-              <p className="text-xs text-slate-500 mt-1">Student ID: STU-2024-001</p>
+              <p className="text-sm font-semibold leading-none text-slate-900">Student Portal</p>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">Self Evaluation</p>
             </div>
-            <div className="size-10 rounded-full border-2 border-primary/20 bg-cover bg-center" style={{ backgroundImage: "url('https://picsum.photos/seed/alex/100/100')" }} />
           </div>
         </div>
       </header>
@@ -296,69 +299,69 @@ export default function EvaluationFormPage() {
             <p className="mt-4 text-lg font-bold text-slate-900">Loading your evaluation schedule...</p>
           </div>
         ) : !canEvaluate ? (
-          <div className="bg-white border border-amber-200 rounded-3xl shadow-xl overflow-hidden">
-            <div className="p-10 border-b border-amber-100 text-center">
-              <div className="mx-auto size-20 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-6">
-                <ClipboardList className="w-10 h-10" />
+          <div className="bg-white border border-amber-200 rounded-3xl shadow-xl overflow-hidden mt-4 md:mt-0">
+            <div className="p-6 md:p-10 border-b border-amber-100 text-center">
+              <div className="mx-auto size-16 md:size-20 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 md:mb-6">
+                <ClipboardList className="w-8 h-8 md:w-10 md:h-10" />
               </div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">Evaluation Locked</p>
-              <h2 className="mt-3 text-4xl font-black text-slate-900 tracking-tight">You Cannot Evaluate Yet</h2>
-              <p className="mt-4 text-slate-600 font-bold leading-relaxed">
+              <p className="text-[10px] md:text-[11px] font-black uppercase tracking-widest text-amber-600">Evaluation Locked</p>
+              <h2 className="mt-2 md:mt-3 text-2xl md:text-4xl font-black text-slate-900 tracking-tight">Access Restricted</h2>
+              <p className="mt-3 md:mt-4 text-sm md:text-base text-slate-600 font-bold leading-relaxed px-2">
                 Your next self-evaluation will open in {daysUntilAvailable} day{daysUntilAvailable === 1 ? '' : 's'}.
                 {nextAvailableLabel ? ` The next available date is ${nextAvailableLabel}.` : ''}
               </p>
             </div>
-            <div className="bg-amber-50 px-8 py-6 flex items-center justify-center gap-4">
+            <div className="bg-amber-50 px-6 md:px-8 py-5 md:py-6 flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="px-8 py-3 rounded-xl font-black text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-xs"
+                className="px-6 py-3 rounded-xl font-black text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-[10px]"
               >
-                Back to Dashboard
+                Go to Dashboard
               </button>
               <button
                 onClick={() => navigate('/history')}
-                className="px-8 py-3 rounded-xl font-black text-white bg-primary hover:bg-primary/90 transition-all uppercase tracking-widest text-xs"
+                className="px-6 py-3 rounded-xl font-black text-white bg-primary hover:bg-primary/90 transition-all uppercase tracking-widest text-[10px] shadow-lg shadow-primary/20"
               >
-                View Evaluation List
+                View Evaluations
               </button>
             </div>
           </div>
         ) : (
         <>
         {/* Progress Stepper */}
-        <div className="mb-10 overflow-x-auto pb-4 scrollbar-hide">
-          <div className="flex items-center justify-between min-w-[800px]">
+        <div className="mb-6 md:mb-10 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+          <div className="flex items-center justify-between min-w-[500px] md:min-w-full">
             {criteria.map((c, idx) => {
               const isActive = idx === currentStep;
               const isCompleted = idx < currentStep;
               return (
-                <div key={c.key} className="flex flex-col items-center gap-2 flex-1 relative">
-                  <div className={`size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all ${
+                <div key={c.key} className="flex flex-col items-center gap-1.5 md:gap-2 flex-1 relative">
+                  <div className={`size-8 md:size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all text-xs md:text-sm ${
                     isActive ? 'bg-primary text-white shadow-lg shadow-primary/30' : 
                     isCompleted ? 'bg-primary text-white' : 'bg-slate-200 text-slate-400'
                   }`}>
-                    {isCompleted ? <Check className="w-5 h-5" /> : idx + 1}
+                    {isCompleted ? <Check className="w-4 h-4 md:w-5 md:h-5" /> : idx + 1}
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-primary' : 'text-slate-400'}`}>
+                  <span className={`text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-primary' : 'text-slate-400'}`}>
                     {c.label}
                   </span>
                   {idx < criteria.length - 1 && (
-                    <div className={`absolute top-5 left-1/2 w-full h-[2px] transition-colors ${idx < currentStep ? 'bg-primary' : 'bg-slate-200'}`} />
+                    <div className={`absolute top-4 md:top-5 left-1/2 w-full h-[2px] transition-colors ${idx < currentStep ? 'bg-primary' : 'bg-slate-200'}`} />
                   )}
                 </div>
               );
             })}
             {/* Summary Step */}
-            <div className="flex flex-col items-center gap-2 flex-1 relative">
-              <div className={`size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all ${
+            <div className="flex flex-col items-center gap-1.5 md:gap-2 flex-1 relative">
+              <div className={`size-8 md:size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all text-xs md:text-sm ${
                 currentStep === criteria.length ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-slate-200 text-slate-400'
               }`}>
-                <ClipboardList className="w-5 h-5" />
+                <ClipboardList className="w-4 h-4 md:w-5 md:h-5" />
               </div>
-              <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${currentStep === criteria.length ? 'text-primary' : 'text-slate-400'}`}>
+              <span className={`text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-colors ${currentStep === criteria.length ? 'text-primary' : 'text-slate-400'}`}>
                 Summary
               </span>
-              <div className={`absolute top-5 -left-1/2 w-full h-[2px] transition-colors ${currentStep === criteria.length ? 'bg-primary' : 'bg-slate-200'}`} />
+              <div className={`absolute top-4 md:top-5 -left-1/2 w-full h-[2px] transition-colors ${currentStep === criteria.length ? 'bg-primary' : 'bg-slate-200'}`} />
             </div>
           </div>
         </div>
@@ -374,86 +377,87 @@ export default function EvaluationFormPage() {
               className="bg-white border border-primary/10 rounded-3xl shadow-xl overflow-hidden"
             >
               {/* Form Header */}
-              <div className="p-10 border-b border-primary/5 flex gap-8 items-start">
-                <div className={cn("size-20 rounded-2xl flex items-center justify-center shrink-0", criterion.bgColor, criterion.color)}>
-                  {getIcon(criterion.icon, "w-10 h-10")}
+              <div className="px-6 py-8 md:p-10 border-b border-primary/5 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start text-center md:text-left">
+                <div className={cn("size-16 md:size-20 rounded-2xl flex items-center justify-center shrink-0", criterion.bgColor, criterion.color)}>
+                  {getIcon(criterion.icon, "w-8 h-8 md:w-10 md:h-10")}
                 </div>
                 <div>
-                  <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full mb-4">
+                  <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full mb-3 md:mb-4">
                     Step {currentStep + 1} of {criteria.length}
                   </span>
-                  <h2 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">{criterion.label}</h2>
-                  <p className="text-slate-500 font-bold leading-relaxed">
-                    {criterion.description || `Reflect on your ${criterion.label.toLowerCase()} this quarter. What is going well? What could be improved?`}
+                  <h2 className="text-2xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight">{criterion.label}</h2>
+                  <p className="text-sm md:text-base text-slate-500 font-bold leading-relaxed px-4 md:px-0">
+                    {criterion.description || `Reflect on your ${criterion.label.toLowerCase()} this quarter.`}
                   </p>
                 </div>
               </div>
 
               {/* Form Fields */}
-              <div className="p-10 space-y-10">
+              <div className="p-6 md:p-10 space-y-8 md:space-y-10">
                 {/* Rating Component */}
                 <div className="space-y-4">
-                  <label className="block text-xl font-black text-slate-900 tracking-tight">
+                  <label className="block text-lg md:text-xl font-black text-slate-900 tracking-tight text-center md:text-left">
                     How would you rate yourself?
                   </label>
-                  <StarRating 
-                    readonly={false}
-                    rating={selectedRating}
-                    max={ratingScale}
-                    onRate={(r) => setScores({ ...scores, [criterion.key]: r })}
-                    starClassName="w-12 h-12"
-                  />
+                  <div className="flex justify-center md:justify-start">
+                    <StarRating 
+                      readonly={false}
+                      rating={selectedRating}
+                      max={ratingScale}
+                      onRate={(r) => setScores({ ...scores, [criterion.key]: r })}
+                      starClassName="size-8 md:size-12"
+                    />
+                  </div>
                 </div>
 
                 {/* Reflection Component */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xl font-black text-slate-900 tracking-tight" htmlFor="reflection">
-                      Self-Reflection & Details
+                    <label className="block text-lg md:text-xl font-black text-slate-900 tracking-tight" htmlFor="reflection">
+                      Self-Reflection
                     </label>
                     <span className={cn(
-                      "text-xs font-bold",
+                      "text-[10px] font-black uppercase tracking-widest",
                       (reflections[criterion.key]?.length || 0) >= 50 ? "text-emerald-500" : "text-slate-400"
                     )}>
-                      {reflections[criterion.key]?.length || 0} / 50 characters
+                      {reflections[criterion.key]?.length || 0} / 50 min
                     </span>
                   </div>
                   <textarea 
-                    className="w-full rounded-2xl border-slate-200 bg-slate-50 focus:border-primary focus:ring-primary placeholder:text-slate-400 p-6 text-slate-700 font-medium outline-none transition-all" 
+                    className="w-full rounded-2xl border-slate-200 bg-slate-50 focus:border-primary focus:ring-primary placeholder:text-slate-400 p-4 md:p-6 text-sm md:text-base text-slate-700 font-medium outline-none transition-all" 
                     id="reflection" 
-                    placeholder={`Describe your ${criterion.label.toLowerCase()} situation this quarter...`}
-                    rows={6}
+                    placeholder={`Describe your ${criterion.label.toLowerCase()} situation...`}
+                    rows={5}
                     value={reflections[criterion.key] || ''}
                     onChange={(e) => setReflections({ ...reflections, [criterion.key]: e.target.value })}
                   />
                 </div>
 
                 {/* Tip Box */}
-                <div className="flex items-start gap-4 p-6 bg-primary/5 rounded-2xl border border-primary/10">
-                  <div className="text-primary mt-0.5">
-                    <Lightbulb className="w-6 h-6" />
+                <div className="flex items-start gap-3 md:gap-4 p-4 md:p-6 bg-primary/5 rounded-2xl border border-primary/10">
+                  <div className="text-primary mt-0.5 shrink-0">
+                    <Lightbulb className="w-5 h-5 md:w-6 md:h-6" />
                   </div>
-                  <p className="text-sm text-slate-600 font-bold leading-relaxed">
-                    <strong className="text-primary">Tip:</strong>{' '}
-                    {selectedTip || `Choose a star rating for ${criterion.label.toLowerCase()} to see the admin's guidance for that score.`}
+                  <p className="text-[11px] md:text-sm text-slate-600 font-bold leading-relaxed">
+                    <strong className="text-primary text-[10px] md:text-xs">TIP:</strong>{' '}
+                    {selectedTip || `Choose a star rating to see guidance for that score.`}
                   </p>
                 </div>
               </div>
 
               {/* Form Footer */}
-              <div className="bg-slate-50 p-8 flex items-center justify-between">
+              <div className="bg-slate-50 p-6 md:p-8 flex items-center justify-between gap-4">
                 <button 
                   onClick={handleBack}
-                  className="flex items-center gap-2 px-8 py-3 rounded-xl font-black text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-xs"
+                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 rounded-xl font-black text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-[10px]"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back
+                  <span className="hidden sm:inline">Back</span>
                 </button>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-slate-400 font-bold hidden sm:block uppercase tracking-widest">Autosaved</span>
+                <div className="flex items-center gap-4 flex-1 md:flex-none">
                   <button 
                     onClick={handleNext}
-                    className="bg-primary hover:bg-primary/90 text-white px-10 py-4 rounded-xl font-black shadow-lg shadow-primary/25 transition-all flex items-center gap-2 uppercase tracking-widest text-xs"
+                    className="flex-1 md:flex-none bg-primary hover:bg-primary/90 text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-black shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
                   >
                     Next Area
                     <ArrowRight className="w-4 h-4" />
@@ -469,43 +473,45 @@ export default function EvaluationFormPage() {
               exit={{ opacity: 0, x: -20 }}
               className="bg-white border border-primary/10 rounded-3xl shadow-xl overflow-hidden"
             >
-              <div className="p-10 border-b border-primary/5">
-                <h2 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Review Your Evaluation</h2>
-                <p className="text-slate-500 font-bold leading-relaxed">
-                  Please review your ratings and reflections before submitting. You can go back to any section to make changes.
+              <div className="p-6 md:p-10 border-b border-primary/5">
+                <h2 className="text-2xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight">Review Results</h2>
+                <p className="text-sm md:text-base text-slate-500 font-bold leading-relaxed">
+                  Review your responses before final submission.
                 </p>
               </div>
 
-              <div className="p-10 space-y-6">
+              <div className="p-6 md:p-10 space-y-4 md:space-y-6">
                 {criteria.map((c) => (
-                  <div key={c.key} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div key={c.key} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
                     <div className="flex items-center gap-4">
-                      <div className={cn("size-10 rounded-xl flex items-center justify-center", c.bgColor, c.color)}>
+                      <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", c.bgColor, c.color)}>
                         {getIcon(c.icon, "w-5 h-5")}
                       </div>
                       <div>
                         <p className="text-sm font-black text-slate-900">{c.label}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rating: {scores[c.key] || 0}/{ratingScale}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Rating: {scores[c.key] || 0}</p>
                       </div>
                     </div>
-                    <StarRating rating={scores[c.key] || 0} max={ratingScale} starClassName="w-4 h-4" />
+                    <div className="flex justify-end md:justify-start">
+                      <StarRating rating={scores[c.key] || 0} max={ratingScale} starClassName="size-4" />
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="bg-slate-50 p-8 flex items-center justify-between">
+              <div className="bg-slate-50 p-6 md:p-8 flex items-center justify-between gap-4">
                 <button 
                   onClick={handleBack}
-                  className="flex items-center gap-2 px-8 py-3 rounded-xl font-black text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-xs"
+                  className="flex items-center justify-center gap-2 px-6 md:px-8 py-3 rounded-xl font-black text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all uppercase tracking-widest text-[10px]"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back
+                  <span className="hidden sm:inline">Back</span>
                 </button>
                 <button 
                   onClick={handleFinish}
-                  className="bg-primary hover:bg-primary/90 text-white px-10 py-4 rounded-xl font-black shadow-lg shadow-primary/25 transition-all flex items-center gap-2 uppercase tracking-widest text-xs"
+                  className="flex-1 md:flex-none bg-primary hover:bg-primary/90 text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-black shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
                 >
-                  Finish & Submit
+                  Submit Final
                   <Check className="w-4 h-4" />
                 </button>
               </div>

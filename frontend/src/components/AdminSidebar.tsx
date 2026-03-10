@@ -26,13 +26,12 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Administrator');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/admin/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
     { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
-    { icon: Calendar, label: 'Evaluation Periods', path: '/admin/evaluations' },
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];

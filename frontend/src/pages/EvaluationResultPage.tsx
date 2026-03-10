@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getRealtimeSocket } from '../lib/realtime';
 import {
   ArrowRight,
   Bell,
@@ -23,9 +24,12 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import StarRating from '../components/StarRating';
-import RadarChart from '../components/RadarChart';
-import Sidebar from '../components/Sidebar';
+
+import StarRating from '../components/ui/StarRating';
+import RadarChart from '../components/ui/RadarChart';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
+
 
 type EvaluationResponse = {
   criterion_id?: string | null;
@@ -135,10 +139,34 @@ export default function EvaluationResultPage() {
   const [isLoading, setIsLoading] = useState(Boolean(locationState.evaluationId));
   const [quarterFeedback, setQuarterFeedback] = useState<FeedbackItem[]>([]);
   const [activeCriterion, setActiveCriterion] = useState<CriterionView | null>(null);
+  const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const feedbackScrollRef = useRef<HTMLDivElement | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 5000);
+  };
 
   useEffect(() => {
-    const loadEvaluation = async () => {
+    const loadEvaluationAndComparison = async () => {
+      // Fetch global rating scale configuration
+      try {
+        const criteriaRes = await fetch(`${API_BASE_URL}/settings/evaluation-criteria`);
+        const criteriaData = await criteriaRes.json().catch(() => ({}));
+        if (criteriaRes.ok && criteriaData?.ratingScale) {
+          setGlobalRatingScale(Math.max(1, Number(criteriaData.ratingScale)));
+        }
+        if (criteriaRes.ok && Array.isArray(criteriaData?.criteria)) {
+          setGlobalCriteria(criteriaData.criteria);
+        }
+      } catch (err) {
+        console.error('Error loading global rating scale/criteria:', err);
+      }
+
       if (!locationState.evaluationId) {
         setIsLoading(false);
         return;
@@ -146,20 +174,43 @@ export default function EvaluationResultPage() {
 
       try {
         const response = await fetch(`${API_BASE_URL}/evaluations/${locationState.evaluationId}`);
-        const data = await response.json().catch(() => ({}));
+        const currentData = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data?.error || 'Failed to load evaluation result.');
+          throw new Error(currentData?.error || 'Failed to load evaluation result.');
         }
-        setEvaluation(data as EvaluationRecord);
-      } catch {
+        setEvaluation(currentData as EvaluationRecord);
+
+        // Fetch user's evaluation history to find the previous one for comparison
+        const userId = Number(currentData.user_id);
+        if (userId) {
+          const historyResponse = await fetch(`${API_BASE_URL}/evaluations/user/${userId}`);
+          const historyData = await historyResponse.json().catch(() => []);
+          if (Array.isArray(historyData) && historyData.length > 1) {
+            // History is usually sorted by date descending, so current is at [0] and previous is at [1]
+            // But since we just submitted, current might be at [0]
+            const sortedHistory = [...historyData].sort((a, b) => 
+              new Date(b.submitted_at || b.created_at).getTime() - new Date(a.submitted_at || a.created_at).getTime()
+            );
+            
+            const currentIndex = sortedHistory.findIndex(h => Number(h.id) === Number(locationState.evaluationId));
+            if (currentIndex !== -1 && currentIndex < sortedHistory.length - 1) {
+              const previousEval = sortedHistory[currentIndex + 1];
+              setPreviousEvaluation(previousEval);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading evaluation for comparison:', err);
         setEvaluation(null);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadEvaluation();
+    loadEvaluationAndComparison();
   }, [locationState.evaluationId]);
+
+  const [previousEvaluation, setPreviousEvaluation] = useState<EvaluationRecord | null>(null);
 
   useEffect(() => {
     const loadQuarterFeedback = async () => {
@@ -215,7 +266,88 @@ export default function EvaluationResultPage() {
     container.scrollTop = container.scrollHeight;
   }, [quarterFeedback]);
 
+  // Real-time notifications via Socket.IO
+  useEffect(() => {
+    const raw = localStorage.getItem('auth_user');
+    const authUser = raw ? JSON.parse(raw) : null;
+    const userId = Number(authUser?.id);
+    if (!userId) return;
+
+    const socket = getRealtimeSocket();
+
+    // Feedback notifications (teacher gave/updated/deleted feedback)
+    const handleFeedbackCreated = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('🎓 Your teacher just sent you new feedback!');
+      // Refresh feedback list
+      setQuarterFeedback(prev => [...prev]); // trigger re-fetch via setEvaluation
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    const handleFeedbackUpdated = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('✏️ A teacher updated their feedback for you.');
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    const handleFeedbackDeleted = (payload: { studentId?: number }) => {
+      if (Number(payload?.studentId) !== userId) return;
+      showToast('🗑️ A feedback message was removed.');
+      setEvaluation(prev => prev ? { ...prev } : null);
+    };
+
+    // Admin notifications (evaluation settings/criteria changed, profile updated)
+    const handleNotificationCreated = (payload: { userId?: number; notification?: { message?: string } }) => {
+      if (Number(payload?.userId) !== userId) return;
+      const message = String(payload?.notification?.message || '');
+      if (message.toLowerCase().includes('evaluation') || message.toLowerCase().includes('criteria')) {
+        showToast('⚙️ Admin updated evaluation settings. Your results may reflect the latest criteria.');
+      } else if (message.toLowerCase().includes('profile') || message.toLowerCase().includes('class') || message.toLowerCase().includes('student id')) {
+        showToast('👤 An admin updated your profile information.');
+      } else if (message) {
+        showToast(`🔔 ${message}`);
+      }
+    };
+
+    socket.emit('feedback:subscribe', { studentId: userId });
+    socket.on('feedback:created', handleFeedbackCreated);
+    socket.on('feedback:updated', handleFeedbackUpdated);
+    socket.on('feedback:deleted', handleFeedbackDeleted);
+    socket.on('notification:created', handleNotificationCreated);
+
+    return () => {
+      socket.emit('feedback:unsubscribe', { studentId: userId });
+      socket.off('feedback:created', handleFeedbackCreated);
+      socket.off('feedback:updated', handleFeedbackUpdated);
+      socket.off('feedback:deleted', handleFeedbackDeleted);
+      socket.off('notification:created', handleNotificationCreated);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const criteriaData = useMemo<CriterionView[]>(() => {
+    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    
+    if (activeGlobal.length > 0) {
+      return activeGlobal.map((criterion, index) => {
+        const response = (evaluation?.responses || []).find(r => 
+          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+        );
+        
+        return {
+          key: String(criterion.id || criterion.name || `criterion-${index}`),
+          label: String(criterion.name || 'Unnamed Criterion'),
+          icon: String(criterion.icon || 'Star'),
+          score: response ? Number(response.star_value || 0) : 0,
+          reflection: response ? String(response.reflection || '').trim() : '',
+          tip: response ? String(response.tip_snapshot || '').trim() : '',
+          ...CRITERION_STYLES[index % CRITERION_STYLES.length],
+        };
+      });
+    }
+
     if (evaluation?.responses?.length) {
       return evaluation.responses.map((response, index) => ({
         key: response.criterion_key || toCriterionKey(response.criterion_name || `criterion${index + 1}`),
@@ -239,9 +371,9 @@ export default function EvaluationResultPage() {
       tip: '',
       ...CRITERION_STYLES[index % CRITERION_STYLES.length],
     }));
-  }, [evaluation, locationState.reflections, locationState.scores]);
+  }, [globalCriteria, evaluation, locationState.reflections, locationState.scores]);
 
-  const ratingScale = Math.max(1, Number(evaluation?.rating_scale || 5));
+  const ratingScale = globalRatingScale;
   const averageScore = criteriaData.length > 0
     ? criteriaData.reduce((sum, item) => sum + item.score, 0) / criteriaData.length
     : Number(evaluation?.average_score || 0);
@@ -253,13 +385,24 @@ export default function EvaluationResultPage() {
     (currentLowest, item) => (currentLowest === null || item.score < currentLowest.score ? item : currentLowest),
     null
   );
-  const radarData = criteriaData.map((item) => ({
-    subject: item.label,
-    prev: Math.max(0, item.score * 16),
-    curr: Math.max(0, item.score * (100 / ratingScale)),
-  }));
+  const radarData = criteriaData.map((item) => {
+    // Find the matching criterion in the previous evaluation
+    const prevResponse = previousEvaluation?.responses?.find(r =>
+      r.criterion_key === item.key || r.criterion_name === item.label
+    );
+    // Use raw star values — RadarChart uses domain=[0, ratingScale] for correct rings
+    const prevScore = prevResponse ? Number(prevResponse.star_value || 0) : 0;
+
+    return {
+      subject: item.label,
+      prev: Math.max(0, prevScore),
+      curr: Math.max(0, item.score),
+    };
+  });
+
+
   const radarKeys = [
-    { key: 'prev', name: 'Baseline', color: '#cbd5e1', fill: '#cbd5e1' },
+    { key: 'prev', name: previousEvaluation ? toPeriodLabel(previousEvaluation.period) : 'Baseline', color: '#cbd5e1', fill: '#cbd5e1' },
     { key: 'curr', name: toPeriodLabel(evaluation?.period || ''), color: '#5d5fef', fill: '#5d5fef' },
   ];
   const completedLabel = formatLongDate(String(evaluation?.submitted_at || evaluation?.created_at || new Date().toISOString()));
@@ -268,35 +411,58 @@ export default function EvaluationResultPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+      <main className="relative flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
+        <StudentMobileNav />
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
           <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">Evaluation Results</h2>
+            <h2 className="text-slate-900 text-sm md:text-lg font-bold leading-tight tracking-tight uppercase tracking-widest font-black">Evaluation Results</h2>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <div className="flex items-center justify-end gap-3 md:gap-4">
+            <button className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
             </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
+            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl hidden md:block">
               <Settings className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1200px] mx-auto flex flex-col gap-8">
+        {/* Toast notification banner */}
+        <AnimatePresence>
+          {toastMessage ? (
+            <motion.div
+              key="toast"
+              initial={{ opacity: 0, y: -60 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -60 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute top-20 right-4 left-4 md:left-auto md:right-8 md:w-[420px] z-[200] bg-slate-900 text-white rounded-2xl shadow-2xl px-5 py-4 flex items-center gap-3 border border-white/10"
+            >
+              <div className="flex-1 text-sm font-bold leading-snug">{toastMessage}</div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="shrink-0 p-1 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-[1200px] mx-auto flex flex-col gap-6 md:gap-8">
             <motion.section
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center text-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden"
+              className="flex flex-col items-center text-center bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-emerald-400 to-primary" />
-              <div className="size-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                <PartyPopper className="w-8 h-8" />
+              <div className="size-12 md:size-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                <PartyPopper className="w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <h1 className="text-slate-900 text-3xl md:text-4xl font-bold leading-tight mb-2">Evaluation Complete!</h1>
-              <p className="text-slate-600 text-lg max-w-2xl">
+              <h1 className="text-slate-900 text-2xl md:text-4xl font-black leading-tight mb-2 tracking-tight">Well Done!</h1>
+              <p className="text-slate-600 text-sm md:text-lg max-w-2xl font-bold">
                 {evaluation?.period
                   ? `Your ${toPeriodLabel(evaluation.period)} evaluation was submitted on ${completedLabel}.`
                   : 'Your evaluation has been submitted successfully.'}
@@ -305,10 +471,10 @@ export default function EvaluationResultPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               <div className="lg:col-span-7 flex flex-col gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-slate-900 text-xl font-bold">Performance Overview</h3>
-                    <div className="flex gap-4 text-xs font-semibold uppercase tracking-wider">
+                <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 h-full">
+                  <div className="flex items-center justify-between mb-6 md:mb-8">
+                    <h3 className="text-slate-900 text-lg md:text-xl font-black uppercase tracking-widest">Growth Radar</h3>
+                    <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest">
                       <div className="flex items-center gap-1.5">
                         <span className="w-3 h-3 rounded-full bg-primary" />
                         <span className="text-primary">{toPeriodLabel(evaluation?.period || '')}</span>
@@ -317,7 +483,7 @@ export default function EvaluationResultPage() {
                   </div>
 
                   {criteriaData.length > 0 ? (
-                    <RadarChart data={radarData} dataKeys={radarKeys} />
+                    <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
                   ) : (
                     <div className="h-[320px] rounded-2xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
                       {isLoading ? 'Loading evaluation result...' : 'No saved criteria data found.'}
@@ -379,15 +545,15 @@ export default function EvaluationResultPage() {
                   ) : null}
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-200 flex-1">
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div>
-                      <h3 className="text-slate-900 text-lg font-bold">Teacher Feedback</h3>
-                      <p className="text-xs text-slate-500">{toPeriodLabel(evaluation?.period || '')}</p>
+                      <h3 className="text-slate-900 text-base md:text-lg font-black uppercase tracking-widest">Teacher Feedback</h3>
+                      <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">{toPeriodLabel(evaluation?.period || '')}</p>
                     </div>
                     <button
                       onClick={() => navigate('/feedback')}
-                      className="text-xs text-primary font-semibold hover:underline"
+                      className="text-[10px] md:text-xs text-primary font-black uppercase tracking-widest hover:underline"
                     >
                       View All
                     </button>
@@ -399,7 +565,7 @@ export default function EvaluationResultPage() {
                     >
                       {quarterFeedback.map((feedback) => (
                         <div key={feedback.id} className="flex gap-3">
-                          <div className="size-10 rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center">
+                          <div className="size-9 md:size-10 rounded-xl overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center border border-slate-200">
                             {feedback.teacher_profile_image ? (
                               <img
                                 src={feedback.teacher_profile_image}
@@ -410,14 +576,14 @@ export default function EvaluationResultPage() {
                               <Users className="w-4 h-4 text-slate-400" />
                             )}
                           </div>
-                          <div className="flex-1 rounded-xl bg-slate-50 border border-slate-100 p-4">
-                            <div className="flex items-center justify-between gap-3 mb-2">
-                              <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                          <div className="flex-1 rounded-xl bg-slate-50 border border-slate-100 p-3 md:p-4">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 md:gap-3 mb-2">
+                              <p className="text-sm font-black text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
+                              <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 {formatLongDate(String(feedback.created_at || ''))}
                               </span>
                             </div>
-                            <p className="text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+                            <p className="text-sm leading-relaxed text-slate-600 font-medium line-clamp-4">
                               {feedback.comment}
                             </p>
                           </div>
@@ -425,8 +591,8 @@ export default function EvaluationResultPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm font-bold text-slate-400">
-                      No teacher feedback is available yet for this quarter.
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">
+                      No feedback yet.
                     </div>
                   )}
                 </div>
@@ -436,8 +602,8 @@ export default function EvaluationResultPage() {
             <section className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-slate-900 text-2xl font-bold">Criteria Breakdown</h2>
-                  <p className="text-sm text-slate-500">Click any criterion to view its stars and full comment.</p>
+                  <h2 className="text-slate-900 text-xl md:text-2xl font-black uppercase tracking-widest">Detail View</h2>
+                  <p className="text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-widest">Click cards for full reflections.</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -477,20 +643,20 @@ export default function EvaluationResultPage() {
               </div>
             </section>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8 pb-12">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3 md:gap-4 mt-8 pb-12">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="w-full sm:w-auto px-8 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+                className="flex-1 md:flex-none px-8 py-3.5 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
               >
                 <LayoutDashboard className="w-5 h-5" />
-                Return to Dashboard
+                Return Home
               </button>
               <button
                 onClick={() => navigate('/history')}
-                className="w-full sm:w-auto px-8 py-3 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                className="flex-1 md:flex-none px-8 py-3.5 bg-white text-slate-700 font-black text-[10px] uppercase tracking-widest rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
               >
                 <History className="w-5 h-5" />
-                View Full History
+                History
               </button>
             </div>
           </div>
@@ -515,41 +681,41 @@ export default function EvaluationResultPage() {
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="relative w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
             >
-              <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
+              <div className="p-6 md:p-8 border-b border-slate-100 flex items-start justify-between gap-6">
                 <div className="flex items-start gap-4">
-                  <div className={`size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color}`}>
-                    {getIcon(activeCriterion.icon, 'w-7 h-7')}
+                  <div className={`size-12 md:size-14 rounded-2xl flex items-center justify-center ${activeCriterion.bgColor} ${activeCriterion.color} shrink-0`}>
+                    {getIcon(activeCriterion.icon, 'w-6 h-6 md:w-7 md:h-7')}
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-primary">Criterion Detail</p>
-                    <h3 className="text-2xl font-black text-slate-900">{activeCriterion.label}</h3>
-                    <div className="flex items-center gap-3">
-                      <StarRating rating={activeCriterion.score} max={ratingScale} starClassName="w-5 h-5" />
-                      <span className="text-sm font-black text-slate-900">{activeCriterion.score}/{ratingScale} Stars</span>
+                  <div className="space-y-1 md:space-y-2">
+                    <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-primary">Detail View</p>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{activeCriterion.label}</h3>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <StarRating rating={activeCriterion.score} max={ratingScale} starClassName="size-4 md:size-5" />
+                      <span className="text-xs md:text-sm font-black text-slate-900">{activeCriterion.score}/{ratingScale}</span>
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveCriterion(null)}
-                  className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors"
+                  className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-8 space-y-6">
-                <div className="rounded-2xl border border-primary/10 bg-primary/5 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
+              <div className="p-6 md:p-8 space-y-4 md:space-y-6">
+                <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4 md:p-5">
+                  <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-primary mb-2">Assigned Tip</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700">
                     {activeCriterion.tip || 'No admin tip was saved for this criterion.'}
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Your Comment</p>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+                  <p className="text-[9px] md:text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Your Reflection</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700 whitespace-pre-wrap">
-                    {activeCriterion.reflection || 'No written comment was submitted for this criterion.'}
+                    {activeCriterion.reflection || 'No written reflection was submitted for this criterion.'}
                   </p>
                 </div>
               </div>
@@ -560,3 +726,5 @@ export default function EvaluationResultPage() {
     </div>
   );
 }
+
+

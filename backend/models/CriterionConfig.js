@@ -270,6 +270,11 @@ class CriterionConfig {
     try {
       await connection.beginTransaction();
 
+      // 1. Get current scale to see if we need to normalize scores
+      const [settingRows] = await connection.query("SELECT `value` FROM settings WHERE `key` = 'max_stars_per_category' LIMIT 1");
+      const oldRatingScale = Number(settingRows?.[0]?.value || DEFAULT_RATING_SCALE);
+
+      // 2. Update the rating scale setting
       await connection.query(
         `
           INSERT INTO settings (\`key\`, \`value\`)
@@ -278,6 +283,35 @@ class CriterionConfig {
         `,
         [String(normalizedRatingScale)]
       );
+
+      // 3. Normalize existing scores if the scale changed
+      if (oldRatingScale !== normalizedRatingScale) {
+        console.log(`Normalizing scores: ${oldRatingScale} -> ${normalizedRatingScale}`);
+        const factor = normalizedRatingScale / oldRatingScale;
+        
+        // Update individual responses
+        await connection.query(
+          "UPDATE evaluation_responses SET star_value = ROUND(star_value * ?)",
+          [factor]
+        );
+
+        // Update pre-calculated columns in evaluations table if they exist
+        // Note: We use COALESCE to avoid issues with nulls if some columns aren't used
+        await connection.query(`
+          UPDATE evaluations 
+          SET 
+            rating_scale = ?,
+            living_stars = ROUND(living_stars * ?),
+            job_study_stars = ROUND(job_study_stars * ?),
+            human_support_stars = ROUND(human_support_stars * ?),
+            health_stars = ROUND(health_stars * ?),
+            feeling_stars = ROUND(feeling_stars * ?),
+            choice_behavior_stars = ROUND(choice_behavior_stars * ?),
+            money_payment_stars = ROUND(money_payment_stars * ?),
+            life_skill_stars = ROUND(life_skill_stars * ?),
+            average_score = ROUND(average_score * ?)
+        `, [normalizedRatingScale, factor, factor, factor, factor, factor, factor, factor, factor, factor]);
+      }
 
       await connection.query('DELETE FROM evaluation_criterion_star_descriptions');
       await connection.query('DELETE FROM evaluation_criteria');

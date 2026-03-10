@@ -35,7 +35,7 @@ export default function Sidebar({ className }: SidebarProps) {
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/alex/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(
     location.pathname === '/profile' || 
     location.pathname === '/help' || 
@@ -186,11 +186,11 @@ export default function Sidebar({ className }: SidebarProps) {
   }, []);
 
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: FileText, label: 'My Evaluations', path: '/history' },
-    { icon: MessageSquare, label: 'Feedback', path: '/feedback' },
-    { icon: Bell, label: 'Notifications', path: '/notifications', hasNotification: unreadNotificationCount > 0 },
-    { icon: MessageSquare, label: 'Message', path: '/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', isAction: false },
+    { icon: FileText, label: 'My Evaluations', path: '/history', isAction: false },
+    { icon: MessageSquare, label: 'Feedback', path: '/feedback', isAction: false },
+    { icon: Bell, label: 'Notifications', path: '/notifications', hasNotification: unreadNotificationCount > 0, isAction: false },
+    { icon: MessageSquare, label: 'Message', path: '/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount, isAction: false },
   ];
 
   const settingsSubItems = [
@@ -198,6 +198,11 @@ export default function Sidebar({ className }: SidebarProps) {
     { icon: HelpCircle, label: 'Help Center', path: '/help' },
     { icon: Info, label: 'FAQ', path: '/faq' },
   ];
+
+  // Smooth animation presets for consistent, fluid transitions
+  const smoothTransition = { duration: 0.35, ease: [0.4, 0, 0.2, 1] as const };
+  const quickTransition = { duration: 0.2, ease: [0.4, 0, 0.2, 1] as const };
+  const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
 
   return (
     <motion.aside 

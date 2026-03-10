@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import AdminSidebar from '../components/AdminSidebar';
+import AdminSidebar from '../components/layout/sidebar/AdminSidebar';
+import AdminMobileNav from '../components/AdminMobileNav';
 import { cn } from '../lib/utils';
 import { useEffect, useRef, useState } from 'react';
 
@@ -252,7 +253,7 @@ export default function AdminSettingsPage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/admin/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
   const filteredCriterionIconOptions = CRITERION_ICON_OPTIONS.filter((option) => {
@@ -623,7 +624,7 @@ export default function AdminSettingsPage() {
 
         const savedPhoto = String(data.profile_image || authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'https://picsum.photos/seed/admin/200/200';
+          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
         const resolvedFirstName = String(data.first_name || '').trim();
         const resolvedLastName = String(data.last_name || '').trim();
         const fallbackName = splitNameParts(String(data.name || authUser.name || ''));
@@ -639,7 +640,7 @@ export default function AdminSettingsPage() {
       } catch (error) {
         const fallbackPhoto = String(authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'https://picsum.photos/seed/admin/200/200';
+          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
         const fallbackName = splitNameParts(authUser.name || '');
         setProfileForm((prev) => ({
           ...prev,
@@ -1232,6 +1233,7 @@ export default function AdminSettingsPage() {
       <AdminSidebar />
 
       <main className="flex-1 overflow-y-auto relative">
+        <AdminMobileNav />
         {/* Success Toast */}
         <AnimatePresence>
           {showSuccess && (
@@ -1292,10 +1294,10 @@ export default function AdminSettingsPage() {
         </AnimatePresence>
 
         {/* Header */}
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-black text-slate-900">Settings</h1>
-            <div className="h-4 w-px bg-slate-200" />
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
+            <h1 className="text-lg md:text-xl font-black text-slate-900">Settings</h1>
+            <div className="h-4 w-px bg-slate-200 hidden md:block" />
             <div className="flex gap-1">
               <button 
                 onClick={() => setActiveTab('system')}
@@ -1318,18 +1320,18 @@ export default function AdminSettingsPage() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 w-full md:w-auto">
             <button 
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+              className="w-full md:w-auto bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
             >
               {isSaving ? 'Saving...' : 'Save All Changes'}
             </button>
           </div>
         </header>
 
-        <div className="p-8 max-w-7xl mx-auto space-y-8">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           {activeTab === 'system' ? (
             <>
               <div className="flex flex-col gap-2">
@@ -1983,7 +1985,7 @@ export default function AdminSettingsPage() {
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-3xl overflow-hidden border-4 border-slate-50 shadow-inner relative group">
                       <img
-                        src={profileForm.photoUrl || 'https://picsum.photos/seed/admin/200/200'}
+                        src={profileForm.photoUrl || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
                         alt={`${profileForm.firstName} ${profileForm.lastName}`.trim() || 'Admin'}
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">

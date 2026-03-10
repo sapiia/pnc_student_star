@@ -2,8 +2,12 @@ const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const path = require('path');
 const XLSX = require('xlsx');
 const saltRounds = 10;
+const Notification = require('../models/Notification');
+const { emitNotificationEvent } = require('../src/realtime');
+
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
@@ -85,6 +89,8 @@ const insertUserFlexible = async ({
   classValue,
   studentIdValue,
   gender,
+  major,
+  generation,
   isRegistered,
   queryExecutor = db
 }) => {
@@ -139,6 +145,18 @@ const insertUserFlexible = async ({
     placeholders.push('?');
   }
 
+  if (columns.has('major') && major) {
+    insertColumns.push('major');
+    insertValues.push(major);
+    placeholders.push('?');
+  }
+
+  if (columns.has('generation') && generation) {
+    insertColumns.push('generation');
+    insertValues.push(generation);
+    placeholders.push('?');
+  }
+
   const sql = `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`;
   const [result] = await queryExecutor.query(sql, insertValues);
   return result;
@@ -152,6 +170,8 @@ const updateUserFlexibleById = async ({
   classValue,
   studentIdValue,
   gender,
+  major,
+  generation,
   isRegistered
 }) => {
   const columns = await getUsersTableColumns();
@@ -194,6 +214,16 @@ const updateUserFlexibleById = async ({
   if (columns.has('is_registered') && typeof isRegistered !== 'undefined') {
     updates.push('is_registered = ?');
     values.push(isRegistered ? 1 : 0);
+  }
+
+  if (columns.has('major') && major !== undefined) {
+    updates.push('major = ?');
+    values.push(major);
+  }
+
+  if (columns.has('generation') && generation !== undefined) {
+    updates.push('generation = ?');
+    values.push(generation);
   }
 
   if (updates.length === 0) {
@@ -278,6 +308,15 @@ const createHttpError = (status, message) => {
   const error = new Error(message);
   error.status = status;
   return error;
+};
+
+const toFallbackNameFromEmail = (email = '') => {
+  const local = (email || '').toString().trim().split('@')[0] || 'User';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 };
 
 const normalizeGender = (gender = '') => gender.toString().trim().toLowerCase();
@@ -390,6 +429,8 @@ const buildInvitedUserSummary = (normalizedInvite) => {
 };
 
 const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
+  console.log('Building invite artifacts for:', normalizedInvite.email);
+
   const {
     firstName,
     lastName,
@@ -442,37 +483,67 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       : '/dashboard';
 
   const text = [
-    `You are invited to join PNC Student Star as ${roleLabel}.`,
+    'Welcome to PNC Student Star!',
+    '',
+    `Hello, you have been invited to join the PNC Student Star platform as a ${roleLabel}.`,
+    'We are excited to have you as part of our community!',
+    '',
     `Invited by: ${inviterIdentity}`,
     '',
-    'Temporary password (for first login):',
-    tempPassword,
-    '',
-    'Please complete your registration using this link:',
+    'To get started, please complete your registration by clicking the link below:',
     inviteLink,
     '',
-    'After registration, use this email and temporary password to log in (you can change it later).',
+    '--- Account Details ---',
+    `Temporary Password (for your first login): ${tempPassword}`,
     '',
-    'After completing registration, login here:',
+    'After registration, you can log in using your email and the temporary password provided above. You will be able to change your password after your first login.',
+    '',
+    'Login here after registration:',
     loginLink,
     '',
-    `After login, you will be redirected to: ${roleDashboardPath}`,
+    `Redirected to: ${roleDashboardPath}`,
+    '-----------------------',
     '',
-    `This link expires in ${INVITE_EXPIRES_HOURS} hours.`
+    `This invitation link will expire in ${INVITE_EXPIRES_HOURS} hours.`,
+    '',
+    'Best regards,',
+    'PNC Student Star Team'
   ].join('\n');
 
   const html = `
-    <p>You are invited to join <strong>PNC Student Star</strong> as <strong>${roleLabel}</strong>.</p>
-    <p><strong>Invited by:</strong> ${inviterIdentity}</p>
-    <p><strong>Temporary password (for first login):</strong> <code>${tempPassword}</code></p>
-    <p>Please complete your registration using the link below:</p>
-    <p><a href="${inviteLink}">${inviteLink}</a></p>
-    <p>After registration, use this email and temporary password to log in (you can change it later).</p>
-    <p>After completing registration, login here:</p>
-    <p><a href="${loginLink}">${loginLink}</a></p>
-    <p>After login, you will be redirected to: <strong>${roleDashboardPath}</strong>.</p>
-    <p>This link expires in ${INVITE_EXPIRES_HOURS} hours.</p>
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
+      <div style="text-align: center; margin-bottom: 25px;">
+        <img src="cid:star_gmail_logo" style="width: 84px; height: 84px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="PNC Student Star Profile" />
+      </div>
+      <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Welcome to PNC Student Star!</h2>
+      <p>Hello,</p>
+      <p>We are excited to invite you to join the <strong>PNC Student Star</strong> platform as <strong>${roleLabel}</strong>.</p>
+      <p>Our community is growing, and we can't wait for you to explore all the features we have prepared for you.</p>
+      
+      <div style="margin: 25px 0; text-align: center;">
+        <a href="${inviteLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Complete Your Registration</a>
+      </div>
+
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+        <p style="margin-top: 0; font-weight: bold;">Quick Access Details:</p>
+        <p><strong>Invited by:</strong> ${inviterIdentity}</p>
+        <p><strong>Temporary Password:</strong> <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 4px;">${tempPassword}</code></p>
+      </div>
+
+      <p style="margin-top: 20px;">After registering, you can log in at <a href="${loginLink}">${loginLink}</a> using your email and the temporary password above. You will be able to set a new password during or after your first login.</p>
+      
+      <p style="color: #64748b; font-size: 0.875rem;">Note: This invitation link will expire in ${INVITE_EXPIRES_HOURS} hours.</p>
+      
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="color: #64748b; font-size: 0.875rem;">Best regards,<br /><strong>PNC Student Star Team</strong></p>
+    </div>
   `;
+
+  const logoAttachment = {
+    filename: 'star_gmail_logo.jpg',
+    path: path.join(__dirname, '../uploads/logo/star_gmail_logo.jpg'),
+    cid: 'star_gmail_logo'
+  };
 
   return {
     classForUser,
@@ -481,7 +552,8 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       to: email,
       subject: 'PNC Student Star Invitation',
       text,
-      html
+      html,
+      attachments: [logoAttachment]
     },
     roleDashboardPath,
     temporaryPassword: tempPassword,
@@ -490,11 +562,13 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
       subject: 'PNC Student Star Invitation',
       text,
+      html,
       inviteLink,
       loginLink,
       temporaryPassword: tempPassword,
       invitedBy: inviterIdentity,
       roleDashboardPath,
+      attachments: [logoAttachment],
       smtpConfigured: false
     },
     invitedUser: buildInvitedUserSummary(normalizedInvite)
@@ -502,11 +576,20 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
 };
 
 const sendInviteForUser = async (inviteInput, options = {}) => {
+  console.log('Sending invite for user:', inviteInput.email, 'Options:', options);
+
   const normalizedInvite = normalizeInviteInput(inviteInput || {});
   const queryExecutor = options.queryExecutor || db;
-  const [existingUsers] = await queryExecutor.query("SELECT id FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
+  const [existingUsers] = await queryExecutor.query("SELECT * FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
   if (existingUsers.length > 0) {
-    throw createHttpError(409, 'A user with this email already exists.');
+    const existingName = getDisplayNameFromUserRow(existingUsers[0] || {})
+      || normalizedInvite.name
+      || toFallbackNameFromEmail(normalizedInvite.email);
+    const duplicateError = createHttpError(409, 'A user with this email already exists.');
+    duplicateError.existingUserName = existingName;
+    duplicateError.email = normalizedInvite.email;
+
+    throw duplicateError;
   }
 
   if (options.validateOnly) {
@@ -514,12 +597,14 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
       validatedRow: {
         firstName: normalizedInvite.firstName,
         lastName: normalizedInvite.lastName,
+        name: normalizedInvite.name,
         email: normalizedInvite.email,
         gender: normalizedInvite.gender,
         role: normalizedInvite.role,
-        generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
-        className: normalizedInvite.role === 'student' ? normalizedInvite.className || null : null,
-        studentId: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+        generation: normalizedInvite.generation || null,
+        major: normalizedInvite.major || null,
+        className: normalizedInvite.className || null,
+        studentId: normalizedInvite.studentId || null,
         inviterName: normalizedInvite.inviterName || undefined,
         inviterEmail: normalizedInvite.inviterEmail || undefined
       },
@@ -539,18 +624,21 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     classValue: artifacts.classForUser,
     studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
     gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
+    major: normalizedInvite.role === 'student' ? normalizedInvite.major || null : null,
+    generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
     isRegistered: false,
     queryExecutor
   });
 
   if (isConfigured && transporter && !options.skipSendEmail) {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+      from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
       replyTo: ADMIN_INVITER_EMAIL,
       to: artifacts.emailMessage.to,
       subject: artifacts.emailMessage.subject,
       text: artifacts.emailMessage.text,
-      html: artifacts.emailMessage.html
+      html: artifacts.emailMessage.html,
+      attachments: artifacts.emailMessage.attachments
     });
   }
 
@@ -614,6 +702,7 @@ const validateBulkInviteRows = async (rows, options = {}) => {
   const seenEmailsInFile = new Set();
   const validRows = [];
   const errors = [];
+  const existingUsers = [];
 
   for (const row of rows) {
     const rowEmail = (row.payload.email || '').toString().trim().toLowerCase();
@@ -635,6 +724,16 @@ const validateBulkInviteRows = async (rows, options = {}) => {
         invitedUser: result.invitedUser
       });
     } catch (err) {
+      if (Number(err?.status) === 409) {
+        const fallbackName = `${(row.payload.firstName || '').toString().trim()} ${(row.payload.lastName || '').toString().trim()}`.trim()
+          || toFallbackNameFromEmail(rowEmail);
+        existingUsers.push({
+          row: row.rowNumber,
+          email: rowEmail,
+          name: (err.existingUserName || fallbackName || rowEmail).toString().trim()
+        });
+        continue;
+      }
       errors.push({
         row: row.rowNumber,
         email: rowEmail,
@@ -643,7 +742,7 @@ const validateBulkInviteRows = async (rows, options = {}) => {
     }
   }
 
-  return { validRows, errors };
+  return { validRows, errors, existingUsers };
 };
 
 // Get all users
@@ -735,9 +834,9 @@ const createUser = async (req, res) => {
       isRegistered: true
     });
 
-    res.status(201).json({ 
-      message: "User created successfully", 
-      userId: result.insertId 
+    res.status(201).json({
+      message: "User created successfully",
+      userId: result.insertId
     });
   } catch (err) {
     console.error(err);
@@ -747,8 +846,9 @@ const createUser = async (req, res) => {
 
 // Update user
 const updateUser = async (req, res) => {
-  const { name, email, role, class_name, student_id } = req.body;
-  
+  const { name, email, role, class_name, student_id, gender } = req.body;
+  const userId = req.params.id;
+
   try {
     const normalizedRole = normalizeRole(role);
     const normalizedStudentId = (student_id || '').toString().trim();
@@ -759,11 +859,56 @@ const updateUser = async (req, res) => {
       return res.status(400).json({ error: "student_id is required when role is student." });
     }
 
-    const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ?, student_id = ? WHERE id = ?";
-    await db.query(sql, [name, email, normalizedRole, class_name || null, normalizedStudentId || null, req.params.id]);
+    // Get old user data to describe changes
+    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender FROM users WHERE id = ?", [userId]);
+    const oldUser = oldUserRows[0];
+
+    const nameParts = (name || '').trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ');
+
+    const sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, role = ?, class = ?, student_id = ?, gender = ? WHERE id = ?";
+    await db.query(sql, [firstName, lastName, email, normalizedRole, class_name || null, normalizedStudentId || null, gender || null, userId]);
+
+    // Construct notification message
+    if (oldUser) {
+      let changes = [];
+      const newClass = class_name || null;
+      const newStudentId = normalizedStudentId || null;
+      const newGender = gender || null;
+      
+      if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
+      if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
+      if (oldUser.gender !== newGender) changes.push(`Gender: ${newGender || 'None'}`);
+      
+      if (changes.length > 0) {
+        // Notify the updated user (e.g. the student)
+        const updateMsg = `Admin updated your profile: ${changes.join(', ')}.`;
+        const nId = await Notification.create({ user_id: userId, message: updateMsg, is_read: 0 });
+        const [nRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [nId]);
+        
+        if (nRows[0]) {
+          emitNotificationEvent({ action: 'created', notification: nRows[0] });
+        }
+
+        // Output to all teachers if the updated user is a student
+        if (normalizedRole === 'student') {
+           const [teacherRows] = await db.query("SELECT id FROM users WHERE role = 'teacher'");
+           const oldName = `${oldUser.first_name || ''} ${oldUser.last_name || ''}`.trim() || oldUser.email;
+           const newName = name || oldName;
+           const teacherMsg = `Admin updated profile for student ${newName} (${normalizedStudentId}): ${changes.join(', ')}.`;
+           for (const tRow of teacherRows) {
+               const tnId = await Notification.create({ user_id: tRow.id, message: teacherMsg, is_read: 0 });
+               const [tnRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [tnId]);
+               if (tnRows[0]) emitNotificationEvent({ action: 'created', notification: tnRows[0] });
+           }
+        }
+      }
+    }
+
     res.json({ message: "User updated successfully" });
   } catch (err) {
-    console.error(err);
+    console.error("Failed to update user:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -780,11 +925,14 @@ const inviteUser = async (req, res) => {
 };
 
 const commitBulkInviteRows = async (rows) => {
+  console.log('Starting commitBulkInviteRows with', rows.length, 'rows');
+
   if (!rows.length) {
     return {
       message: 'No rows to process.',
-      summary: { totalRows: 0, invitedCount: 0, failedCount: 0, smtpConfigured: false },
+      summary: { totalRows: 0, invitedCount: 0, failedCount: 0, skippedExistingCount: 0, smtpConfigured: false },
       invited: [],
+      existingUsers: [],
       errors: []
     };
   }
@@ -793,6 +941,7 @@ const commitBulkInviteRows = async (rows) => {
   const transportInfo = createEmailTransporter();
   const invited = [];
   const errors = [];
+  const skippedExistingUsers = [];
 
   try {
     await connection.beginTransaction();
@@ -820,23 +969,18 @@ const commitBulkInviteRows = async (rows) => {
         const validated = await sendInviteForUser(payload, { validateOnly: true, queryExecutor: connection });
         normalizedRows.push({ row: rowNumber, payload: validated.validatedRow });
       } catch (err) {
+        if (Number(err?.status) === 409) {
+          const fallbackName = `${(payload.firstName || '').toString().trim()} ${(payload.lastName || '').toString().trim()}`.trim()
+            || toFallbackNameFromEmail(normalizedEmail);
+          skippedExistingUsers.push({
+            row: rowNumber,
+            email: normalizedEmail,
+            name: (err.existingUserName || fallbackName || normalizedEmail).toString().trim()
+          });
+          continue;
+        }
         errors.push({ row: rowNumber, email: normalizedEmail, error: err.message || 'Row validation failed.' });
       }
-    }
-
-    if (errors.length > 0) {
-      await connection.rollback();
-      return {
-        message: `Validation failed: ${errors.length} row(s) have errors. No users were inserted.`,
-        summary: {
-          totalRows: rows.length,
-          invitedCount: 0,
-          failedCount: errors.length,
-          smtpConfigured: transportInfo.isConfigured
-        },
-        invited: [],
-        errors
-      };
     }
 
     for (const row of normalizedRows) {
@@ -852,6 +996,14 @@ const commitBulkInviteRows = async (rows) => {
           emailEnvelope: result.preview
         });
       } catch (err) {
+        if (Number(err?.status) === 409) {
+          skippedExistingUsers.push({
+            row: row.row,
+            email: row.payload.email,
+            name: (err.existingUserName || toFallbackNameFromEmail(row.payload.email || '') || row.payload.email).toString().trim()
+          });
+          continue;
+        }
         errors.push({
           row: row.row,
           email: row.payload.email,
@@ -860,17 +1012,19 @@ const commitBulkInviteRows = async (rows) => {
       }
     }
 
-    if (errors.length > 0) {
+    if (invited.length === 0 && errors.length > 0) {
       await connection.rollback();
       return {
-        message: `Invite preparation failed: ${errors.length} row(s) failed. No users were inserted.`,
+        message: `Bulk invite failed: No valid users to invite. ${errors.length} row(s) had errors.`,
         summary: {
           totalRows: rows.length,
           invitedCount: 0,
           failedCount: errors.length,
+          skippedExistingCount: skippedExistingUsers.length,
           smtpConfigured: transportInfo.isConfigured
         },
         invited: [],
+        existingUsers: skippedExistingUsers,
         errors
       };
     }
@@ -888,14 +1042,16 @@ const commitBulkInviteRows = async (rows) => {
     for (const row of invited) {
       try {
         await transportInfo.transporter.sendMail({
-          from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+          from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
           replyTo: ADMIN_INVITER_EMAIL,
           to: row.emailEnvelope.to,
           subject: row.emailEnvelope.subject,
           text: row.emailEnvelope.text,
-          html: row.emailEnvelope.html
+          html: row.emailEnvelope.html,
+          attachments: row.emailEnvelope.attachments
         });
       } catch (err) {
+        console.error('Failed to send invite email to:', row.email, err);
         emailErrors.push({
           row: row.row,
           email: row.email,
@@ -910,20 +1066,34 @@ const commitBulkInviteRows = async (rows) => {
     delete clean.emailEnvelope;
     return clean;
   });
+  const existingUsers = Array.from(
+    skippedExistingUsers.reduce((map, row) => {
+      const key = (row.email || '').toString().trim().toLowerCase();
+      if (!key || map.has(key)) return map;
+      map.set(key, {
+        row: row.row,
+        email: key,
+        name: (row.name || toFallbackNameFromEmail(key) || key).toString().trim()
+      });
+      return map;
+    }, new Map())
+  ).map((entry) => entry[1]);
 
   return {
     message: emailErrors.length > 0
-      ? `Users inserted (${invitedUsers.length}) but ${emailErrors.length} email(s) failed to send.`
-      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, 0 failed.`,
+      ? `Users inserted (${invitedUsers.length}), skipped ${existingUsers.length + errors.length} user(s), but ${emailErrors.length} email(s) failed to send.`
+      : `Processed ${rows.length} rows: ${invitedUsers.length} invited, ${existingUsers.length + errors.length} skipped or failed.`,
     summary: {
       totalRows: rows.length,
       invitedCount: invitedUsers.length,
-      failedCount: 0,
+      failedCount: errors.length,
+      skippedExistingCount: existingUsers.length,
       smtpConfigured: transportInfo.isConfigured,
       emailFailedCount: emailErrors.length
     },
     invited: invitedUsers,
-    errors: emailErrors
+    existingUsers,
+    errors: [...errors, ...emailErrors]
   };
 };
 
@@ -947,17 +1117,22 @@ const validateUsersBulkInvite = async (req, res) => {
     return res.status(400).json({ error: 'Maximum 500 rows per import.' });
   }
 
-  const { validRows, errors } = await validateBulkInviteRows(rows);
+  const { validRows, errors, existingUsers } = await validateBulkInviteRows(rows);
+  const skippedExistingCount = Array.isArray(existingUsers) ? existingUsers.length : 0;
   return res.status(200).json({
     message: errors.length > 0
       ? `Validation failed: ${errors.length} row(s) have errors.`
-      : `Validation successful for ${validRows.length} rows.`,
+      : skippedExistingCount > 0
+        ? `Validation successful for ${validRows.length} rows. Skipped ${skippedExistingCount} existing user(s).`
+        : `Validation successful for ${validRows.length} rows.`,
     summary: {
       totalRows: rows.length,
       validCount: validRows.length,
-      failedCount: errors.length
+      failedCount: errors.length,
+      skippedExistingCount
     },
     validRows,
+    existingUsers: existingUsers || [],
     errors
   });
 };
@@ -1515,6 +1690,16 @@ const setUserActive = async (req, res) => {
       values.push(is_active ? 0 : 1);
     }
 
+    if (!is_active) {
+      const [userRow] = await db.query("SELECT role FROM users WHERE id = ?", [req.params.id]);
+      if (userRow.length > 0 && userRow[0].role === 'admin') {
+        const [activeAdmins] = await db.query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 AND (is_deleted IS NULL OR is_deleted = 0)");
+        if (activeAdmins.length <= 1) {
+          return res.status(403).json({ error: "Cannot disable the only active administrative account." });
+        }
+      }
+    }
+
     setClauses.push('updated_at = CURRENT_TIMESTAMP()');
     let sql = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
     values.push(req.params.id);
@@ -1595,6 +1780,35 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// Permanent individual delete
+const hardDeleteUser = async (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ error: "Invalid user id." });
+  }
+
+  try {
+    // Prevent hard-deleting the only admin? (Optional safety)
+    const [userRow] = await db.query("SELECT role FROM users WHERE id = ?", [userId]);
+    if (userRow.length > 0 && userRow[0].role === 'admin') {
+      const [admins] = await db.query("SELECT id FROM users WHERE role = 'admin'");
+      if (admins.length <= 1) {
+        return res.status(403).json({ error: "Cannot delete the only administrative account." });
+      }
+    }
+
+    const [result] = await db.query("DELETE FROM users WHERE id = ?", [userId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    return res.json({ message: "User permanently deleted from database." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to permanently delete user." });
+  }
+};
+
 // Delete all users (soft delete/archive)
 const deleteAllUsers = async (req, res) => {
   try {
@@ -1640,6 +1854,28 @@ const deleteAllUsers = async (req, res) => {
   }
 };
 
+// Disable all users
+const disableAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query("UPDATE users SET is_active = 0, is_disable = 1, updated_at = CURRENT_TIMESTAMP() WHERE (is_deleted IS NULL OR is_deleted = 0)");
+    return res.json({ message: `${result.affectedRows} users disabled successfully.`, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to disable users." });
+  }
+};
+
+// Hard delete non-admin users
+const hardDeleteAllUsers = async (req, res) => {
+  try {
+    const [result] = await db.query("DELETE FROM users WHERE role <> 'admin'");
+    return res.json({ message: `${result.affectedRows} non-admin users permanently deleted.`, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to hard-delete users." });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -1650,7 +1886,10 @@ module.exports = {
   updateUserProfileImage,
   changeUserPassword,
   deleteUser,
+  hardDeleteUser,
   deleteAllUsers,
+  hardDeleteAllUsers,
+  disableAllUsers,
   setUserActive,
   loginUser,
   inviteUser,
