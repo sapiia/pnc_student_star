@@ -24,6 +24,8 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminUserManagementPage from './pages/admin/AdminUserManagementPage';
 import AdminSettingsPage from './pages/admin/AdminSettingsPage';
 import AdminClassStudentsPage from './pages/admin/AdminClassStudentsPage';
+import AdminTeacherRecordsPage from './pages/admin/AdminTeacherRecordsPage';
+import AdminRecordsPage from './pages/admin/AdminRecordsPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
 import AdminMessagesPage from './pages/admin/AdminMessagesPage';
 
@@ -60,6 +62,8 @@ export default function App() {
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/users" element={<AdminUserManagementPage />} />
         <Route path="/admin/students/:generation/:className" element={<AdminClassStudentsPage />} />
+        <Route path="/admin/teachers" element={<AdminTeacherRecordsPage />} />
+        <Route path="/admin/admins" element={<AdminRecordsPage />} />
         <Route path="/admin/evaluations" element={<AdminDashboardPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
         <Route path="/admin/messages" element={<AdminMessagesPage />} />

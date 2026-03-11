@@ -24,7 +24,8 @@ const {
   validateUsersBulkInvite,
   commitUsersBulkInvite,
   validateInvite,
-  completeInviteRegistration
+  completeInviteRegistration,
+  updateClassNameForStudents
 } = require('../controllers/userController');
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -127,6 +128,9 @@ router.patch('/active', disableAllUsers);
 
 // PATCH /api/users/:id/active - Enable/disable specific user
 router.patch('/:id/active', setUserActive);
+
+// POST /api/users/update-class-name - Update class name for all students in a class
+router.post('/update-class-name', updateClassNameForStudents);
 
 // DELETE /api/users - Delete (archive) all users
 router.delete('/', deleteAllUsers);

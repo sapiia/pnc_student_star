@@ -19,7 +19,7 @@ import AdminMobileNav from '../../components/common/AdminMobileNav';
 
 import { cn } from '../../lib/utils';
 import RadarChart from '../../components/ui/RadarChart';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
 type UserStatus = 'Active' | 'Inactive' | 'Pending' | 'Deleted';
@@ -120,6 +120,9 @@ type ApiUser = {
   account_status?: string;
   registration_status?: string;
   gender?: string | null;
+  generation?: string | null;
+  className?: string | null;
+  major?: string | null;
 };
 
 const defaultNewUser = {
@@ -196,7 +199,10 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     color: randomColor,
     profileImage: String(apiUser.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
     studentId,
-    gender: apiUser.gender === 'male' || apiUser.gender === 'female' ? apiUser.gender as Gender : undefined
+    gender: apiUser.gender === 'male' || apiUser.gender === 'female' ? apiUser.gender as Gender : undefined,
+    generation: apiUser.generation || undefined,
+    className: apiUser.class || apiUser.className || undefined,
+    major: apiUser.major || undefined
   };
 };
 
@@ -217,6 +223,9 @@ export default function AdminUserManagementPage() {
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
+  const [genderFilter, setGenderFilter] = useState('All Genders');
+  const [generationFilter, setGenerationFilter] = useState('All Generations');
+  const [classFilter, setClassFilter] = useState('All Classes');
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBulkImporting, setIsBulkImporting] = useState(false);
@@ -228,8 +237,23 @@ export default function AdminUserManagementPage() {
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
-  const [classOptions, setClassOptions] = useState<string[]>(DEFAULT_CLASS_OPTIONS);
-  const [customClassDraft, setCustomClassDraft] = useState('');
+  // Extract unique class options from student data based on selected generation
+  const classOptions = useMemo(() => {
+    const students = users.filter(u => u.role === 'Student');
+    const filteredByGen = generationFilter === 'All Generations' 
+      ? students 
+      : students.filter(u => u.generation === generationFilter);
+    // Extract class from group string like "Gen 2026 - WEB DEV - Class WEB B" -> "WEB B"
+    // Use case-insensitive regex to handle inconsistent capitalization
+    const uniqueClasses = Array.from(new Set(
+      filteredByGen.map(u => {
+        if (!u.group) return null;
+        const match = u.group.match(/Class\s+(.+)$/i);
+        return match ? match[1].trim() : null;
+      }).filter(Boolean)
+    ));
+    return uniqueClasses.sort();
+  }, [users, generationFilter]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -276,9 +300,6 @@ export default function AdminUserManagementPage() {
     if (state?.openInvite) {
       setIsModalOpen(true);
       const prefillClass = state.prefillClass || '';
-      if (prefillClass && !classOptions.includes(prefillClass)) {
-        setClassOptions(prev => Array.from(new Set([...prev, prefillClass])));
-      }
       setNewUser(prev => ({
         ...prev,
         className: prefillClass || prev.className,
@@ -287,7 +308,7 @@ export default function AdminUserManagementPage() {
       // Clear state so it doesn't reopen on refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
-  }, [location, navigate]); // Removed classOptions from dependencies to avoid loop, using functional check inside if needed or just relying on state update
+  }, [location, navigate]);
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -296,7 +317,14 @@ export default function AdminUserManagementPage() {
       user.email.toLowerCase().includes(normalizedQuery) ||
       (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
     const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesGender = genderFilter === 'All Genders' || 
+      (genderFilter === 'Male' && user.gender === 'male') ||
+      (genderFilter === 'Female' && user.gender === 'female');
+    const matchesGeneration = generationFilter === 'All Generations' || 
+      (user.role === 'Student' && user.generation === generationFilter);
+    const matchesClass = classFilter === 'All Classes' || 
+      (user.role === 'Student' && user.group?.toLowerCase().includes(`class ${classFilter}`.toLowerCase()));
+    return matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
@@ -308,7 +336,7 @@ export default function AdminUserManagementPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, roleFilter]);
+  }, [searchQuery, roleFilter, genderFilter, generationFilter, classFilter]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -831,14 +859,22 @@ export default function AdminUserManagementPage() {
               />
             </div>
             
-            <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex gap-2 w-full md:w-auto items-center flex-nowrap overflow-x-auto">
               <button className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
                 <Filter className="w-4 h-4" />
                 Filter
               </button>
               <select 
                 value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
+                onChange={(e) => {
+                  const newRole = e.target.value;
+                  setRoleFilter(newRole);
+                  // Reset generation and class filters when not filtering by Students
+                  if (newRole !== 'Students') {
+                    setGenerationFilter('All Generations');
+                    setClassFilter('All Classes');
+                  }
+                }}
                 className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
                 <option>All Roles</option>
@@ -846,6 +882,38 @@ export default function AdminUserManagementPage() {
                 <option>Teachers</option>
                 <option>Admins</option>
               </select>
+              <select 
+                value={genderFilter}
+                onChange={(e) => setGenderFilter(e.target.value)}
+                className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                <option>All Genders</option>
+                <option>Male</option>
+                <option>Female</option>
+              </select>
+              {roleFilter === 'Students' && (
+                <>
+                  <select 
+                    value={generationFilter}
+                    onChange={(e) => setGenerationFilter(e.target.value)}
+                    className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  >
+                    <option>All Generations</option>
+                    <option>2026</option>
+                    <option>2027</option>
+                  </select>
+                  <select 
+                    value={classFilter}
+                    onChange={(e) => setClassFilter(e.target.value)}
+                    className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  >
+                    <option>All Classes</option>
+                    {classOptions.map((cls) => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </div>
 
@@ -1377,25 +1445,7 @@ export default function AdminUserManagementPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2 ml-1">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</label>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextClass = customClassDraft.trim().toUpperCase();
-                                if (!nextClass) return;
-                                if (!classOptions.includes(nextClass)) {
-                                  setClassOptions((prev) => [...prev, nextClass]);
-                                }
-                                setNewUser((prev) => ({ ...prev, className: nextClass }));
-                                setCustomClassDraft('');
-                              }}
-                              className="inline-flex size-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-200 transition-colors hover:bg-emerald-600"
-                              title="Add new class"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Class</label>
                           <select
                             value={newUser.className}
                             onChange={(e) => setNewUser({ ...newUser, className: e.target.value })}
@@ -1406,14 +1456,7 @@ export default function AdminUserManagementPage() {
                               <option key={classOption} value={classOption}>{classOption}</option>
                             ))}
                           </select>
-                          <input
-                            type="text"
-                            value={customClassDraft}
-                            onChange={(e) => setCustomClassDraft(e.target.value)}
-                            placeholder="Add new class manually"
-                            className="w-full px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                          />
-                          <p className="text-[10px] text-slate-400 font-bold ml-1">Default options: WEB A, WEB B.</p>
+                          <p className="text-[10px] text-slate-400 font-bold ml-1">Classes available for selected generation</p>
                         </div>
 
                         <div className="space-y-2 md:col-span-1">
