@@ -44,6 +44,7 @@ export default function BaseSidebar({
   const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
+  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
 
   useEffect(() => {
     if (['/profile', '/help', '/faq'].includes(location.pathname)) {
@@ -54,6 +55,17 @@ export default function BaseSidebar({
   useEffect(() => {
     localStorage.setItem('sidebar_collapsed', String(isCollapsed));
   }, [isCollapsed]);
+
+  useEffect(() => {
+    const handlePhotoUpdate = () => {
+      setPhotoTimestamp(Date.now());
+    };
+
+    window.addEventListener('profile-photo-updated', handlePhotoUpdate);
+    return () => {
+      window.removeEventListener('profile-photo-updated', handlePhotoUpdate);
+    };
+  }, []);
 
 
   const menuButtonClass = "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ease-in-out relative group origin-left";
@@ -139,7 +151,7 @@ export default function BaseSidebar({
       <div className="p-4 border-t border-slate-100">
         <div className={cn("flex flex-col gap-4", isCollapsed ? "items-center" : "")}>
           <div className={cn(profileButtonClass, isCollapsed ? "justify-center p-2" : "")} style={{ transform: `scale(${isCollapsed ? 0.94 : 1})` }} onClick={() => navigate(settingsPath || '/')}>
-            <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm"><img alt={profileName} src={profilePhoto || defaultPhoto} /></div>
+            <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm"><img alt={profileName} src={profilePhoto ? `${profilePhoto}?t=${photoTimestamp}` : defaultPhoto} /></div>
             {!isCollapsed && <div className="flex-1 min-w-0"><p className="text-xs font-black text-slate-900 truncate">{profileName}</p><p className="text-[10px] text-slate-500 font-bold truncate">{profileRole}</p></div>}
             {isCollapsed && <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 bg-slate-900 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">Profile</div>}
           </div>
