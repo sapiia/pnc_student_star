@@ -13,20 +13,14 @@ import {
   BarChart3,
   Plus,
   Minus,
-  CheckCircle2
+  CheckCircle2,
+  Pencil
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ResponsiveContainer, 
-  RadarChart, 
-  PolarGrid, 
-  PolarAngleAxis, 
-  Radar,
-  Tooltip
-} from 'recharts';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
+import RadarChart from '../../components/ui/RadarChart';
 import { cn } from '../../lib/utils';
 import { CRITERIA } from '../../constants';
 
@@ -84,6 +78,9 @@ export default function AdminClassStudentsPage() {
   const [selectedStudentEvaluations, setSelectedStudentEvaluations] = useState<any[]>([]);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
+  const [isEditClassModalOpen, setIsEditClassModalOpen] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [isUpdatingClass, setIsUpdatingClass] = useState(false);
 
   useEffect(() => {
     const loadCriteriaConfig = async () => {
@@ -120,22 +117,58 @@ export default function AdminClassStudentsPage() {
     fetchStudentDetails();
   }, [selectedStudent]);
 
-  // Calculate Radar Data and GPA from real evaluations
-  const radarData = globalCriteria.map(c => {
-    const relevantEvals = selectedStudentEvaluations.filter(e => e.criterion_id === c.id);
-    const avg = relevantEvals.length > 0 
-      ? relevantEvals.reduce((acc, curr) => acc + Number(curr.score), 0) / relevantEvals.length 
-      : 0;
-    
-    return {
-      subject: c.label,
-      score: avg,
-      fullMark: globalRatingScale
-    };
-  });
+  // Calculate historical comparison data and GPA from real evaluations
+  const historicalComparison = useMemo(() => {
+    if (selectedStudentEvaluations.length === 0) {
+      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[], maxValue: globalRatingScale };
+    }
+
+    // Sort evaluations by date (oldest first for comparison)
+    const sortedEvaluations = [...selectedStudentEvaluations].sort((a, b) => {
+      const dateA = new Date(String(a.submitted_at || a.created_at || '')).getTime();
+      const dateB = new Date(String(b.submitted_at || b.created_at || '')).getTime();
+      return dateA - dateB;
+    });
+
+    // Get up to 2 most recent evaluations for comparison
+    const comparedEvaluations = sortedEvaluations.length === 1
+      ? [sortedEvaluations[0]]
+      : sortedEvaluations.slice(-2);
+
+    const maxValue = globalRatingScale;
+
+    const data = globalCriteria.map((criterion, index) => {
+      const row: Record<string, string | number> = {
+        subject: String(criterion.name || `Criterion ${index + 1}`),
+      };
+
+      comparedEvaluations.forEach((evaluation, evaluationIndex) => {
+        const chartKey = comparedEvaluations.length === 1
+          ? 'current'
+          : evaluationIndex === 0
+            ? 'previous'
+            : 'current';
+        const response = (evaluation.responses || []).find(r => 
+          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
+          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+        );
+        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
+      });
+      return row;
+    });
+
+    const dataKeys = comparedEvaluations.map((evaluation, index) => ({
+      key: comparedEvaluations.length === 1 ? 'current' : index === 0 ? 'previous' : 'current',
+      name: index === 0 && comparedEvaluations.length > 1 ? 'Baseline' : (evaluation.period || 'Current'),
+      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
+      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
+    }));
+
+    return { data, dataKeys, maxValue };
+  }, [selectedStudentEvaluations, globalCriteria, globalRatingScale]);
 
   const calculatedGPA = selectedStudentEvaluations.length > 0
-    ? (selectedStudentEvaluations.reduce((acc, curr) => acc + Number(curr.score), 0) / selectedStudentEvaluations.length).toFixed(1)
+    ? (selectedStudentEvaluations.reduce((acc, curr) => acc + Number(curr.average_score || 0), 0) / selectedStudentEvaluations.length).toFixed(1)
     : 'N/A';
 
   useEffect(() => {
@@ -251,6 +284,83 @@ export default function AdminClassStudentsPage() {
     }
   };
 
+  const handleUpdateClassName = async () => {
+    if (!newClassName.trim() || newClassName.trim() === className) {
+      alert('Please enter a different class name.');
+      return;
+    }
+
+    setIsUpdatingClass(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/update-class-name`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oldClassName: className,
+          newClassName: newClassName.trim()
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSuccessMessage(`Class name updated to "${newClassName.trim()}" for ${data.affectedRows} students.`);
+        setToastType('success');
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2500);
+        setIsEditClassModalOpen(false);
+        
+        // Update URL without navigation using History API
+        const newUrl = `/admin/students/${generation}/${encodeURIComponent(newClassName.trim())}`;
+        window.history.replaceState(null, '', newUrl);
+        
+        // Manually trigger a refetch by resetting state
+        setIsLoading(true);
+        setStudents([]);
+        
+        // Fetch students with the new class name
+        try {
+          const fetchResponse = await fetch(`${API_BASE_URL}/users`);
+          const fetchData = await fetchResponse.json();
+          if (Array.isArray(fetchData)) {
+            const filtered = fetchData.filter((u: any) => {
+              if (u.role.toLowerCase() !== 'student') return false;
+              const gen = extractGeneration(u);
+              const cls = u.class || u.major || 'Unknown Class';
+              return gen === generation && cls === newClassName.trim();
+            }).map(u => {
+              const genderLower = String(u.gender || '').toLowerCase();
+              return {
+                id: u.id,
+                name: (u.name || '').trim() || [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Student',
+                email: u.email,
+                status: Number(u.is_deleted) === 1 ? 'Deleted' : (Number(u.is_disable) === 1 ? 'Inactive' : 'Active'),
+                gender: genderLower === 'male' ? 'M' : (genderLower === 'female' ? 'F' : 'N/A'),
+                gpa: 'N/A',
+                attendance: 'N/A',
+                profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                studentIdAt: u.student_id || u.resolved_student_id || 'N/A',
+                scores: new Array(CRITERIA.length).fill(0)
+              };
+            });
+            setStudents(filtered);
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to update class name.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Communication error.');
+    } finally {
+      setIsUpdatingClass(false);
+    }
+  };
+
   const filteredStudents = students.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -290,10 +400,20 @@ export default function AdminClassStudentsPage() {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
+            <div className="flex items-center gap-2">
               <h1 className="text-lg md:text-xl font-black text-slate-900">{generation} - {className}</h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Class Student Performance</p>
+              <button
+                onClick={() => {
+                  setNewClassName(className || '');
+                  setIsEditClassModalOpen(true);
+                }}
+                className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                title="Edit Class Name"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
             </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Class Student Performance</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -523,24 +643,14 @@ export default function AdminClassStudentsPage() {
                         <BarChart3 className="w-3 h-3" />
                       </div>
                     </div>
-                    <div className="h-[240px] w-full bg-slate-50/50 rounded-3xl border border-slate-100 p-2 shadow-inner">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                          <PolarGrid stroke="#e2e8f0" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 8, fontWeight: 600 }} />
-                          <Radar
-                            name="Score"
-                            dataKey="score"
-                            stroke="#5d5fef"
-                            strokeWidth={3}
-                            fill="#5d5fef"
-                            fillOpacity={0.15}
-                          />
-                          <Tooltip 
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold' }}
-                          />
-                        </RadarChart>
-                      </ResponsiveContainer>
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                      {historicalComparison.data.length > 0 ? (
+                        <RadarChart data={historicalComparison.data} dataKeys={historicalComparison.dataKeys} maxValue={historicalComparison.maxValue} />
+                      ) : (
+                        <div className="h-[350px] rounded-xl border border-dashed border-slate-200 flex items-center justify-center text-sm font-bold text-slate-400">
+                          No evaluation history is available yet.
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -618,6 +728,69 @@ export default function AdminClassStudentsPage() {
                     )}
                   >
                     {isActionSubmitting ? 'Processing...' : 'Confirm'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+        {/* Edit Class Name Modal */}
+        <AnimatePresence>
+          {isEditClassModalOpen && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => !isUpdatingClass && setIsEditClassModalOpen(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 14 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 14 }}
+                className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
+              >
+                <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
+                  <Pencil className="w-8 h-8" />
+                </div>
+                
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                  Edit Class Name
+                </h3>
+                
+                <p className="mt-3 text-sm text-slate-600 font-bold leading-relaxed">
+                  Update the class name for all students in this class. This will change the class information for {students.length} student{students.length !== 1 ? 's' : ''}.
+                </p>
+
+                <div className="mt-6">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                    New Class Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newClassName}
+                    onChange={(e) => setNewClassName(e.target.value)}
+                    placeholder="Enter new class name"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
+                    disabled={isUpdatingClass}
+                  />
+                </div>
+
+                <div className="mt-8 flex gap-3">
+                  <button
+                    onClick={() => setIsEditClassModalOpen(false)}
+                    disabled={isUpdatingClass}
+                    className="flex-1 py-3 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleUpdateClassName}
+                    disabled={isUpdatingClass || !newClassName.trim() || newClassName.trim() === className}
+                    className="flex-1 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg bg-primary hover:bg-primary/90 shadow-primary/20 disabled:opacity-60"
+                  >
+                    {isUpdatingClass ? 'Updating...' : 'Save Changes'}
                   </button>
                 </div>
               </motion.div>
