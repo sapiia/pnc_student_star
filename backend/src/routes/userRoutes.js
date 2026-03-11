@@ -24,7 +24,10 @@ const {
   validateUsersBulkInvite,
   commitUsersBulkInvite,
   validateInvite,
-  completeInviteRegistration
+  completeInviteRegistration,
+  getTeacherClasses,
+  getStudentsByClass,
+  getTeacherStudents
 } = require('../controllers/userController');
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -139,5 +142,15 @@ router.delete('/:id/hard', hardDeleteUser);
 
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', deleteUser);
+
+// Teacher-specific routes for reports
+// GET /api/users/teachers/classes/:teacherId - Get teacher's assigned classes
+router.get('/teachers/classes/:teacherId', getTeacherClasses);
+
+// GET /api/users/teachers/classes/:teacherId/students - Get all students for teacher
+router.get('/teachers/students/:teacherId', getTeacherStudents);
+
+// GET /api/users/classes/:class/students - Get students by class
+router.get('/classes/:class/students', getStudentsByClass);
 
 module.exports = router;

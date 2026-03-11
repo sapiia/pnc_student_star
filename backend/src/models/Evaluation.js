@@ -453,6 +453,266 @@ class Evaluation {
     const [result] = await db.query('DELETE FROM evaluations WHERE id = ?', [id]);
     return result.affectedRows > 0;
   }
+
+  // Get evaluation statistics for teacher's students
+  static async getReportStats(teacherId, filters = {}) {
+    const { class: classFilter, gender, period } = filters;
+    
+    try {
+      await this.ensureSchema();
+      
+      let query = `
+        SELECT 
+          u.class,
+          u.gender,
+          e.period,
+          e.average_score,
+          e.criteria_count,
+          e.submitted_at
+        FROM evaluations e
+        INNER JOIN users u ON e.user_id = u.id
+        WHERE u.role = 'student'
+        AND u.is_active = 1
+        AND u.is_deleted = 0
+      `;
+      
+      const params = [];
+      
+      if (classFilter) {
+        query += ' AND u.class = ?';
+        params.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        query += ' AND u.gender = ?';
+        params.push(gender.toLowerCase());
+      }
+      
+      if (period) {
+        query += ' AND e.period = ?';
+        params.push(period);
+      }
+      
+      query += ' ORDER BY e.submitted_at DESC';
+      
+      const [rows] = await db.query(query, params);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get criteria-wise average scores for students
+  static async getCriteriaAverages(filters = {}) {
+    const { class: classFilter, gender } = filters;
+    
+    try {
+      await this.ensureSchema();
+      
+      let query = `
+        SELECT 
+          er.criterion_key,
+          er.criterion_name,
+          er.criterion_icon,
+          AVG(er.star_value) as avg_score,
+          COUNT(DISTINCT e.user_id) as student_count
+        FROM evaluation_responses er
+        INNER JOIN evaluations e ON er.evaluation_id = e.id
+        INNER JOIN users u ON e.user_id = u.id
+        WHERE u.role = 'student'
+        AND u.is_active = 1
+        AND u.is_deleted = 0
+      `;
+      
+      const params = [];
+      
+      if (classFilter) {
+        query += ' AND u.class = ?';
+        params.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        query += ' AND u.gender = ?';
+        params.push(gender.toLowerCase());
+      }
+      
+      query += ' GROUP BY er.criterion_key, er.criterion_name, er.criterion_icon ORDER BY avg_score DESC';
+      
+      const [rows] = await db.query(query, params);
+      return rows.map(row => ({
+        name: row.criterion_name,
+        value: Number(row.avg_score || 0).toFixed(2),
+        key: row.criterion_key,
+        icon: row.criterion_icon,
+        studentCount: row.student_count
+      }));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get trend data (average scores over time periods)
+  static async getTrendData(filters = {}) {
+    const { class: classFilter, gender } = filters;
+    
+    try {
+      await this.ensureSchema();
+      
+      let query = `
+        SELECT 
+          DATE_FORMAT(e.submitted_at, '%Y-%m') as month,
+          e.period,
+          AVG(e.average_score) as avg_score,
+          COUNT(*) as evaluation_count,
+          COUNT(DISTINCT e.user_id) as student_count
+        FROM evaluations e
+        INNER JOIN users u ON e.user_id = u.id
+        WHERE u.role = 'student'
+        AND u.is_active = 1
+        AND u.is_deleted = 0
+      `;
+      
+      const params = [];
+      
+      if (classFilter) {
+        query += ' AND u.class = ?';
+        params.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        query += ' AND u.gender = ?';
+        params.push(gender.toLowerCase());
+      }
+      
+      query += ' GROUP BY DATE_FORMAT(e.submitted_at, "%Y-%m"), e.period ORDER BY month ASC LIMIT 12';
+      
+      const [rows] = await db.query(query, params);
+      return rows.map(row => ({
+        name: row.period || row.month,
+        avg: Number(row.avg_score || 0).toFixed(1),
+        completion: row.evaluation_count,
+        studentCount: row.student_count
+      }));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get engagement status (completion rates)
+  static async getEngagementStats(filters = {}) {
+    const { class: classFilter, gender } = filters;
+    
+    try {
+      await this.ensureSchema();
+      
+      // Get total students
+      let countQuery = `
+        SELECT COUNT(*) as total
+        FROM users
+        WHERE role = 'student'
+        AND is_active = 1
+        AND is_deleted = 0
+      `;
+      const countParams = [];
+      
+      if (classFilter) {
+        countQuery += ' AND class = ?';
+        countParams.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        countQuery += ' AND gender = ?';
+        countParams.push(gender.toLowerCase());
+      }
+      
+      const [totalRows] = await db.query(countQuery, countParams);
+      const totalStudents = totalRows[0]?.total || 0;
+      
+      // Get students with evaluations
+      let evalQuery = `
+        SELECT COUNT(DISTINCT e.user_id) as evaluated
+        FROM evaluations e
+        INNER JOIN users u ON e.user_id = u.id
+        WHERE u.role = 'student'
+        AND u.is_active = 1
+        AND u.is_deleted = 0
+      `;
+      const evalParams = [];
+      
+      if (classFilter) {
+        evalQuery += ' AND u.class = ?';
+        evalParams.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        evalQuery += ' AND u.gender = ?';
+        evalParams.push(gender.toLowerCase());
+      }
+      
+      const [evalRows] = await db.query(evalQuery, evalParams);
+      const evaluatedStudents = evalRows[0]?.evaluated || 0;
+      
+      const completed = totalStudents > 0 ? Math.round((evaluatedStudents / totalStudents) * 100) : 0;
+      const pending = 100 - completed;
+      
+      return [
+        { name: 'Completed', value: completed, fill: '#5d5fef' },
+        { name: 'Pending', value: pending, fill: '#94a3b8' }
+      ];
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get overall stats summary
+  static async getSummaryStats(filters = {}) {
+    const { class: classFilter, gender } = filters;
+    
+    try {
+      await this.ensureSchema();
+      
+      let query = `
+        SELECT 
+          COUNT(DISTINCT u.id) as total_students,
+          AVG(e.average_score) as avg_score,
+          COUNT(e.id) as total_evaluations,
+          COUNT(DISTINCT e.user_id) as evaluated_students
+        FROM users u
+        LEFT JOIN evaluations e ON u.id = e.user_id
+        WHERE u.role = 'student'
+        AND u.is_active = 1
+        AND u.is_deleted = 0
+      `;
+      
+      const params = [];
+      
+      if (classFilter) {
+        query += ' AND u.class = ?';
+        params.push(classFilter);
+      }
+      
+      if (gender && gender !== 'All') {
+        query += ' AND u.gender = ?';
+        params.push(gender.toLowerCase());
+      }
+      
+      const [rows] = await db.query(query, params);
+      const row = rows[0];
+      
+      const totalStudents = row.total_students || 0;
+      const evaluatedStudents = row.evaluated_students || 0;
+      const completionRate = totalStudents > 0 ? Math.round((evaluatedStudents / totalStudents) * 100) : 0;
+      
+      return {
+        totalStudents,
+        avgScore: Number(row.avg_score || 0).toFixed(2),
+        completionRate,
+        totalEvaluations: row.total_evaluations || 0
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = Evaluation;
