@@ -454,6 +454,9 @@ export default function TeacherStudentProfilePage() {
                         <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs uppercase tracking-wider rounded-lg border border-slate-200">
                            {student.class || 'Unassigned Class'}
                         </span>
+                        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 font-bold text-xs uppercase tracking-wider rounded-lg border border-emerald-200">
+                           {student.generation ? `Gen ${student.generation}` : 'Unknown Generation'}
+                        </span>
                         <span className="px-3 py-1 bg-primary/10 text-primary font-bold text-xs uppercase tracking-wider rounded-lg border border-primary/20">
                            {student.gender || 'Unknown Gender'}
                         </span>

@@ -218,6 +218,7 @@ export default function AdminUserManagementPage() {
   const [editStudentId, setEditStudentId] = useState('');
   const [editClassName, setEditClassName] = useState('');
   const [editGender, setEditGender] = useState<Gender | ''>('');
+  const [editGeneration, setEditGeneration] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
@@ -472,6 +473,7 @@ export default function AdminUserManagementPage() {
     setEditStudentId(user.studentId || '');
     setEditClassName(user.group || ''); // Group usually acts as class for students
     setEditGender(user.gender || '');
+    setEditGeneration(user.generation || '');
     setIsProfileModalOpen(true);
     setProfileEvaluations([]);
     
@@ -501,14 +503,15 @@ export default function AdminUserManagementPage() {
           role: selectedProfileUser.role.toLowerCase(),
           class_name: editClassName,
           student_id: editStudentId,
-          gender: editGender || undefined
+          gender: editGender || undefined,
+          generation: editGeneration || undefined
         })
       });
       const data = await res.json();
       if (res.ok) {
         setUsers(prev => prev.map(u => 
           u.id === selectedProfileUser.id 
-            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName, gender: editGender || undefined } 
+            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName, gender: editGender || undefined, generation: editGeneration || undefined } 
             : u
         ));
         setSuccessMessage('Student details updated.');
@@ -1556,6 +1559,10 @@ export default function AdminUserManagementPage() {
                            <div>
                              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Class</label>
                              <input type="text" value={editClassName} onChange={e => setEditClassName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
+                           </div>
+                           <div>
+                             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Generation</label>
+                             <input type="text" value={editGeneration} onChange={e => setEditGeneration(e.target.value)} placeholder="e.g., 2026" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
                            </div>
                            <div>
                              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Gender</label>

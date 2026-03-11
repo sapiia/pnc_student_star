@@ -846,12 +846,13 @@ const createUser = async (req, res) => {
 
 // Update user
 const updateUser = async (req, res) => {
-  const { name, email, role, class_name, student_id, gender } = req.body;
+  const { name, email, role, class_name, student_id, gender, generation } = req.body;
   const userId = req.params.id;
 
   try {
     const normalizedRole = normalizeRole(role);
     const normalizedStudentId = (student_id || '').toString().trim();
+    const normalizedGeneration = (generation || '').toString().trim();
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
     }
@@ -860,15 +861,15 @@ const updateUser = async (req, res) => {
     }
 
     // Get old user data to describe changes
-    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender FROM users WHERE id = ?", [userId]);
+    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender, generation FROM users WHERE id = ?", [userId]);
     const oldUser = oldUserRows[0];
 
     const nameParts = (name || '').trim().split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ');
 
-    const sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, role = ?, class = ?, student_id = ?, gender = ? WHERE id = ?";
-    await db.query(sql, [firstName, lastName, email, normalizedRole, class_name || null, normalizedStudentId || null, gender || null, userId]);
+    const sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, role = ?, class = ?, student_id = ?, gender = ?, generation = ? WHERE id = ?";
+    await db.query(sql, [firstName, lastName, email, normalizedRole, class_name || null, normalizedStudentId || null, gender || null, normalizedGeneration || null, userId]);
 
     // Construct notification message
     if (oldUser) {
@@ -876,10 +877,12 @@ const updateUser = async (req, res) => {
       const newClass = class_name || null;
       const newStudentId = normalizedStudentId || null;
       const newGender = gender || null;
+      const newGeneration = normalizedGeneration || null;
       
       if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
       if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
       if (oldUser.gender !== newGender) changes.push(`Gender: ${newGender || 'None'}`);
+      if (oldUser.generation !== newGeneration) changes.push(`Generation: ${newGeneration || 'None'}`);
       
       if (changes.length > 0) {
         // Notify the updated user (e.g. the student)
