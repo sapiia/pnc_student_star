@@ -13,7 +13,10 @@ const {
   updateUserProfileImage,
   changeUserPassword,
   deleteUser,
+  hardDeleteUser,
   deleteAllUsers,
+  hardDeleteAllUsers,
+  disableAllUsers,
   setUserActive,
   loginUser,
   inviteUser,
@@ -104,11 +107,20 @@ router.patch(
 // PATCH /api/users/:id/password - Change password for user
 router.patch('/:id/password', changeUserPassword);
 
-// PATCH /api/users/:id/active - Enable/disable user
+// PATCH /api/users/active - Disable all users
+router.patch('/active', disableAllUsers);
+
+// PATCH /api/users/:id/active - Enable/disable specific user
 router.patch('/:id/active', setUserActive);
 
-// DELETE /api/users - Delete all users
+// DELETE /api/users - Delete (archive) all users
 router.delete('/', deleteAllUsers);
+
+// DELETE /api/users/hard-delete - Permanently remove non-admin users
+router.delete('/hard-delete', hardDeleteAllUsers);
+
+// DELETE /api/users/:id/hard - Permanently remove user
+router.delete('/:id/hard', hardDeleteUser);
 
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', deleteUser);

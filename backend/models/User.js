@@ -13,6 +13,15 @@ class User {
     }
   }
 
+  static async findAllByRole(role) {
+    try {
+      const [rows] = await db.query("SELECT * FROM users WHERE role = ?", [role]);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Find user by ID
   static async findById(id) {
     try {

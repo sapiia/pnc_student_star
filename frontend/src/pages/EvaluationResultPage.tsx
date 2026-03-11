@@ -1,242 +1,299 @@
-﻿import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Star, 
-  History, 
-  TrendingUp, 
-  Lightbulb, 
-  PartyPopper,
-  Home,
-  Briefcase,
-  Users,
-  Heart,
-  Smile,
-  Brain,
-  CreditCard,
-  Wrench,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  LayoutDashboard,
-  Bell,
-  Settings
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Bell, ClipboardList, MessageSquare } from 'lucide-react';
 import { motion } from 'motion/react';
-import { CRITERIA } from '../constants';
-import StarRating from '../components/StarRating';
-import RadarChart from '../components/RadarChart';
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
+import RadarChart from '../components/ui/RadarChart';
+import StarRating from '../components/ui/StarRating';
+import { cn } from '../lib/utils';
+
+type EvaluationResponse = {
+  id?: number;
+  criterion_key: string;
+  criterion_name: string;
+  criterion_icon?: string | null;
+  star_value: number;
+  reflection?: string | null;
+  tip_snapshot?: string | null;
+};
+
+type EvaluationRecord = {
+  id: number;
+  user_id: number;
+  period: string;
+  rating_scale: number;
+  criteria_count: number;
+  average_score: number;
+  submitted_at?: string;
+  created_at?: string;
+  responses?: EvaluationResponse[];
+};
+
+type LocationState = {
+  scores?: Record<string, number>;
+  reflections?: Record<string, string>;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+const formatDateTime = (value?: string) => {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+};
 
 export default function EvaluationResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { scores, reflections } = location.state || {};
+  const locationState = (location.state || {}) as LocationState;
 
-  // Map scores to radar data format
-  const radarData = CRITERIA.map(c => ({
-    subject: c.label,
-    prev: 70, // Mock previous data
-    curr: scores ? (scores[c.key] || 0) * 20 : 80 // Scale 1-5 to 0-100
-  }));
+  const [studentId, setStudentId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [evaluation, setEvaluation] = useState<EvaluationRecord | null>(null);
 
-  const radarKeys = [
-    { key: 'prev', name: 'Previous Quarter', color: '#94a3b8', fill: '#94a3b8' },
-    { key: 'curr', name: 'Current Quarter', color: '#5d5fef', fill: '#5d5fef' },
-  ];
-
-  const getIcon = (iconName: string, className?: string) => {
-    switch (iconName) {
-      case 'Home': return <Home className={className} />;
-      case 'Briefcase': return <Briefcase className={className} />;
-      case 'Users': return <Users className={className} />;
-      case 'Heart': return <Heart className={className} />;
-      case 'Smile': return <Smile className={className} />;
-      case 'Brain': return <Brain className={className} />;
-      case 'CreditCard': return <CreditCard className={className} />;
-      case 'Wrench': return <Wrench className={className} />;
-      default: return <Star className={className} />;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      if (!raw) return;
+      const authUser = JSON.parse(raw);
+      const resolvedStudentId = Number(authUser?.id);
+      if (Number.isInteger(resolvedStudentId) && resolvedStudentId > 0) {
+        setStudentId(resolvedStudentId);
+      }
+    } catch {
+      setStudentId(null);
     }
-  };
+  }, []);
+
+  const loadLatestEvaluation = useCallback(async () => {
+    if (!studentId) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/evaluations/user/${studentId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) throw new Error((data as any)?.error || 'Failed to load evaluation.');
+      const list = Array.isArray(data) ? (data as EvaluationRecord[]) : [];
+      const sorted = [...list].sort((a, b) => {
+        const left = new Date(String(a.submitted_at || a.created_at || '')).getTime();
+        const right = new Date(String(b.submitted_at || b.created_at || '')).getTime();
+        return (Number.isNaN(right) ? 0 : right) - (Number.isNaN(left) ? 0 : left);
+      });
+      setEvaluation(sorted[0] || null);
+    } catch (loadError) {
+      setEvaluation(null);
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load evaluation.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studentId]);
+
+  const derivedResponses = useMemo<EvaluationResponse[]>(() => {
+    const scores = locationState?.scores || null;
+    const reflections = locationState?.reflections || {};
+    if (!scores) return [];
+    return Object.entries(scores).map(([key, value], index) => ({
+      id: index + 1,
+      criterion_key: key,
+      criterion_name: key,
+      star_value: Math.max(0, Number(value || 0)),
+      reflection: reflections[key] || '',
+    }));
+  }, [locationState?.reflections, locationState?.scores]);
+
+  const responses = useMemo(() => {
+    if (derivedResponses.length > 0) return derivedResponses;
+    return Array.isArray(evaluation?.responses) ? (evaluation!.responses as EvaluationResponse[]) : [];
+  }, [derivedResponses, evaluation]);
+
+  const ratingScale = useMemo(() => {
+    if (evaluation?.rating_scale) return Math.max(1, Number(evaluation.rating_scale));
+    const maxFromState = derivedResponses.reduce((max, r) => Math.max(max, r.star_value), 5);
+    return Math.max(1, maxFromState || 5);
+  }, [derivedResponses, evaluation?.rating_scale]);
+
+  const radarData = useMemo(() => {
+    return responses.map((r) => ({
+      subject: String(r.criterion_name || r.criterion_key || 'Criterion'),
+      score: Number(r.star_value || 0),
+    }));
+  }, [responses]);
+
+  const radarKeys = useMemo(() => [{ key: 'score', name: 'Score', color: '#5d5fef', fill: '#5d5fef' }], []);
+
+  useEffect(() => {
+    if (derivedResponses.length > 0) return;
+    void loadLatestEvaluation();
+  }, [derivedResponses.length, loadLatestEvaluation]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
-      
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">Evaluation Results</h2>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+
+      <main className="flex-1 overflow-y-auto">
+        <StudentMobileNav />
+
+        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-6 lg:px-8 py-3 md:py-0 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
             </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
-              <Settings className="w-5 h-5" />
+            <div>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">Evaluation Results</h1>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {evaluation?.submitted_at ? `Submitted ${formatDateTime(evaluation.submitted_at)}` : 'Latest summary'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/feedback')}
+              className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-primary/20 bg-primary/10 text-primary hover:bg-primary/15"
+            >
+              Teacher Feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="size-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
+              title="Notifications"
+            >
+              <Bell className="w-5 h-5 text-slate-600" />
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-[1200px] mx-auto flex flex-col gap-8">
-            {/* Success Header Section */}
-            <motion.section 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center text-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-emerald-400 to-primary" />
-              <div className="size-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                <PartyPopper className="w-8 h-8" />
-              </div>
-              <h1 className="text-slate-900 text-3xl md:text-4xl font-bold leading-tight mb-2">Evaluation Complete!</h1>
-              <p className="text-slate-600 text-lg max-w-2xl">
-                Great job on finishing your Q4 2024 assessment. You've shown significant progress in multiple areas!
-              </p>
-            </motion.section>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Left Column: Performance Overview */}
-              <div className="lg:col-span-7 flex flex-col gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-slate-900 text-xl font-bold">Performance Overview</h3>
-                    <div className="flex gap-4 text-xs font-semibold uppercase tracking-wider">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-slate-300" />
-                        <span className="text-slate-500">Q3 2024</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-primary" />
-                        <span className="text-primary">Q4 2024</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <RadarChart data={radarData} dataKeys={radarKeys} />
-
-                  <div className="mt-8 flex items-center justify-center gap-8">
-                    <div className="text-center">
-                      <p className="text-slate-500 text-xs font-medium">Global Average</p>
-                      <p className="text-2xl font-bold text-slate-900">4.2 <span className="text-emerald-500 text-sm font-medium">+0.4</span></p>
-                    </div>
-                    <div className="h-10 w-px bg-slate-200" />
-                    <div className="text-center">
-                      <p className="text-slate-500 text-xs font-medium">Rank</p>
-                      <p className="text-2xl font-bold text-slate-900">Top 15%</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Insights & Actions */}
-              <div className="lg:col-span-5 flex flex-col gap-6">
-                {/* Growth Insights Card */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="flex items-center gap-3 mb-4">
-                    <TrendingUp className="w-5 h-5 text-emerald-500" />
-                    <h3 className="text-slate-900 text-lg font-bold">Growth Insights</h3>
-                  </div>
-                  <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-emerald-800">Job & Study</h4>
-                      <span className="bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full">+1.5 Stars</span>
-                    </div>
-                    <p className="text-emerald-700 text-sm leading-relaxed">
-                      Outstanding improvement! Your dedication to academic deadlines and peer collaboration has significantly boosted your score this quarter.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Areas for Focus Card */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1">
-                  <div className="flex items-center gap-3 mb-4">
-                    <Lightbulb className="w-5 h-5 text-amber-500" />
-                    <h3 className="text-slate-900 text-lg font-bold">Areas for Focus</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-slate-700 text-sm">Money & Payment</span>
-                        <span className="text-rose-500 text-xs font-bold">-0.2 Trend</span>
-                      </div>
-                      <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-600 italic">
-                        "Try setting a weekly budget to stabilize your score and avoid last-minute payment stress."
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-slate-700 text-sm">Life Skills</span>
-                        <span className="text-amber-600 text-xs font-bold">Low Score (2.8)</span>
-                      </div>
-                      <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-600 italic">
-                        "Consider attending the upcoming workshop on 'Effective Communication' to boost this pillar."
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 pb-24 md:pb-8">
+          {error ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+              {error}
             </div>
+          ) : null}
 
-            {/* Criteria Breakdown Grid */}
-            <section className="flex flex-col gap-4">
-              <h2 className="text-slate-900 text-2xl font-bold">Criteria Breakdown</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {CRITERIA.map((criterion, idx) => {
-                  const trend = idx % 3 === 0 ? 'up' : idx % 3 === 1 ? 'down' : 'stable';
-                  const value = idx % 3 === 0 ? '0.5' : idx % 3 === 1 ? '0.2' : '0.0';
-                  
-                  return (
-                    <motion.div 
-                      key={criterion.key}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      whileInView={{ opacity: 1, scale: 1 }}
-                      viewport={{ once: true }}
-                      className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col gap-3"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className={`p-2 ${criterion.bgColor} rounded-lg ${criterion.color}`}>
-                          {getIcon(criterion.icon, "w-5 h-5")}
+          {isLoading ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center font-bold text-slate-500">
+              Loading results...
+            </div>
+          ) : responses.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center">
+              <div className="size-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ClipboardList className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">No evaluation data</h3>
+              <p className="text-slate-500 text-sm mt-1">Submit an evaluation to see your results here.</p>
+              <button
+                type="button"
+                onClick={() => navigate('/evaluate')}
+                className="mt-6 rounded-xl bg-primary text-white px-5 py-3 text-xs font-black uppercase tracking-widest hover:bg-primary/90"
+              >
+                Start Evaluation
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <motion.section
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="lg:col-span-7 bg-white rounded-3xl border border-slate-200 p-6"
+                >
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Growth Radar</h2>
+                    <span className="text-xs font-black text-slate-900">
+                      Avg {evaluation?.average_score ? Number(evaluation.average_score).toFixed(2) : '--'}
+                    </span>
+                  </div>
+                  <div className="h-[320px] bg-slate-50 rounded-3xl border border-slate-100 shadow-inner flex items-center justify-center overflow-hidden">
+                    <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
+                  </div>
+                </motion.section>
+
+                <motion.section
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="lg:col-span-5 bg-white rounded-3xl border border-slate-200 p-6"
+                >
+                  <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Highlights</h2>
+                  <div className="mt-5 space-y-4">
+                    {responses
+                      .slice()
+                      .sort((a, b) => Number(b.star_value || 0) - Number(a.star_value || 0))
+                      .slice(0, 3)
+                      .map((r) => (
+                        <div key={r.criterion_key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm font-black text-slate-900">{r.criterion_name}</p>
+                          <div className="mt-2 flex items-center justify-between gap-4">
+                            <StarRating rating={Number(r.star_value || 0)} max={ratingScale} starClassName="size-4" readonly />
+                            <span className="text-xs font-black text-slate-700">{Number(r.star_value || 0)}/{ratingScale}</span>
+                          </div>
                         </div>
-                        <span className={`text-xs font-bold flex items-center gap-1 ${
-                          trend === 'up' ? 'text-emerald-500' : 
-                          trend === 'down' ? 'text-rose-500' : 'text-slate-400'
-                        }`}>
-                          {trend === 'up' && <ArrowUp className="w-3 h-3" />}
-                          {trend === 'down' && <ArrowDown className="w-3 h-3" />}
-                          {trend === 'stable' && <Minus className="w-3 h-3" />}
-                          {value}
-                        </span>
+                      ))}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/feedback')}
+                      className={cn(
+                        'w-full rounded-2xl px-5 py-4 text-left border transition-colors',
+                        'border-primary/20 bg-primary/10 hover:bg-primary/15',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="size-10 rounded-xl bg-white text-primary flex items-center justify-center border border-primary/15">
+                            <MessageSquare className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-primary">View Teacher Feedback</p>
+                            <p className="text-xs font-bold text-primary/80 mt-0.5">See notes from your teacher.</p>
+                          </div>
+                        </div>
+                        <span className="text-primary font-black">{'>'}</span>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800">{criterion.label}</h4>
-                        <StarRating rating={scores ? scores[criterion.key] : (idx % 2 === 0 ? 4 : 5)} className="mt-1" />
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                    </button>
+                  </div>
+                </motion.section>
               </div>
-            </section>
 
-            {/* Navigation Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8 pb-12">
-              <button 
-                onClick={() => navigate('/dashboard')}
-                className="w-full sm:w-auto px-8 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
-              >
-                <LayoutDashboard className="w-5 h-5" />
-                Return to Dashboard
-              </button>
-              <button 
-                onClick={() => navigate('/history')}
-                className="w-full sm:w-auto px-8 py-3 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-              >
-                <History className="w-5 h-5" />
-                View Full History
-              </button>
-            </div>
-          </div>
+              <div className="bg-white rounded-3xl border border-slate-200 p-6">
+                <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">All Criteria</h2>
+                <div className="mt-5 space-y-4">
+                  {responses.map((r) => (
+                    <div key={r.criterion_key} className="rounded-2xl border border-slate-200 p-5">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">{r.criterion_name}</p>
+                          <p className="text-xs font-bold text-slate-500 mt-1">{r.criterion_key}</p>
+                        </div>
+                        <div className="flex items-center justify-between md:justify-end gap-4">
+                          <StarRating rating={Number(r.star_value || 0)} max={ratingScale} starClassName="size-4" readonly />
+                          <span className="text-xs font-black text-slate-700">{Number(r.star_value || 0)}/{ratingScale}</span>
+                        </div>
+                      </div>
+                      {String(r.reflection || '').trim() ? (
+                        <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Reflection</p>
+                          <p className="mt-2 text-sm text-slate-700 whitespace-pre-wrap font-medium">{r.reflection}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </main>
     </div>

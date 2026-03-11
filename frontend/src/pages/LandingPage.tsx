@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, FormEvent } from 'react';
-import BrandLogo, { PNLogoMark } from '../components/BrandLogo';
+import BrandLogo, { PNLogoMark } from '../components/ui/BrandLogo';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -22,6 +22,11 @@ export default function LandingPage() {
   const [loginError, setLoginError] = useState('');
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+  // Smooth animation presets for consistent, fluid transitions
+  const smoothTransition = { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
+  const quickTransition = { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const };
+  const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
 
   const handleSupportSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -104,9 +109,9 @@ export default function LandingPage() {
 
           {/* Left Content: Hero Message */}
           <motion.div 
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={smoothTransition}
             className="max-w-xl"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider mb-6">
@@ -128,7 +133,7 @@ export default function LandingPage() {
                   <div 
                     key={i}
                     className="w-10 h-10 rounded-full border-2 border-white bg-slate-200 bg-cover"
-                    style={{ backgroundImage: `url(https://picsum.photos/seed/${i + 10}/100/100)` }}
+                    style={{ backgroundImage: `url(http://localhost:3001/uploads/logo/star_gmail_logo.jpg)` }}
                   />
                 ))}
               </div>
@@ -138,9 +143,9 @@ export default function LandingPage() {
 
           {/* Right Content: Login Card */}
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            transition={{ ...smoothTransition, delay: 0.15 }}
             className="relative flex justify-center lg:justify-end"
           >
             <div className="w-full max-w-[440px] bg-white p-8 lg:p-10 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100 backdrop-blur-xl">
@@ -196,8 +201,8 @@ export default function LandingPage() {
             </div>
             {/* Floating visual elements for the card */}
             <motion.div 
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
               className="absolute -top-6 -right-6 w-16 h-16 bg-white rounded-lg shadow-lg flex items-center justify-center"
             >
               <PNLogoMark className="size-10" />

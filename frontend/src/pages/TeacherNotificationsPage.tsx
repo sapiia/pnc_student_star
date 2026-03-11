@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, ChevronRight, Clock, Home, MessageSquare, ShieldCheck, Trash2 } from 'lucide-react';
+import { 
+  Bell, 
+  MessageSquare, 
+  User, 
+  ShieldCheck, 
+  ChevronRight, 
+  Search,
+  CheckCircle2,
+  Clock,
+  Trash2,
+  CheckCheck
+} from 'lucide-react';
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import TeacherSidebar from '../components/TeacherSidebar';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 type NotificationType = 'message' | 'system' | 'alert';
@@ -281,7 +292,7 @@ export default function TeacherNotificationsPage() {
         <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary inline-flex items-center gap-2">
-              <Home className="w-4 h-4" />
+              <User className="w-4 h-4" />
               Home
             </button>
             <ChevronRight className="w-4 h-4" />
@@ -515,3 +526,4 @@ export default function TeacherNotificationsPage() {
     </div>
   );
 }
+

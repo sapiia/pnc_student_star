@@ -26,7 +26,7 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Administrator');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/admin/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const { unreadMessageCount } = useAdminUnreadNotifications();
 
   const menuItems = [
@@ -292,3 +292,4 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
     </motion.aside>
   );
 }
+

@@ -167,7 +167,7 @@ const createFeedback = async (req, res) => {
     }
 
     const teacherName = String(createdFeedback?.teacher_name || '').trim() || `Teacher #${teacherId}`;
-    const teacherProfile = String(createdFeedback?.teacher_profile_image || '').trim() || null;
+    const teacherProfile = String(createdFeedback?.teacher_profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
     const feedbackNotificationText = `${teacherName} just sent feedback.`;
     const notificationPayload = {
       teacherId,

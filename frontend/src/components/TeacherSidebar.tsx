@@ -27,7 +27,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Teacher');
-  const [profilePhoto, setProfilePhoto] = useState('https://picsum.photos/seed/sarah/100/100');
+  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
@@ -377,3 +377,4 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
     </motion.aside>
   );
 }
+

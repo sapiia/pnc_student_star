@@ -15,6 +15,7 @@ import {
 import Sidebar from '../components/Sidebar';
 import { motion } from 'motion/react';
 import { useState } from 'react';
+
 import { cn } from '../lib/utils';
 
 const MEETINGS = [
@@ -231,3 +232,4 @@ export default function MeetingPage() {
     </div>
   );
 }
+

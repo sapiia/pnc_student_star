@@ -1,244 +1,354 @@
-﻿import { useNavigate } from 'react-router-dom';
-import { 
-  Star, 
-  Search, 
-  Bell, 
-  Settings, 
-  Printer, 
-  Share2, 
-  Zap, 
-  Users, 
-  HelpCircle,
-  CheckCircle2
-} from 'lucide-react';
-import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, ChevronRight, Clock, MessageSquare, Search } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import Sidebar from '../components/layout/sidebar/Sidebar';
+import StudentMobileNav from '../components/StudentMobileNav';
 import { cn } from '../lib/utils';
-import Sidebar from '../components/Sidebar';
 
-const FEEDBACK_LIST = [
-  {
-    id: '1',
-    teacher: 'Ms. Sarah Evans',
-    subject: 'Mathematics',
-    avatar: 'https://picsum.photos/seed/sarah/100/100',
-    time: '10:45 AM',
-    preview: 'Great work on the calculus problem set! Your approach to the derivative equations was...',
-    unread: true
-  },
-  {
-    id: '2',
-    teacher: 'Mr. James Wilson',
-    subject: 'World History',
-    avatar: 'https://picsum.photos/seed/james/100/100',
-    time: 'YESTERDAY',
-    preview: 'I noticed a significant improvement in your essay structure. Keep focusing on secondar...',
-    unread: true
-  },
-  {
-    id: '3',
-    teacher: 'Dr. Elena Rodriguez',
-    subject: 'Biology Lab',
-    avatar: 'https://picsum.photos/seed/elena/100/100',
-    time: '2 DAYS AGO',
-    preview: 'Your lab notes for the photosynthesis experiment were exceptionally detailed. On...',
-    unread: true
-  },
-  {
-    id: '4',
-    teacher: 'Mr. David Chen',
-    subject: 'Physics',
-    avatar: 'https://picsum.photos/seed/david/100/100',
-    time: 'OCT 12',
-    preview: 'The project submission was on time and covered all criteria. Well done on the extra...',
-    unread: false
+type FeedbackRecord = {
+  id: number;
+  teacher_id: number;
+  student_id: number;
+  evaluation_id?: number | null;
+  evaluation_period?: string | null;
+  comment: string;
+  created_at?: string | null;
+  teacher_name?: string | null;
+  teacher_profile_image?: string | null;
+};
+
+type TeacherThread = {
+  teacherId: number;
+  teacherName: string;
+  avatar: string;
+  latestAt: string;
+  latestText: string;
+  count: number;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+
+const formatDateTime = (value?: string | null) => {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const resolveAvatarUrl = (value: string | null | undefined, fallback: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:') || raw.startsWith('blob:')) {
+    return raw;
   }
-];
+  const normalizedPath = raw.startsWith('/') ? raw : `/${raw}`;
+  return `${API_ORIGIN}${normalizedPath}`;
+};
 
 export default function FeedbackPage() {
   const navigate = useNavigate();
-  const [selectedId, setSelectedId] = useState('1');
-  const [feedbackList, setFeedbackList] = useState(FEEDBACK_LIST);
+  const [studentId, setStudentId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [canViewTeacherFeedback, setCanViewTeacherFeedback] = useState(true);
+  const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
-  const handleMarkAllRead = () => {
-    setFeedbackList(prev => prev.map(item => ({ ...item, unread: false })));
-  };
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      if (!raw) return;
+      const authUser = JSON.parse(raw);
+      const resolvedStudentId = Number(authUser?.id);
+      if (Number.isInteger(resolvedStudentId) && resolvedStudentId > 0) {
+        setStudentId(resolvedStudentId);
+      }
+    } catch {
+      setStudentId(null);
+    }
+  }, []);
 
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
-    setFeedbackList(prev => prev.map(item => 
-      item.id === id ? { ...item, unread: false } : item
-    ));
-  };
+  const loadPermissions = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) return;
+      const normalized = String((data as any)?.value ?? 'true').trim().toLowerCase();
+      setCanViewTeacherFeedback(normalized !== 'false' && normalized !== '0');
+    } catch {
+      setCanViewTeacherFeedback(true);
+    }
+  }, []);
 
-  const unreadCount = feedbackList.filter(f => f.unread).length;
-  const currentFeedback = feedbackList.find(f => f.id === selectedId);
+  const loadFeedbacks = useCallback(async () => {
+    if (!studentId) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/feedbacks/student/${studentId}`);
+      const data = await response.json().catch(() => []);
+      if (!response.ok) {
+        throw new Error((data as any)?.error || 'Failed to load feedback.');
+      }
+      setFeedbacks(Array.isArray(data) ? (data as FeedbackRecord[]) : []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load feedback.');
+      setFeedbacks([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    void loadPermissions();
+  }, [loadPermissions]);
+
+  useEffect(() => {
+    void loadFeedbacks();
+  }, [loadFeedbacks]);
+
+  const threads = useMemo<TeacherThread[]>(() => {
+    const fallbackAvatar = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+    const byTeacher = new Map<number, FeedbackRecord[]>();
+    for (const feedback of feedbacks) {
+      const teacherId = Number(feedback.teacher_id);
+      if (!Number.isInteger(teacherId) || teacherId <= 0) continue;
+      if (!byTeacher.has(teacherId)) byTeacher.set(teacherId, []);
+      byTeacher.get(teacherId)!.push(feedback);
+    }
+
+    const list: TeacherThread[] = [];
+    for (const [teacherId, entries] of byTeacher.entries()) {
+      const sorted = [...entries].sort((a, b) => {
+        const left = new Date(String(a.created_at || '')).getTime();
+        const right = new Date(String(b.created_at || '')).getTime();
+        return (Number.isNaN(right) ? 0 : right) - (Number.isNaN(left) ? 0 : left);
+      });
+      const latest = sorted[0];
+      const teacherName = String(latest?.teacher_name || '').trim() || `Teacher #${teacherId}`;
+      const avatar = resolveAvatarUrl(latest?.teacher_profile_image, fallbackAvatar);
+      list.push({
+        teacherId,
+        teacherName,
+        avatar,
+        latestAt: String(latest?.created_at || ''),
+        latestText: String(latest?.comment || '').trim(),
+        count: sorted.length,
+      });
+    }
+
+    return list.sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime());
+  }, [feedbacks]);
+
+  const filteredThreads = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return threads;
+    return threads.filter((thread) => thread.teacherName.toLowerCase().includes(query));
+  }, [searchQuery, threads]);
+
+  const selectedThread = useMemo(() => {
+    if (!selectedTeacherId) return null;
+    return threads.find((t) => t.teacherId === selectedTeacherId) || null;
+  }, [selectedTeacherId, threads]);
+
+  const selectedMessages = useMemo(() => {
+    if (!selectedTeacherId) return [];
+    return feedbacks
+      .filter((f) => Number(f.teacher_id) === selectedTeacherId)
+      .sort((a, b) => new Date(String(a.created_at || '')).getTime() - new Date(String(b.created_at || '')).getTime());
+  }, [feedbacks, selectedTeacherId]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
-      {/* Sidebar Navigation */}
       <Sidebar />
 
-      {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <StudentMobileNav />
+
+        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between shrink-0 gap-4">
           <div className="flex-1 max-w-xl relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search feedback by teacher or subject..." 
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+            <input
+              type="text"
+              placeholder="Search teacher..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none"
             />
           </div>
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
+              title="Notifications"
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
-            </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
-              <Settings className="w-5 h-5" />
             </button>
           </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Feedback List Sidebar */}
-          <div className="w-96 border-r border-slate-200 bg-white flex flex-col shrink-0">
-            <div className="p-6 flex items-center justify-between border-b border-slate-50">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Feedback</h2>
-                <p className="text-xs text-slate-500 mt-1">{unreadCount} unread messages</p>
-              </div>
-              <button 
-                onClick={handleMarkAllRead}
-                className="text-xs font-bold text-primary hover:underline"
-              >
-                Mark all read
-              </button>
+        <div className="flex-1 flex overflow-hidden relative">
+          <aside
+            className={cn(
+              'w-full md:w-96 border-r border-slate-200 bg-white flex flex-col shrink-0 transition-all duration-300 md:translate-x-0 pb-24 md:pb-0',
+              isMobileChatOpen ? '-translate-x-full md:translate-x-0 hidden md:flex' : 'translate-x-0',
+            )}
+          >
+            <div className="p-6 border-b border-slate-50">
+              <h2 className="text-xl font-bold text-slate-900">Teacher Feedback</h2>
+              <p className="text-xs text-slate-500 mt-1">{filteredThreads.length} teacher{filteredThreads.length === 1 ? '' : 's'}</p>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {feedbackList.map((item) => (
-                <button 
-                  key={item.id}
-                  onClick={() => handleSelect(item.id)}
-                  className={cn(
-                    "w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative",
-                    selectedId === item.id && "bg-slate-50"
-                  )}
-                >
-                  {selectedId === item.id && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                  )}
-                  <div className="size-12 rounded-full overflow-hidden shrink-0">
-                    <img src={item.avatar} alt={item.teacher} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="text-sm font-bold text-slate-900 truncate">{item.teacher}</p>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">{item.time}</span>
-                    </div>
-                    <p className="text-xs font-bold text-primary mb-1">{item.subject}</p>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{item.preview}</p>
-                  </div>
-                  {item.unread && (
-                    <div className="size-2 bg-primary rounded-full mt-1 shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Feedback Detail View */}
-          <div className="flex-1 overflow-y-auto bg-white">
-            {currentFeedback ? (
-              <div className="max-w-4xl mx-auto p-10">
-                {/* Teacher Profile Header */}
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-6">
-                    <div className="size-20 rounded-2xl overflow-hidden shadow-lg">
-                      <img src={currentFeedback.avatar} alt={currentFeedback.teacher} />
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="p-6 text-sm font-medium text-slate-500">Loading feedback...</div>
+              ) : !canViewTeacherFeedback ? (
+                <div className="p-6 text-sm font-medium text-slate-500">Teacher feedback is currently hidden by admin settings.</div>
+              ) : error ? (
+                <div className="p-6 text-sm font-medium text-rose-600">{error}</div>
+              ) : filteredThreads.length === 0 ? (
+                <div className="p-6 text-sm font-medium text-slate-500">No teacher feedback yet.</div>
+              ) : (
+                filteredThreads.map((thread) => {
+                  const isActive = thread.teacherId === selectedTeacherId;
+                  return (
+                    <button
+                      key={thread.teacherId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTeacherId(thread.teacherId);
+                        setIsMobileChatOpen(true);
+                      }}
+                      className={cn(
+                        'w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative',
+                        isActive && 'bg-slate-50',
+                      )}
+                    >
+                      {isActive ? <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" /> : null}
+                      <div className="size-12 rounded-full overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
+                        <img src={thread.avatar} alt={thread.teacherName} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start mb-1 gap-2">
+                          <p className="text-sm font-bold text-slate-900 truncate">{thread.teacherName}</p>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                            {formatDateTime(thread.latestAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 truncate">{thread.latestText}</p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {thread.count} message{thread.count === 1 ? '' : 's'}
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-400 transition-colors" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+
+          <section
+            className={cn(
+              'flex-1 flex flex-col bg-white md:bg-transparent overflow-hidden transition-all duration-300',
+              isMobileChatOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 hidden md:flex',
+            )}
+          >
+            <div className="bg-white border-b border-slate-200 p-4 md:p-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileChatOpen(false)}
+                  className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-xl"
+                  title="Back"
+                >
+                  <ChevronRight className="w-5 h-5 rotate-180" />
+                </button>
+                {selectedThread ? (
+                  <>
+                    <div className="size-10 rounded-full overflow-hidden bg-slate-100 border border-slate-200">
+                      <img src={selectedThread.avatar} alt={selectedThread.teacherName} className="w-full h-full object-cover" />
                     </div>
                     <div>
-                      <h2 className="text-3xl font-black text-slate-900 tracking-tight">{currentFeedback.teacher}</h2>
-                      <p className="text-primary font-bold">{currentFeedback.subject} Department</p>
-                      <div className="flex items-center gap-2 text-slate-400 text-xs mt-2">
-                        <Star className="w-3 h-3" />
-                        <span>{currentFeedback.time === '10:45 AM' ? 'Today' : currentFeedback.time} at 10:45 AM</span>
-                      </div>
+                      <h3 className="text-sm font-bold text-slate-900">{selectedThread.teacherName}</h3>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">Feedback thread</p>
                     </div>
+                  </>
+                ) : (
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Select a teacher</h3>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">View feedback details</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button className="p-3 text-slate-400 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all">
-                      <Printer className="w-5 h-5" />
-                    </button>
-                    <button className="p-3 text-slate-400 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all">
-                      <Share2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Badges */}
-                <div className="flex flex-wrap gap-3 mb-10">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold border border-emerald-100">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Excellence in {currentFeedback.subject}
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold border border-indigo-100">
-                    <Zap className="w-4 h-4" />
-                    Fast Learner
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-xs font-bold border border-orange-100">
-                    <Users className="w-4 h-4" />
-                    Great Collaboration
-                  </div>
-                </div>
-
-                {/* Feedback Content */}
-                <div className="space-y-6 text-slate-700 leading-relaxed">
-                  <h3 className="text-xl font-bold text-slate-900">Feedback on Recent Performance</h3>
-                  <p>
-                    Dear Alex, I wanted to personally reach out and commend you on your recent progress in {currentFeedback.subject}. Your performance has been exceptional.
-                  </p>
-                  <p>
-                    {currentFeedback.preview}... I was particularly impressed with how you handled the recent challenges in the curriculum. You demonstrated a high level of critical thinking and dedication.
-                  </p>
-
-                  <div className="p-6 bg-primary/5 border-l-4 border-primary rounded-r-xl italic text-slate-600">
-                    "Your dedication to participating in the after-school study groups has clearly paid off. Keep this momentum going into the next unit."
-                  </div>
-
-                  <p>
-                    For next steps, I'd suggest continuing your current study habits. If you have any questions, feel free to drop by during my office hours.
-                  </p>
-
-                  <div className="pt-6">
-                    <p className="font-bold text-slate-900">Best regards,</p>
-                    <p>{currentFeedback.teacher}</p>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-4 mt-12 pt-10 border-t border-slate-100">
-                  <button className="flex-1 bg-primary text-white font-bold py-4 rounded-2xl shadow-lg shadow-primary/25 hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                    <HelpCircle className="w-5 h-5" />
-                    Ask a Question
-                  </button>
-                  <button className="flex-1 bg-white border border-slate-200 text-slate-700 font-bold py-4 rounded-2xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-5 h-5" />
-                    Acknowledge Feedback
-                  </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <Users className="w-16 h-16 mb-4 opacity-20" />
-                <p>Select a feedback message to view details</p>
-              </div>
-            )}
-          </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50">
+              {selectedThread ? (
+                <AnimatePresence initial={false}>
+                  {selectedMessages.length > 0 ? (
+                    <div className="space-y-4">
+                      {selectedMessages.map((message) => (
+                        <motion.div
+                          key={message.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="bg-white border border-slate-200 rounded-2xl p-4 md:p-6 shadow-sm"
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
+                              <Clock className="w-4 h-4" />
+                              <span>{formatDateTime(message.created_at)}</span>
+                            </div>
+                            {message.evaluation_period ? (
+                              <span className="text-[10px] font-black uppercase tracking-widest text-primary bg-primary/10 px-2 py-1 rounded-full">
+                                {message.evaluation_period}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                            {message.comment}
+                          </p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-10 text-center">
+                      <div className="size-16 bg-slate-100 text-slate-300 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <MessageSquare className="w-8 h-8" />
+                      </div>
+                      <h3 className="text-lg font-black text-slate-900">No messages yet</h3>
+                      <p className="text-slate-500 font-bold text-sm mt-2">Your teacher feedback will appear here.</p>
+                    </div>
+                  )}
+                </AnimatePresence>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                  <div className="size-20 bg-slate-100 text-slate-300 rounded-3xl flex items-center justify-center mb-6">
+                    <MessageSquare className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900">Select a teacher</h3>
+                  <p className="text-slate-500 font-bold max-w-xs mx-auto mt-2">Choose a teacher to view feedback.</p>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       </main>
     </div>
   );
 }
+

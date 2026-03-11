@@ -1,14 +1,16 @@
-﻿import { useNavigate } from 'react-router-dom';
+﻿import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Bell, 
   ChevronDown, 
   BellRing, 
   ChevronRight
 } from 'lucide-react';
-import TeacherSidebar from '../components/TeacherSidebar';
+
+import TeacherSidebar from '../components/layout/sidebar/TeacherSidebar';
+import TeacherMobileNav from '../components/TeacherMobileNav';
+
 import { motion, AnimatePresence } from 'motion/react';
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { useTeacherUnreadNotifications } from '../lib/useTeacherUnreadNotifications';
 
 type AuthUser = {
   id: number;
@@ -34,7 +36,6 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001
 
 export default function TeacherProfilePage() {
   const navigate = useNavigate();
-  const unreadNotificationCount = useTeacherUnreadNotifications();
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('Settings saved successfully!');
   const [errorMessage, setErrorMessage] = useState('');
@@ -49,9 +50,11 @@ export default function TeacherProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'https://picsum.photos/seed/student/200/200'
+    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const unreadNotificationCount = 0;
 
   const redirectByRole = (role: string) => {
     const normalizedRole = String(role || '').trim().toLowerCase();
@@ -280,6 +283,7 @@ export default function TeacherProfilePage() {
       <TeacherSidebar />
       
       <main className="flex-1 flex flex-col overflow-hidden relative">
+        <TeacherMobileNav />
         {/* Success Toast */}
         <AnimatePresence>
           {showSuccess && (
@@ -296,18 +300,14 @@ export default function TeacherProfilePage() {
         </AnimatePresence>
 
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <nav className="flex items-center gap-2 text-sm text-slate-500">
-            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary">Dashboard</button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-semibold text-slate-900">Settings</span>
+        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+          <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500 overflow-hidden">
+            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary transition-colors shrink-0">Dashboard</button>
+            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
+            <span className="font-semibold text-slate-900 truncate">Settings</span>
           </nav>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/teacher/notifications')}
-              title="Notifications"
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative"
-            >
+          <div className="flex items-center gap-2 md:gap-4 ml-2">
+            <button className="hidden sm:block p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0">
               <Bell className="w-5 h-5" />
               {unreadNotificationCount > 0 ? (
                 <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
@@ -316,18 +316,18 @@ export default function TeacherProfilePage() {
             <button 
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-primary text-white px-6 py-2 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70"
+              className="bg-primary text-white px-4 md:px-6 py-1.5 md:py-2 rounded-xl font-bold text-[10px] md:text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70 shrink-0"
             >
-              {isSaving ? 'Saving...' : 'Save Changes'}
+              {isSaving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-4xl mx-auto space-y-8 pb-20">
-            <header>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
-              <p className="text-slate-500 mt-2">Update your profile, security credentials, and stay notified.</p>
+            <header className="mb-6 md:mb-8">
+              <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
+              <p className="text-xs md:text-base text-slate-500 mt-1 md:mt-2">Update profile and stay secure.</p>
             </header>
 
             {errorMessage && (
@@ -342,16 +342,16 @@ export default function TeacherProfilePage() {
               animate={{ opacity: 1, y: 0 }}
               className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="font-bold text-slate-900">Personal Information</h2>
+              <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between">
+                <h2 className="font-bold text-slate-900 text-sm md:text-base">Personal Information</h2>
                 <span className="px-3 py-1 bg-primary/5 text-primary text-[10px] font-black uppercase tracking-widest rounded-lg border border-primary/10">
-                  Active Teacher
+                  Active
                 </span>
               </div>
-                <div className="p-8 flex flex-col md:flex-row gap-12">
+                <div className="p-4 md:p-8 flex flex-col lg:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
-                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Teacher'} />
+                      <img src={profileForm.photoUrl} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}
@@ -414,27 +414,27 @@ export default function TeacherProfilePage() {
               transition={{ delay: 0.1 }}
               className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden"
             >
-              <div className="p-6 border-b border-slate-100">
-                <h2 className="font-bold text-slate-900">Account Security</h2>
-                <p className="text-xs text-slate-500 mt-1">Ensure your account is using a long, random password to stay secure.</p>
+              <div className="p-4 md:p-6 border-b border-slate-100">
+                <h2 className="font-bold text-slate-900 text-sm md:text-base">Account Security</h2>
+                <p className="text-[10px] md:text-xs text-slate-500 mt-1">Keep your account secure.</p>
               </div>
-              <div className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-4 md:p-8 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Password</label>
-                    <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+                    <label className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Current Password</label>
+                    <input type="password" value={profileForm.currentPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, currentPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">New Password</label>
-                    <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+                    <label className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">New Password</label>
+                    <input type="password" value={profileForm.newPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, newPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Confirm New Password</label>
-                    <input type="password" value={profileForm.confirmPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" />
+                    <label className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-wider">Confirm Password</label>
+                    <input type="password" value={profileForm.confirmPassword} onChange={(e) => setProfileForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} placeholder="••••••••" className="w-full px-4 py-2.5 md:py-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" />
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <button type="button" className="text-sm font-bold text-primary hover:underline">Forgot Password?</button>
+                  <button type="button" className="text-xs md:text-sm font-bold text-primary hover:underline">Forgot Password?</button>
                 </div>
               </div>
             </motion.section>
@@ -469,3 +469,4 @@ export default function TeacherProfilePage() {
     </div>
   );
 }
+

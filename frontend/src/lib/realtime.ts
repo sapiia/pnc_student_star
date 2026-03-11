@@ -14,6 +14,13 @@ export type FeedbackRealtimePayload = {
 
 export type NotificationRealtimePayload = {
   action?: string;
+  notification?: {
+    id?: number | null;
+    user_id?: number | null;
+    message?: string | null;
+    is_read?: number | null;
+    created_at?: string | null;
+  } | null;
   notificationId?: number | null;
   userId?: number | null;
 };
