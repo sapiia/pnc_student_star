@@ -389,7 +389,7 @@ export default function TeacherAttentionStudentsPage() {
                                 Profile
                             </button>
                             <button 
-                                onClick={() => navigate('/teacher/messages', { state: { selectedContactId: student.id } })}
+                                onClick={() => navigate('/teacher/messages', { state: { selectedContactId: student.id, isMobileChatOpen: true } })}
                                 className="flex-1 py-2.5 bg-rose-600 border-2 border-rose-600 hover:bg-rose-700 hover:border-rose-700 text-white flex justify-center items-center gap-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-600/20"
                             >
                                 <MessageSquare className="w-4 h-4" /> Message

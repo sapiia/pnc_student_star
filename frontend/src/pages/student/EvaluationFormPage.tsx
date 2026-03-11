@@ -189,7 +189,16 @@ export default function EvaluationFormPage() {
   };
 
   const handleStart = () => {
-    setCurrentStep(0);
+    // Disable button immediately to prevent double-clicks
+    const button = document.activeElement as HTMLButtonElement;
+    if (button) button.disabled = true;
+    
+    // Use requestAnimationFrame for smoother state update
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setCurrentStep(0);
+      });
+    });
   };
 
   const handleFinish = () => {
@@ -285,18 +294,22 @@ export default function EvaluationFormPage() {
         <>
         {/* Progress Stepper */}
         <div className="mb-6 md:mb-10 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-          <div className="flex items-center justify-between min-w-[500px] md:min-w-full">
+          <div className="flex items-center justify-between min-w-[500px] md:min-w-full" style={{ willChange: 'transform' }}>
             {criteria.map((c, idx) => {
               const isActive = idx === currentStep;
               const isCompleted = idx < currentStep;
               return (
                 <div key={c.key} className="flex flex-col items-center gap-1.5 md:gap-2 flex-1 relative">
-                  <div className={`size-8 md:size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all text-xs md:text-sm ${
-                    isActive ? 'bg-primary text-white shadow-lg shadow-primary/30' : 
-                    isCompleted ? 'bg-primary text-white' : 'bg-slate-200 text-slate-400'
-                  }`}>
+                  <motion.div 
+                    className={`size-8 md:size-10 rounded-full flex items-center justify-center font-bold z-10 transition-all text-xs md:text-sm ${
+                      isActive ? 'bg-primary text-white shadow-lg shadow-primary/30' : 
+                      isCompleted ? 'bg-primary text-white' : 'bg-slate-200 text-slate-400'
+                    }`}
+                    animate={{ scale: isActive ? 1.05 : 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
                     {isCompleted ? <Check className="w-4 h-4 md:w-5 md:h-5" /> : idx + 1}
-                  </div>
+                  </motion.div>
                   <span className={`text-[8px] md:text-[10px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-primary' : 'text-slate-400'}`}>
                     {c.label}
                   </span>
@@ -329,7 +342,9 @@ export default function EvaluationFormPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="bg-white border border-primary/10 rounded-3xl shadow-xl overflow-hidden"
+              style={{ willChange: 'transform, opacity' }}
             >
               <div className="p-12 text-center space-y-8">
                 <div className="size-24 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto">
@@ -384,7 +399,9 @@ export default function EvaluationFormPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               className="bg-white border border-primary/10 rounded-3xl shadow-xl overflow-hidden"
+              style={{ willChange: 'transform, opacity' }}
             >
               {/* Form Header */}
               <div className="px-6 py-8 md:p-10 border-b border-primary/5 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start text-center md:text-left">

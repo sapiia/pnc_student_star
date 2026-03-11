@@ -35,7 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 const INITIAL_CRITERIA = [
   { id: 'CRIT-001', icon: 'ð ', name: 'Living', description: 'Focus on your living environment, cleanliness of housing, and overall organization of daily chores.', status: 'Active' },
@@ -1170,7 +1170,7 @@ export default function AdminSettingsPage() {
     setCriterionPendingDelete(null);
   };
 
-  const handlePhotoPick = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoPick = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !authUser?.id) return;
 

@@ -172,18 +172,53 @@ const extractClassName = (user: ApiUser) => {
   const classText = String(user.class || '').trim();
   if (!classText) return 'Unassigned';
 
+  const CANONICAL_CLASSES = ['Class A', 'Class B', 'Class C', 'Class D', 'WEB A', 'WEB B', 'WEB C'] as const;
+  type CanonicalClass = typeof CANONICAL_CLASSES[number];
+
+  const normalizeToCanonicalClass = (rawValue: string): CanonicalClass | null => {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return null;
+
+    const normalized = raw
+      .toLowerCase()
+      .replace(/\bgen\s*\d{4}\b/gi, '')
+      .replace(/[^a-z0-9]+/g, '')
+      .trim();
+
+    const webMatch = normalized.match(/web([a-c])/i);
+    if (webMatch) return `WEB ${webMatch[1].toUpperCase()}` as CanonicalClass;
+
+    const classMatch = normalized.match(/class([a-d])/i) || normalized.match(/^([a-d])$/i);
+    if (classMatch) return `Class ${classMatch[1].toUpperCase()}` as CanonicalClass;
+
+    // Some variants might be like "webclassa" or "webac"
+    const hasWeb = normalized.includes('web');
+    if (hasWeb) {
+      const webClassMatch = normalized.match(/([a-c])$/i);
+      if (webClassMatch) return `WEB ${webClassMatch[1].toUpperCase()}` as CanonicalClass;
+    }
+
+    return null;
+  };
+
   const explicitClassMatch = classText.match(/class\s+([a-z0-9-]+)/i);
-  if (explicitClassMatch) return explicitClassMatch[1].toUpperCase();
+  if (explicitClassMatch) {
+    const normalized = normalizeToCanonicalClass(explicitClassMatch[1]);
+    if (normalized) return normalized;
+  }
 
   const trimmedSegments = classText
     .split('-')
     .map((segment) => segment.trim())
     .filter(Boolean);
   if (trimmedSegments.length > 1) {
-    return trimmedSegments[trimmedSegments.length - 1];
+    const last = trimmedSegments[trimmedSegments.length - 1];
+    const normalized = normalizeToCanonicalClass(last);
+    if (normalized) return normalized;
+    return last;
   }
 
-  return classText;
+  return normalizeToCanonicalClass(classText) || classText;
 };
 
 const getEvaluationSortValue = (evaluation: EvaluationRecord) => {
@@ -270,6 +305,7 @@ export default function TeacherStudentListPage() {
   const location = useLocation();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
   const [isPerformanceOpen, setIsPerformanceOpen] = useState(false);
   const [selectedGeneration, setSelectedGeneration] = useState('All Generations');
   const [selectedClass, setSelectedClass] = useState('All Classes');
@@ -406,6 +442,11 @@ export default function TeacherStudentListPage() {
                   latestEvaluation,
                 } satisfies StudentRecord;
               })
+              .sort((left, right) => (
+                left.className.localeCompare(right.className) ||
+                left.name.localeCompare(right.name) ||
+                left.studentId.localeCompare(right.studentId)
+              ))
           : [];
 
         setStudents(mappedStudents);
@@ -531,11 +572,8 @@ export default function TeacherStudentListPage() {
   ), [students]);
 
   const classOptions = useMemo(() => {
-    const scopedStudents = selectedGeneration === 'All Generations'
-      ? students
-      : students.filter((student) => student.generation === selectedGeneration);
-
-    return ['All Classes', ...Array.from(new Set(scopedStudents.map((student) => student.className))).sort()];
+    const canonical = ['Class A', 'Class B', 'Class C', 'Class D', 'WEB A', 'WEB B', 'WEB C'];
+    return ['All Classes', ...canonical];
   }, [selectedGeneration, students]);
 
   const filteredStudents = useMemo(() => {
@@ -559,18 +597,42 @@ export default function TeacherStudentListPage() {
   }, [searchQuery, selectedClass, selectedGender, selectedGeneration, students]);
 
   useEffect(() => {
-    if (filteredStudents.length === 0) {
+    setPageIndex(0);
+  }, [searchQuery, selectedClass, selectedGender, selectedGeneration]);
+
+  const pageSize = 17;
+  const totalPages = useMemo(() => (
+    Math.max(1, Math.ceil(filteredStudents.length / pageSize))
+  ), [filteredStudents.length]);
+
+  useEffect(() => {
+    if (pageIndex < 0) {
+      setPageIndex(0);
+      return;
+    }
+    if (pageIndex > totalPages - 1) {
+      setPageIndex(totalPages - 1);
+    }
+  }, [pageIndex, totalPages]);
+
+  const pagedStudents = useMemo(() => {
+    const start = pageIndex * pageSize;
+    return filteredStudents.slice(start, start + pageSize);
+  }, [filteredStudents, pageIndex]);
+
+  useEffect(() => {
+    if (pagedStudents.length === 0) {
       setSelectedId(null);
       return;
     }
 
-    const hasSelectedStudent = filteredStudents.some((student) => student.id === selectedId);
-    if (!hasSelectedStudent) {
-      setSelectedId(filteredStudents[0].id);
+    const hasSelectedStudent = pagedStudents.some((student) => student.id === selectedId);
+    if (selectedId === null || !hasSelectedStudent) {
+      setSelectedId(pagedStudents[0].id);
     }
-  }, [filteredStudents, selectedId]);
+  }, [pagedStudents, selectedId]);
 
-  const selectedStudent = filteredStudents.find((student) => student.id === selectedId) || filteredStudents[0] || null;
+  const selectedStudent = filteredStudents.find((student) => student.id === selectedId) || pagedStudents[0] || null;
   const radarData = useMemo(() => buildRadarData(selectedStudent, globalCriteria, globalRatingScale), [selectedStudent, globalCriteria, globalRatingScale]);
   const selectedCriteria = selectedStudent?.latestEvaluation?.responses || [];
   const latestTeacherFeedback = useMemo(() => {
@@ -901,18 +963,33 @@ export default function TeacherStudentListPage() {
                             {loadError}
                           </td>
                         </tr>
-                      ) : filteredStudents.map((student) => (
-                        <tr
-                          key={student.id}
-                          className={cn(
-                            'group transition-all cursor-pointer',
-                            selectedStudent?.id === student.id ? 'bg-primary/5' : 'hover:bg-slate-50/50'
-                          )}
-                          onClick={() => {
-                            setSelectedId(student.id);
-                            setIsPerformanceOpen(true);
-                          }}
-                        >
+                      ) : pagedStudents.flatMap((student, index) => {
+                        const previous = pagedStudents[index - 1];
+                        const classChanged = !previous || previous.className !== student.className;
+                        const rows = [];
+
+                        if (classChanged) {
+                          rows.push(
+                            <tr key={`class-${student.className}`} className="bg-slate-50/60">
+                              <td colSpan={5} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {student.className}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        rows.push(
+                          <tr
+                            key={student.id}
+                            className={cn(
+                              'group transition-all cursor-pointer',
+                              selectedStudent?.id === student.id ? 'bg-primary/5' : 'hover:bg-slate-50/50'
+                            )}
+                            onClick={() => {
+                              setSelectedId(student.id);
+                              setIsPerformanceOpen(true);
+                            }}
+                          >
                           <td className="px-6 py-5 text-sm font-medium text-slate-500">{student.studentId}</td>
                           <td className="px-6 py-5">
                             <div className="flex items-center gap-3">
@@ -959,15 +1036,48 @@ export default function TeacherStudentListPage() {
                             </span>
                           </td>
                           <td className="px-6 py-5">
-                            <button className={cn(
-                              'text-xs font-bold transition-colors',
-                              selectedStudent?.id === student.id ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'
-                            )}>
-                              View Overview
-                            </button>
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedId(student.id);
+                                  setIsPerformanceOpen(true);
+                                }}
+                                className={cn(
+                                  'text-xs font-bold transition-colors',
+                                  selectedStudent?.id === student.id ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
+                                )}
+                              >
+                                Overview
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate(`/teacher/students/${student.id}`);
+                                }}
+                                className="text-xs font-bold text-primary/80 hover:text-primary transition-colors"
+                              >
+                                Profile
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate('/teacher/messages', { state: { selectedContactId: student.id, isMobileChatOpen: true } });
+                                }}
+                                className="text-xs font-bold text-slate-700 hover:text-slate-900 transition-colors"
+                              >
+                                Message
+                              </button>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+
+                        return rows;
+                      })}
                       {!isLoading && !loadError && filteredStudents.length === 0 && (
                         <tr>
                           <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
@@ -979,13 +1089,34 @@ export default function TeacherStudentListPage() {
                   </table>
                   <div className="p-4 border-t border-slate-50 flex items-center justify-between">
                     <p className="text-[10px] text-slate-400">
-                      Showing {filteredStudents.length} of {students.length} students
+                      {(() => {
+                        if (filteredStudents.length === 0) return `Showing 0 of ${students.length} students`;
+                        const start = pageIndex * pageSize + 1;
+                        const end = Math.min(filteredStudents.length, pageIndex * pageSize + pagedStudents.length);
+                        return `Showing ${start}-${end} of ${filteredStudents.length} students`;
+                      })()}
                     </p>
                     <div className="flex items-center gap-2">
-                      <button className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg" disabled>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPageIndex((current) => Math.max(0, current - 1));
+                        }}
+                        className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-50 disabled:hover:bg-transparent"
+                        disabled={filteredStudents.length <= pageSize || pageIndex <= 0}
+                        title="Previous page"
+                      >
                         <ChevronLeft className="w-4 h-4" />
                       </button>
-                      <button className="p-1.5 bg-primary text-white rounded-lg" disabled>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPageIndex((current) => Math.min(totalPages - 1, current + 1));
+                        }}
+                        className="p-1.5 bg-primary text-white rounded-lg disabled:opacity-50 disabled:hover:bg-primary"
+                        disabled={filteredStudents.length <= pageSize || pageIndex >= totalPages - 1}
+                        title="Next page"
+                      >
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>

@@ -360,19 +360,14 @@ export default function TeacherMessagesPage() {
   }, [contacts, searchQuery]);
 
   useEffect(() => {
-    // ONLY override selected contact if it's currently invalid (missing entirely from filtered list) AND we have no explicit passed state
-    // We already initialized it in useState(passedState?.selectedContactId).
-    if (filteredContacts.length === 0) {
-      setSelectedContactId(null);
-      return;
-    }
+    // Keep the selected contact stable while contacts load and while search filters change.
+    if (contacts.length === 0) return;
 
-    const exists = filteredContacts.some((contact) => contact.id === selectedContactId);
-    if (!exists && selectedContactId === null) {
-      // Auto-select the first contact if none is selected
-      setSelectedContactId(filteredContacts[0].id);
+    const exists = contacts.some((contact) => contact.id === selectedContactId);
+    if (selectedContactId === null || !exists) {
+      setSelectedContactId(contacts[0].id);
     }
-  }, [filteredContacts, selectedContactId]);
+  }, [contacts, selectedContactId]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 

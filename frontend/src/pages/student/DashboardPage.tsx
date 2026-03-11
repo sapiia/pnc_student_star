@@ -20,7 +20,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import StarRating from '../../components/ui/StarRating';
 import RadarChart from '../../components/ui/RadarChart';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
@@ -338,7 +338,7 @@ export default function DashboardPage() {
   }, [loadRecentFeedback, studentUserId]);
 
   const getIcon = (name: string) => {
-    const icons: Record<string, React.ReactNode> = { Home: <Home />, Briefcase: <Briefcase />, Users: <Users />, Users2: <Users2 />, Heart: <Heart />, Smile: <Smile />, Brain: <Brain />, CreditCard: <CreditCard />, Wrench: <Wrench />, MessageCircle: <MessageCircle /> };
+    const icons: Record<string, ReactNode> = { Home: <Home />, Briefcase: <Briefcase />, Users: <Users />, Users2: <Users2 />, Heart: <Heart />, Smile: <Smile />, Brain: <Brain />, CreditCard: <CreditCard />, Wrench: <Wrench />, MessageCircle: <MessageCircle /> };
     const IconComponent = icons[name] || <Star />;
     return <span className="w-6 h-6">{IconComponent}</span>;
   };

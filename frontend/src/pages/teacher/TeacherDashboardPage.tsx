@@ -554,7 +554,7 @@ export default function TeacherDashboardPage() {
                               View Profile
                             </button>
                             <button 
-                              onClick={() => navigate('/teacher/messages', { state: { selectedContactId: student.id } })}
+                              onClick={() => navigate('/teacher/messages', { state: { selectedContactId: student.id, isMobileChatOpen: true } })}
                               className={cn(
                                 "px-4 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all",
                                 student.status === 'Action Needed' ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-800 hover:bg-slate-900"

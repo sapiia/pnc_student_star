@@ -14,10 +14,11 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
 import StudentMobileNav from '../../components/common/StudentMobileNav';
 
+const RESULTS_PER_PAGE = 6;
 
 const CATEGORIES = [
   { id: 'all', label: 'All Articles', count: 89 },
@@ -62,6 +63,75 @@ export default function HelpCenterPage() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('evaluation');
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsTopRef = useRef<HTMLDivElement | null>(null);
+
+  const filteredResults = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return RESULTS.filter((result) => {
+      const matchesCategory = activeCategory === 'all'
+        ? true
+        : result.category.toLowerCase() === activeCategory;
+
+      if (!matchesCategory) return false;
+      if (!query) return true;
+
+      const haystack = `${result.title} ${result.description} ${result.category}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [activeCategory, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_PAGE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const paginatedResults = useMemo(() => {
+    const start = (currentPage - 1) * RESULTS_PER_PAGE;
+    return filteredResults.slice(start, start + RESULTS_PER_PAGE);
+  }, [currentPage, filteredResults]);
+
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, idx) => idx + 1);
+
+    let start = currentPage - 1;
+    let end = currentPage + 1;
+
+    if (currentPage <= 2) {
+      start = 2;
+      end = 3;
+    } else if (currentPage >= totalPages - 1) {
+      start = totalPages - 2;
+      end = totalPages - 1;
+    }
+
+    start = Math.max(2, start);
+    end = Math.min(totalPages - 1, end);
+
+    const items: Array<number | '...'> = [1];
+
+    if (start > 2) items.push('...');
+    for (let page = start; page <= end; page += 1) items.push(page);
+    if (end < totalPages - 1) items.push('...');
+
+    items.push(totalPages);
+    return items;
+  }, [currentPage, totalPages]);
+
+  const goToPage = (page: number) => {
+    const nextPage = Math.max(1, Math.min(totalPages, page));
+    setCurrentPage(nextPage);
+
+    requestAnimationFrame(() => {
+      resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -202,64 +272,93 @@ export default function HelpCenterPage() {
 
               {/* Results List */}
               <div className="lg:col-span-9 space-y-6 md:space-y-8">
-                {RESULTS.map((result, idx) => (
-                  <motion.div 
-                    key={result.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: idx * 0.1 }}
-                    className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 hover:border-primary/20 transition-all group"
-                  >
-                    <div className="flex items-center justify-between mb-4 md:mb-6">
-                      <span className="px-3 py-1 bg-primary/5 text-primary text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-lg">
-                        {result.category}
-                      </span>
-                      <div className="flex items-center gap-2 text-slate-400 text-[10px] md:text-xs font-bold">
-                        <Clock className="w-3.5 h-3.5" />
-                        {result.readTime}
+                <div ref={resultsTopRef} />
+
+                {filteredResults.length === 0 ? (
+                  <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100">
+                    <p className="text-slate-600 text-sm md:text-base font-semibold">No articles match your search.</p>
+                    <p className="text-slate-400 text-xs md:text-sm mt-2 font-medium">Try a different keyword or category.</p>
+                  </div>
+                ) : (
+                  paginatedResults.map((result, idx) => (
+                    <motion.div 
+                      key={result.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 hover:border-primary/20 transition-all group"
+                    >
+                      <div className="flex items-center justify-between mb-4 md:mb-6">
+                        <span className="px-3 py-1 bg-primary/5 text-primary text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-lg">
+                          {result.category}
+                        </span>
+                        <div className="flex items-center gap-2 text-slate-400 text-[10px] md:text-xs font-bold">
+                          <Clock className="w-3.5 h-3.5" />
+                          {result.readTime}
+                        </div>
                       </div>
-                    </div>
-                    <h2 className="text-xl md:text-2xl font-black text-slate-900 group-hover:text-primary transition-colors mb-4 cursor-pointer leading-tight">
-                      {result.title}
-                    </h2>
-                    <p className="text-slate-500 text-xs md:text-base leading-relaxed mb-6 font-medium">
-                      {result.description}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-4 md:gap-8 pt-6 border-t border-slate-50">
-                      <span className="text-[10px] md:text-xs font-bold text-slate-400">Updated {result.updated}</span>
-                      <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full">
-                        <ThumbsUp className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-[10px] md:text-xs font-black text-slate-600">{result.helpful} Helpful</span>
+                      <h2 className="text-xl md:text-2xl font-black text-slate-900 group-hover:text-primary transition-colors mb-4 cursor-pointer leading-tight">
+                        {result.title}
+                      </h2>
+                      <p className="text-slate-500 text-xs md:text-base leading-relaxed mb-6 font-medium">
+                        {result.description}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-4 md:gap-8 pt-6 border-t border-slate-50">
+                        <span className="text-[10px] md:text-xs font-bold text-slate-400">Updated {result.updated}</span>
+                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full">
+                          <ThumbsUp className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-[10px] md:text-xs font-black text-slate-600">{result.helpful} Helpful</span>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))
+                )}
 
                 {/* Pagination */}
-                <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 pt-8 md:pt-12 pb-12">
-                  <button className="size-10 md:size-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-xl md:rounded-2xl transition-all shadow-sm">
+                {filteredResults.length > 0 && totalPages > 1 && (
+                  <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 pt-8 md:pt-12 pb-12">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="size-10 md:size-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-xl md:rounded-2xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                    aria-label="Previous page"
+                  >
                     <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
                   </button>
                   <div className="flex items-center gap-1.5">
-                    {[1, 2, 3].map((page) => (
-                      <button 
-                        key={page}
-                        className={cn(
-                          "size-10 md:size-12 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all shadow-sm",
-                          page === 1 ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white text-slate-500 hover:border-primary/20 border border-transparent"
-                        )}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                    <span className="px-2 text-slate-300 font-black">...</span>
-                    <button className="size-10 md:size-12 rounded-xl md:rounded-2xl bg-white text-slate-500 font-black text-xs md:text-sm border border-transparent shadow-sm">12</button>
+                    {paginationItems.map((item, idx) => {
+                      if (item === '...') {
+                        return <span key={`ellipsis-${idx}`} className="px-2 text-slate-300 font-black">...</span>;
+                      }
+
+                      return (
+                        <button 
+                          key={item}
+                          onClick={() => goToPage(item)}
+                          aria-current={item === currentPage ? 'page' : undefined}
+                          className={cn(
+                            "size-10 md:size-12 rounded-xl md:rounded-2xl font-black text-xs md:text-sm transition-all shadow-sm",
+                            item === currentPage
+                              ? "bg-primary text-white shadow-lg shadow-primary/20"
+                              : "bg-white text-slate-500 hover:border-primary/20 border border-transparent"
+                          )}
+                        >
+                          {item}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <button className="size-10 md:size-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-xl md:rounded-2xl transition-all shadow-sm">
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="size-10 md:size-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-xl md:rounded-2xl transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                    aria-label="Next page"
+                  >
                     <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
                   </button>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

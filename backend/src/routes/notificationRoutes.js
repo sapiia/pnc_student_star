@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllNotifications,
-  getNotificationById,
   getNotificationsByUserId,
   getUnreadNotificationsByUserId,
   getStudentTeacherReplyThread,
+  getNotificationById,
   createNotification,
   updateNotification,
   markNotificationAsRead,
@@ -16,9 +16,6 @@ const {
 // GET /api/notifications - Get all notifications
 router.get('/', getAllNotifications);
 
-// GET /api/notifications/:id - Get notification by ID
-router.get('/:id', getNotificationById);
-
 // GET /api/notifications/user/:userId - Get notifications by user ID
 router.get('/user/:userId', getNotificationsByUserId);
 
@@ -27,6 +24,9 @@ router.get('/user/:userId/unread', getUnreadNotificationsByUserId);
 
 // GET /api/notifications/thread/student/:studentId/teacher/:teacherId - Get student->teacher quick reply thread
 router.get('/thread/student/:studentId/teacher/:teacherId', getStudentTeacherReplyThread);
+
+// GET /api/notifications/:id - Get notification by ID
+router.get('/:id', getNotificationById);
 
 // POST /api/notifications - Create new notification
 router.post('/', createNotification);
