@@ -6,6 +6,7 @@ const path = require('path');
 const XLSX = require('xlsx');
 const saltRounds = 10;
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const { emitNotificationEvent } = require('../realtime');
 
 
@@ -748,7 +749,33 @@ const validateBulkInviteRows = async (rows, options = {}) => {
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
+    const { sortBy, sortOrder } = req.query;
     const columns = await getUsersTableColumns();
+    
+    // Build ORDER BY clause based on sortBy parameter
+    let orderByClause = 'ORDER BY u.created_at DESC';
+    
+    if (sortBy === 'generation') {
+      const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+      // Try to extract generation from class field or use generation column directly
+      if (columns.has('generation')) {
+        orderByClause = `ORDER BY CAST(u.generation AS UNSIGNED) ${order}, u.created_at DESC`;
+      } else {
+        // Fallback: try to extract from class field (e.g., "Gen 2026 - WEB A")
+        orderByClause = `ORDER BY CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.class, 'Gen ', -1), ' ', 1) AS UNSIGNED) ${order}, u.created_at DESC`;
+      }
+    } else if (sortBy === 'name') {
+      const order = sortOrder === 'desc' ? 'DESC' : 'ASC';
+      if (columns.has('first_name') && columns.has('last_name')) {
+        orderByClause = `ORDER BY u.first_name ${order}, u.last_name ${order}, u.created_at DESC`;
+      } else {
+        orderByClause = `ORDER BY u.name ${order}, u.created_at DESC`;
+      }
+    } else if (sortBy === 'created_at') {
+      const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+      orderByClause = `ORDER BY u.created_at ${order}`;
+    }
+
     try {
       const [rows] = await db.query(`
         SELECT
@@ -756,12 +783,12 @@ const getAllUsers = async (req, res) => {
           COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
         FROM users u
         LEFT JOIN students s ON s.user_id = u.id
-        ORDER BY u.created_at DESC
+        ${orderByClause}
       `);
       return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
     } catch (_err) {
       // Backward-compatible fallback when migrations/tables are not yet applied.
-      const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
+      const [rows] = await db.query(`SELECT * FROM users ${orderByClause.replace('u.', '')}`);
       return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
     }
   } catch (err) {
@@ -1869,6 +1896,42 @@ const disableAllUsers = async (req, res) => {
   }
 };
 
+// Get teacher's assigned classes
+const getTeacherClasses = async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId || req.user?.id;
+    const classes = await User.getTeacherClasses(teacherId);
+    return res.json(classes);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to get teacher classes." });
+  }
+};
+
+// Get students by class for teacher reports
+const getStudentsByClass = async (req, res) => {
+  try {
+    const { class: className } = req.params;
+    const students = await User.getStudentsByClass(className);
+    return res.json(students);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to get students." });
+  }
+};
+
+// Get all students for teacher
+const getTeacherStudents = async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId || req.user?.id;
+    const students = await User.getTeacherStudents(teacherId);
+    return res.json(students);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to get teacher students." });
+  }
+};
+
 // Hard delete non-admin users
 const hardDeleteAllUsers = async (req, res) => {
   try {
@@ -1926,6 +1989,7 @@ module.exports = {
   hardDeleteAllUsers,
   disableAllUsers,
   setUserActive,
+  setGenerationActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,
@@ -1933,5 +1997,8 @@ module.exports = {
   commitUsersBulkInvite,
   validateInvite,
   completeInviteRegistration,
+  getTeacherClasses,
+  getStudentsByClass,
+  getTeacherStudents,
   updateClassNameForStudents
 };

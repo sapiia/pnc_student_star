@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
-  Shield
+  ArrowUpDown,
+  Filter
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -80,11 +81,13 @@ export default function AdminDashboardPage() {
   const [teacherCount, setTeacherCount] = useState(0);
   const [adminCount, setAdminCount] = useState(0);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState<string>('generation');
+  const [sortOrder, setSortOrder] = useState<string>('desc');
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users`);
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
         const data = await response.json();
         if (Array.isArray(data)) {
           const students = data.filter((u: any) => u.role.toLowerCase() === 'student');
@@ -151,7 +154,7 @@ export default function AdminDashboardPage() {
       }
     };
     fetchUsers();
-  }, []);
+  }, [sortBy, sortOrder]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -273,7 +276,35 @@ export default function AdminDashboardPage() {
             {/* User Management Table */}
             <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="font-black text-slate-900">User Management</h3>
+                <div className="flex items-center gap-4">
+                  <h3 className="font-black text-slate-900">User Management</h3>
+                  {/* Sort Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="w-4 h-4 text-slate-400" />
+                    <select 
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="generation">Generation</option>
+                      <option value="name">Name</option>
+                      <option value="created_at">Date</option>
+                    </select>
+                    <select 
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="desc">DESC</option>
+                      <option value="asc">ASC</option>
+                    </select>
+                  </div>
+                  {/* Advanced Filters Button */}
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all">
+                    <Filter className="w-3.5 h-3.5" />
+                    Advanced Filters
+                  </button>
+                </div>
                 <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
                   <Plus className="w-4 h-4" />
                   Add User

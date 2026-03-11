@@ -125,6 +125,59 @@ class User {
       throw error;
     }
   }
+
+  // Get teacher's assigned classes (unique class values from students)
+  static async getTeacherClasses(teacherId) {
+    try {
+      // Get unique classes from students (could be extended to use a teacher_class_assignment table)
+      const [rows] = await db.query(`
+        SELECT DISTINCT class 
+        FROM users 
+        WHERE role = 'student' 
+        AND class IS NOT NULL 
+        AND class != ''
+        ORDER BY class
+      `);
+      return rows.map(row => row.class);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get students by class
+  static async getStudentsByClass(className) {
+    try {
+      const [rows] = await db.query(`
+        SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
+        FROM users 
+        WHERE role = 'student' 
+        AND class = ?
+        AND is_active = 1
+        AND is_deleted = 0
+        ORDER BY first_name, last_name
+      `, [className]);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get all students for teacher (all classes teacher has access to)
+  static async getTeacherStudents(teacherId) {
+    try {
+      const [rows] = await db.query(`
+        SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
+        FROM users 
+        WHERE role = 'student' 
+        AND is_active = 1
+        AND is_deleted = 0
+        ORDER BY class, first_name, last_name
+      `);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = User;

@@ -380,25 +380,35 @@ export default function DashboardPage() {
   const cardTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.42, ease: [0.22, 1, 0.36, 1] as const };
   const listTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.28, ease: [0.16, 1, 0.3, 1] as const };
 
+  const renderTopBar = () => (
+    <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between">
+      <div className="flex items-center gap-2 text-slate-500 text-[10px] md:text-sm">
+        <Home className="w-3.5 h-3.5 md:w-4 md:h-4" />
+        <span>/</span>
+        <span className="font-medium text-slate-900">Student Dashboard</span>
+      </div>
+      <div className="flex items-center gap-2 md:gap-4">
+        <button onClick={() => navigate('/notifications')} className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600">
+          <Bell className="w-4.5 h-4.5 md:w-5 md:h-5" />
+          {unreadNotificationCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 bg-red-500 rounded-full text-white text-[8px] font-black">
+              {Math.min(unreadNotificationCount, 9)}
+            </span>
+          )}
+        </button>
+        <button onClick={() => navigate('/help')} className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-600">
+          <HelpCircle className="w-4.5 h-4.5 md:w-5 md:h-5" />
+        </button>
+      </div>
+    </header>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <StudentMobileNav />
-        <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-500 text-[10px] md:text-sm">
-            <Home className="w-3.5 h-3.5 md:w-4 md:h-4" /><span>/</span><span className="font-medium text-slate-900">Student Dashboard</span>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            <button onClick={() => navigate('/notifications')} className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 relative text-slate-600">
-              <Bell className="w-4.5 h-4.5 md:w-5 md:h-5" />
-              {unreadNotificationCount > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 bg-red-500 rounded-full text-white text-[8px] font-black">{Math.min(unreadNotificationCount, 9)}</span>}
-            </button>
-            <button onClick={() => navigate('/help')} className="size-9 md:size-10 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-600">
-              <HelpCircle className="w-4.5 h-4.5 md:w-5 md:h-5" />
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           <AnimatePresence>

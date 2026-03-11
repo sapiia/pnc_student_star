@@ -442,283 +442,298 @@ export default function FeedbackPage() {
     }
   };
 
+  const renderTopBar = () => (
+    <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between shrink-0">
+      <div className="flex-1 max-w-xl relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search teacher..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+        />
+      </div>
+      <div className="flex items-center gap-4 ml-4">
+        <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <Bell className="w-5 h-5" />
+          <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+        </button>
+      </div>
+    </header>
+  );
+
+  const renderTeacherListPanel = () => (
+    <aside className={cn(
+      'w-full md:w-96 border-r border-slate-200 bg-white flex flex-col shrink-0 transition-all duration-300 md:translate-x-0 pb-24 md:pb-0',
+      isMobileChatOpen ? '-translate-x-full md:translate-x-0 hidden md:flex' : 'translate-x-0'
+    )}>
+      <div className="p-6 border-b border-slate-50">
+        <h2 className="text-xl font-bold text-slate-900">Teachers</h2>
+        <p className="text-xs text-slate-500 mt-1">{filteredTeachers.length} profiles</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="p-6 text-sm font-medium text-slate-500">Loading feedback...</div>
+        ) : !canViewTeacherFeedback ? (
+          <div className="p-6 text-sm font-medium text-slate-500">Teacher feedback is currently hidden by admin settings.</div>
+        ) : loadError ? (
+          <div className="p-6 text-sm font-medium text-rose-600">{loadError}</div>
+        ) : filteredTeachers.length === 0 ? (
+          <div className="p-6 text-sm font-medium text-slate-500">No teacher feedback yet.</div>
+        ) : filteredTeachers.map((teacher) => (
+          <button
+            key={teacher.teacherId}
+            onClick={() => {
+              setSelectedTeacherId(teacher.teacherId);
+              setIsMobileChatOpen(true);
+            }}
+            className={cn(
+              'w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative',
+              selectedTeacherId === teacher.teacherId && 'bg-slate-50'
+            )}
+          >
+            {selectedTeacherId === teacher.teacherId ? (
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+            ) : null}
+            <div className="size-12 rounded-full overflow-hidden shrink-0 bg-primary/10 text-primary flex items-center justify-center">
+              {teacher.teacherProfileImage ? (
+                <img src={teacher.teacherProfileImage} alt={teacher.teacherName} className="w-full h-full object-cover" />
+              ) : (
+                <Users className="w-5 h-5" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start mb-1 gap-4">
+                <p className="text-sm font-bold text-slate-900 truncate">{teacher.teacherName}</p>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">{formatDateLabel(teacher.latestAt)}</span>
+                  {teacher.unreadCount > 0 ? (
+                    <span className="inline-flex min-w-5 h-5 px-1 mt-1 rounded-full bg-rose-500 text-white text-[10px] font-black items-center justify-center">
+                      {teacher.unreadCount}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">
+                {teacher.totalFeedbacks} feedback{teacher.totalFeedbacks > 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                {teacher.latestSnippet || 'No content'}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+
+  const renderChatPanel = () => (
+    <section className={cn(
+      'flex-1 flex flex-col bg-white overflow-hidden transition-all duration-300 pb-24 md:pb-0',
+      isMobileChatOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 hidden md:flex'
+    )}>
+      {selectedTeacher ? (
+        <>
+          <div className="px-4 md:px-8 py-3 md:py-6 border-b border-slate-100 flex items-center gap-4">
+            <button
+              onClick={() => setIsMobileChatOpen(false)}
+              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="size-10 md:size-12 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              {selectedTeacher.teacherProfileImage ? (
+                <img src={selectedTeacher.teacherProfileImage} alt={selectedTeacher.teacherName} className="w-full h-full object-cover" />
+              ) : (
+                <Users className="w-5 h-5" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm md:text-lg font-black text-slate-900 leading-tight">{selectedTeacher.teacherName}</h3>
+              <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400 mt-0.5 md:mt-1">Conversation</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 bg-slate-50">
+            {isLoadingReplies ? (
+              <div className="text-sm font-medium text-slate-500">Loading conversation...</div>
+            ) : chatEntries.length > 0 ? chatEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className={cn('flex', entry.kind === 'student' ? 'justify-end' : 'justify-start')}
+              >
+                <div className={cn(
+                  'max-w-[85%] md:max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border',
+                  entry.kind === 'student'
+                    ? 'bg-primary text-white border-primary/30'
+                    : 'bg-white text-slate-700 border-slate-200'
+                )}>
+                  {entry.kind === 'teacher' ? (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                      Feedback from {entry.quarterLabel}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-1">
+                      You replied
+                    </p>
+                  )}
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{entry.text}</p>
+                  <p className={cn(
+                    'mt-2 text-[10px] font-bold',
+                    entry.kind === 'student' ? 'text-white/80' : 'text-slate-400'
+                  )}>
+                    {formatDateLabel(entry.createdAt)}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReplyToMessage(entry)}
+                      className={cn(
+                        'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        entry.kind === 'student'
+                          ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
+                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                      )}
+                    >
+                      Reply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleHideMessage(entry.id)}
+                      className={cn(
+                        'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        entry.kind === 'student'
+                          ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
+                          : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                      )}
+                    >
+                      Hide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget({ kind: entry.kind === 'teacher' ? 'feedback' : 'reply', id: Number(entry.kind === 'teacher' ? entry.feedbackId : entry.replyId) })}
+                      className={cn(
+                        'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1 transition-colors',
+                        entry.kind === 'student'
+                          ? 'border border-white/30 bg-rose-500/85 text-white hover:bg-rose-500'
+                          : 'border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                      )}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                <Users className="w-14 h-14 mb-3 opacity-20" />
+                <p className="text-sm">No conversation yet for this teacher.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-200 bg-white p-6 space-y-3">
+            {replyToMessage ? (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[11px] font-bold text-primary">
+                    Replying to {replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'}: "{replyToMessage.text.slice(0, 120)}"
+                  </p>
+                  <button type="button" onClick={() => setReplyToMessage(null)} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <textarea
+              rows={3}
+              value={replyDraft}
+              onChange={(event) => setReplyDraft(event.target.value)}
+              placeholder="Reply to this teacher..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40"
+            />
+            <div className="flex items-center justify-between gap-4">
+              <p className={cn(
+                'text-xs font-bold',
+                replyStatus.toLowerCase().includes('failed') || replyStatus.toLowerCase().includes('no ')
+                  ? 'text-rose-600'
+                  : 'text-emerald-600'
+              )}>
+                {replyStatus || ' '}
+              </p>
+              <button
+                type="button"
+                onClick={handleQuickReply}
+                disabled={isSubmittingReply || !selectedTeacher}
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-60"
+              >
+                <Send className="w-4 h-4" />
+                {isSubmittingReply ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="h-full flex flex-col items-center justify-center text-slate-400">
+          <Users className="w-16 h-16 mb-4 opacity-20" />
+          <p>{isLoading ? 'Loading feedback...' : 'Select a teacher profile to see all feedback.'}</p>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderDeleteModal = () => (
+    deleteTarget ? (
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <button
+          type="button"
+          onClick={() => setDeleteTarget(null)}
+          className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+        />
+        <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
+          <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
+          <p className="mt-2 text-sm text-slate-500">
+            This will delete the selected {deleteTarget.kind === 'feedback' ? 'feedback' : 'reply'} message for both sides.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              disabled={isDeletingMessage}
+              className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
+            >
+              {isDeletingMessage ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <StudentMobileNav />
-        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between shrink-0">
-          <div className="flex-1 max-w-xl relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search teacher..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-4 ml-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         <div className="flex-1 flex overflow-hidden relative">
-          <aside className={cn(
-            "w-full md:w-96 border-r border-slate-200 bg-white flex flex-col shrink-0 transition-all duration-300 md:translate-x-0 pb-24 md:pb-0",
-            isMobileChatOpen ? "-translate-x-full md:translate-x-0 hidden md:flex" : "translate-x-0"
-          )}>
-            <div className="p-6 border-b border-slate-50">
-              <h2 className="text-xl font-bold text-slate-900">Teachers</h2>
-              <p className="text-xs text-slate-500 mt-1">{filteredTeachers.length} profiles</p>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {isLoading ? (
-                <div className="p-6 text-sm font-medium text-slate-500">Loading feedback...</div>
-              ) : !canViewTeacherFeedback ? (
-                <div className="p-6 text-sm font-medium text-slate-500">Teacher feedback is currently hidden by admin settings.</div>
-              ) : loadError ? (
-                <div className="p-6 text-sm font-medium text-rose-600">{loadError}</div>
-              ) : filteredTeachers.length === 0 ? (
-                <div className="p-6 text-sm font-medium text-slate-500">No teacher feedback yet.</div>
-              ) : filteredTeachers.map((teacher) => (
-                <button
-                  key={teacher.teacherId}
-                  onClick={() => {
-                    setSelectedTeacherId(teacher.teacherId);
-                    setIsMobileChatOpen(true);
-                  }}
-                  className={cn(
-                    'w-full p-6 flex gap-4 text-left border-b border-slate-50 transition-all hover:bg-slate-50 group relative',
-                    selectedTeacherId === teacher.teacherId && 'bg-slate-50'
-                  )}
-                >
-                  {selectedTeacherId === teacher.teacherId ? (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                  ) : null}
-                  <div className="size-12 rounded-full overflow-hidden shrink-0 bg-primary/10 text-primary flex items-center justify-center">
-                    {teacher.teacherProfileImage ? (
-                      <img src={teacher.teacherProfileImage} alt={teacher.teacherName} className="w-full h-full object-cover" />
-                    ) : (
-                      <Users className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-1 gap-4">
-                      <p className="text-sm font-bold text-slate-900 truncate">{teacher.teacherName}</p>
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">{formatDateLabel(teacher.latestAt)}</span>
-                        {teacher.unreadCount > 0 ? (
-                          <span className="inline-flex min-w-5 h-5 px-1 mt-1 rounded-full bg-rose-500 text-white text-[10px] font-black items-center justify-center">
-                            {teacher.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">
-                      {teacher.totalFeedbacks} feedback{teacher.totalFeedbacks > 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                      {teacher.latestSnippet || 'No content'}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          <section className={cn(
-            "flex-1 flex flex-col bg-white overflow-hidden transition-all duration-300 pb-24 md:pb-0",
-            isMobileChatOpen ? "translate-x-0" : "translate-x-full md:translate-x-0 hidden md:flex"
-          )}>
-            {selectedTeacher ? (
-              <>
-                <div className="px-4 md:px-8 py-3 md:py-6 border-b border-slate-100 flex items-center gap-4">
-                  <button 
-                    onClick={() => setIsMobileChatOpen(false)}
-                    className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-                  >
-                    <ArrowLeft className="w-5 h-5" />
-                  </button>
-                  <div className="size-10 md:size-12 rounded-full overflow-hidden bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    {selectedTeacher.teacherProfileImage ? (
-                      <img src={selectedTeacher.teacherProfileImage} alt={selectedTeacher.teacherName} className="w-full h-full object-cover" />
-                    ) : (
-                      <Users className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-sm md:text-lg font-black text-slate-900 leading-tight">{selectedTeacher.teacherName}</h3>
-                    <p className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400 mt-0.5 md:mt-1">Conversation</p>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 bg-slate-50">
-                  {isLoadingReplies ? (
-                    <div className="text-sm font-medium text-slate-500">Loading conversation...</div>
-                  ) : chatEntries.length > 0 ? chatEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className={cn('flex', entry.kind === 'student' ? 'justify-end' : 'justify-start')}
-                    >
-                      <div className={cn(
-                        'max-w-[85%] md:max-w-[78%] rounded-2xl px-4 py-3 shadow-sm border',
-                        entry.kind === 'student'
-                          ? 'bg-primary text-white border-primary/30'
-                          : 'bg-white text-slate-700 border-slate-200'
-                      )}>
-                        {entry.kind === 'teacher' ? (
-                          <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
-                            Feedback from {entry.quarterLabel}
-                          </p>
-                        ) : (
-                          <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-1">
-                            You replied
-                          </p>
-                        )}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{entry.text}</p>
-                        <p className={cn(
-                          'mt-2 text-[10px] font-bold',
-                          entry.kind === 'student' ? 'text-white/80' : 'text-slate-400'
-                        )}>
-                          {formatDateLabel(entry.createdAt)}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setReplyToMessage(entry)}
-                            className={cn(
-                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
-                              entry.kind === 'student'
-                                ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
-                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                            )}
-                          >
-                            Reply
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleHideMessage(entry.id)}
-                            className={cn(
-                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
-                              entry.kind === 'student'
-                                ? 'border border-white/30 bg-white/15 text-white hover:bg-white/25'
-                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                            )}
-                          >
-                            Hide
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget({ kind: entry.kind === 'teacher' ? 'feedback' : 'reply', id: Number(entry.kind === 'teacher' ? entry.feedbackId : entry.replyId) })}
-                            className={cn(
-                              'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1 transition-colors',
-                              entry.kind === 'student'
-                                ? 'border border-white/30 bg-rose-500/85 text-white hover:bg-rose-500'
-                                : 'border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
-                            )}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                      <Users className="w-14 h-14 mb-3 opacity-20" />
-                      <p className="text-sm">No conversation yet for this teacher.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-slate-200 bg-white p-6 space-y-3">
-                  {replyToMessage ? (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-[11px] font-bold text-primary">
-                          Replying to {replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'}: "{replyToMessage.text.slice(0, 120)}"
-                        </p>
-                        <button type="button" onClick={() => setReplyToMessage(null)} className="text-slate-400 hover:text-slate-600">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                  <textarea
-                    rows={3}
-                    value={replyDraft}
-                    onChange={(event) => setReplyDraft(event.target.value)}
-                    placeholder="Reply to this teacher..."
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40"
-                  />
-                  <div className="flex items-center justify-between gap-4">
-                    <p className={cn(
-                      'text-xs font-bold',
-                      replyStatus.toLowerCase().includes('failed') || replyStatus.toLowerCase().includes('no ')
-                        ? 'text-rose-600'
-                        : 'text-emerald-600'
-                    )}>
-                      {replyStatus || ' '}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleQuickReply}
-                      disabled={isSubmittingReply || !selectedTeacher}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-60"
-                    >
-                      <Send className="w-4 h-4" />
-                      {isSubmittingReply ? 'Sending...' : 'Send'}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <Users className="w-16 h-16 mb-4 opacity-20" />
-                <p>{isLoading ? 'Loading feedback...' : 'Select a teacher profile to see all feedback.'}</p>
-              </div>
-            )}
-          </section>
+          {renderTeacherListPanel()}
+          {renderChatPanel()}
         </div>
       </main>
 
-      {deleteTarget ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <button
-            type="button"
-            onClick={() => setDeleteTarget(null)}
-            className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
-          />
-          <div className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl border border-slate-200 p-6">
-            <h3 className="text-lg font-black text-slate-900">Delete Message?</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              This will delete the selected {deleteTarget.kind === 'feedback' ? 'feedback' : 'reply'} message for both sides.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeletingMessage}
-                className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60"
-              >
-                {isDeletingMessage ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {renderDeleteModal()}
     </div>
   );
 }
