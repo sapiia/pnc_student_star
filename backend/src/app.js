@@ -8,6 +8,7 @@ const meetingScheduleRoutes = require('./routes/meetingScheduleRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const settingRoutes = require('./routes/settingRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const db = require('./config/database');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/meetings', meetingScheduleRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -35,7 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const INITIAL_CRITERIA = [
   { id: 'CRIT-001', icon: 'ð ', name: 'Living', description: 'Focus on your living environment, cleanliness of housing, and overall organization of daily chores.', status: 'Active' },
@@ -974,6 +974,10 @@ export default function AdminSettingsPage() {
         setSuccessMessage('Criteria, interval, and role permissions saved successfully!');
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
+        
+        // Notify all students that settings have been updated
+        console.log('📢 Broadcasting settings update to all students');
+        window.dispatchEvent(new Event('student-settings-updated'));
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to save criteria configuration.');
       } finally {
@@ -1658,6 +1662,26 @@ export default function AdminSettingsPage() {
                           )}
                         >
                           {rolePermissions.studentCanEditAfterSubmit ? 'Allowed' : 'Locked'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">Multiple Evaluations Per Cycle</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Allow students to evaluate more than once per cycle</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRolePermissions((prev) => ({ 
+                            ...prev, 
+                            studentMaxEvaluationsPerCycle: prev.studentMaxEvaluationsPerCycle === 1 ? 999 : 1 
+                          }))}
+                          className={cn(
+                            "rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors",
+                            rolePermissions.studentMaxEvaluationsPerCycle > 1 ? "bg-indigo-500 text-white" : "bg-slate-200 text-slate-600"
+                          )}
+                        >
+                          {rolePermissions.studentMaxEvaluationsPerCycle > 1 ? 'Enabled' : 'Disabled'}
                         </button>
                       </div>
 

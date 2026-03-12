@@ -20,7 +20,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import StarRating from '../../components/ui/StarRating';
 import RadarChart from '../../components/ui/RadarChart';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
@@ -136,6 +136,7 @@ export default function DashboardPage() {
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
+  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState<number>(1);
   const canStartEvaluation = !latestEvaluation || daysLeft === 0;
 
   const currentStatusCriteria = useMemo(() => {
@@ -251,6 +252,7 @@ export default function DashboardPage() {
         feedbackResponse,
         notificationsResponse,
         criteriaConfigResponse,
+        settingsResponse,
       ] = await Promise.all([
         fetch(`${API_BASE_URL}/users/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
@@ -259,21 +261,30 @@ export default function DashboardPage() {
         fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
         fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
         fetch(`${API_BASE_URL}/notifications/user/${userId}`),
-        fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
+        fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+        fetch(`${API_BASE_URL}/settings`)
       ]);
 
       const data = await response.json().catch(() => ({}));
       const intervalData = await intervalResponse.json().catch(() => ({}));
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
       const visibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
       const reminderData = await reminderNotificationsResponse.json().catch(() => ({}));
-      const feedbackData = await feedbackResponse.json().catch(() => []);
-      const notifData = await notificationsResponse.json().catch(() => []);
+      const feedbackData = await feedbackResponse.json().catch(() => ([]));
+      const notifData = await notificationsResponse.json().catch(() => ([]));
       const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+      const settingsData = await settingsResponse.json().catch(() => ([]));
 
       const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
       setGlobalRatingScale(nextRatingScale);
       setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+
+      // Find studentMaxEvaluationsPerCycle setting
+      const maxEvaluationsSetting = Array.isArray(settingsData) 
+        ? settingsData.find(s => s.key === 'studentMaxEvaluationsPerCycle') 
+        : null;
+      const maxEvaluationsPerCycleValue = Number(maxEvaluationsSetting?.value) || 1;
+      setMaxEvaluationsPerCycle(maxEvaluationsPerCycleValue);
 
       const sortedEvals = Array.isArray(evaluationsData) ? [...evaluationsData].sort((a, b) => getEvaluationSortValue(b) - getEvaluationSortValue(a)) : [];
       const latestEval = sortedEvals.length > 0 ? sortedEvals[0] : null;
@@ -305,6 +316,15 @@ export default function DashboardPage() {
       const lastDate = new Date(lastDateRaw);
       if (Number.isNaN(lastDate.getTime())) { setDaysLeft(0); return; }
 
+      // If multiple evaluations are allowed, immediately unlock the student
+      if (maxEvaluationsPerCycleValue > 1) {
+        // IMMEDIATE UNLOCK: Allow evaluation regardless of any previous locks
+        setDaysLeft(0); // Always 0 days when multiple evaluations allowed
+        console.log('🔓 Dashboard: Student unlocked - Multiple evaluations per cycle enabled');
+        return;
+      }
+
+      // Original time-based logic for single evaluation mode
       const nextDate = new Date(lastDate);
       nextDate.setDate(nextDate.getDate() + resolvedCycle);
       const remaining = nextDate.getTime() - Date.now();
@@ -325,6 +345,20 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { void loadIdentity(); }, [loadIdentity]);
+
+  // Add real-time listener for settings changes
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      console.log('🔄 Dashboard: Settings updated - refreshing evaluation eligibility');
+      void loadIdentity();
+    };
+
+    window.addEventListener('student-settings-updated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('student-settings-updated', handleSettingsUpdate);
+    };
+  }, [loadIdentity]);
   useEffect(() => { void loadRecentFeedback(); }, [loadRecentFeedback]);
 
   useEffect(() => {

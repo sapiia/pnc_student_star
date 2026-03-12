@@ -453,6 +453,23 @@ class Evaluation {
     const [result] = await db.query('DELETE FROM evaluations WHERE id = ?', [id]);
     return result.affectedRows > 0;
   }
+
+  static async findByUserIds(userIds) {
+    await this.ensureSchema();
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return [];
+    }
+    const placeholders = userIds.map(() => '?').join(', ');
+    const [rows] = await db.query(
+      `SELECT e.*, u.first_name, u.last_name, u.role, u.class 
+       FROM evaluations e 
+       JOIN users u ON e.user_id = u.id 
+       WHERE e.user_id IN (${placeholders}) 
+       ORDER BY e.submitted_at DESC, e.created_at DESC`,
+      userIds
+    );
+    return hydrateEvaluations(rows);
+  }
 }
 
 module.exports = Evaluation;

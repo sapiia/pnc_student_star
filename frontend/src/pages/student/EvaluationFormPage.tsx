@@ -90,13 +90,22 @@ export default function EvaluationFormPage() {
           return;
         }
 
-        const [intervalResponse, evaluationsResponse] = await Promise.all([
+        const [intervalResponse, evaluationsResponse, settingsResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
-          fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
+          fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
+          fetch(`${API_BASE_URL}/settings`)
         ]);
 
         const intervalData = await intervalResponse.json().catch(() => ({}));
         const evaluations = await evaluationsResponse.json().catch(() => ([]));
+        const settings = await settingsResponse.json().catch(() => ([]));
+        
+        // Find the studentMaxEvaluationsPerCycle setting
+        const maxEvaluationsSetting = Array.isArray(settings) 
+          ? settings.find(s => s.key === 'studentMaxEvaluationsPerCycle') 
+          : null;
+        const maxEvaluationsPerCycle = Number(maxEvaluationsSetting?.value) || 1;
+        
         const latestEvaluation = Array.isArray(evaluations) && evaluations.length > 0 ? evaluations[0] : null;
 
         if (!latestEvaluation) {
@@ -106,6 +115,7 @@ export default function EvaluationFormPage() {
           return;
         }
 
+        // Count evaluations in current cycle
         const intervalDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
         const latestSubmittedAt = String(latestEvaluation?.submitted_at || latestEvaluation?.created_at || '').trim();
         const latestDate = new Date(latestSubmittedAt);
@@ -117,11 +127,37 @@ export default function EvaluationFormPage() {
           return;
         }
 
+        // Calculate cycle start date (count back from latest evaluation)
+        const cycleStartDate = new Date(latestDate);
+        cycleStartDate.setDate(cycleStartDate.getDate() - intervalDays);
+
+        // Count evaluations in current cycle
+        const evaluationsInCycle = Array.isArray(evaluations) 
+          ? evaluations.filter(evaluation => {
+              const evalDate = new Date(evaluation.submitted_at || evaluation.created_at);
+              return evalDate >= cycleStartDate;
+            }).length
+          : 0;
+
+        // Check if student can evaluate based on max evaluations per cycle
+        const canEvaluateByCount = maxEvaluationsPerCycle > 1 || evaluationsInCycle < maxEvaluationsPerCycle;
+        
+        // If multiple evaluations are allowed, immediately unlock the student
+        if (maxEvaluationsPerCycle > 1) {
+          // IMMEDIATE UNLOCK: Allow evaluation regardless of any previous locks
+          setCanEvaluate(true); 
+          setDaysUntilAvailable(0);
+          setNextAvailableLabel('');
+          console.log('🔓 Student unlocked: Multiple evaluations per cycle enabled');
+          return;
+        }
+
+        // Original time-based logic for single evaluation mode
         const nextAvailableDate = new Date(latestDate);
         nextAvailableDate.setDate(nextAvailableDate.getDate() + intervalDays);
         const remainingDays = Math.max(0, Math.ceil((nextAvailableDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 
-        setCanEvaluate(remainingDays === 0);
+        setCanEvaluate(remainingDays === 0 && canEvaluateByCount);
         setDaysUntilAvailable(remainingDays);
         setNextAvailableLabel(
           new Intl.DateTimeFormat('en-US', {
@@ -138,6 +174,18 @@ export default function EvaluationFormPage() {
     };
 
     loadEligibility();
+
+    // Add real-time listener for settings changes
+    const handleSettingsUpdate = () => {
+      console.log('🔄 Settings updated - refreshing evaluation eligibility');
+      loadEligibility();
+    };
+
+    window.addEventListener('student-settings-updated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('student-settings-updated', handleSettingsUpdate);
+    };
   }, []);
 
   useEffect(() => {
