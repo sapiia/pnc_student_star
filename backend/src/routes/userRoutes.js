@@ -25,13 +25,10 @@ const {
   commitUsersBulkInvite,
   validateInvite,
   completeInviteRegistration,
-<<<<<<< HEAD
   getTeacherClasses,
   getStudentsByClass,
-  getTeacherStudents
-=======
+  getTeacherStudents,
   updateClassNameForStudents
->>>>>>> d880429b5f1b2592e06ac05f27cb69cde0827433
 } = require('../controllers/userController');
 const upload = multer({
   storage: multer.memoryStorage(),

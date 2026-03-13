@@ -14,12 +14,8 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
-<<<<<<< HEAD
   ArrowUpDown,
   Filter
-=======
-  Shield
->>>>>>> d880429b5f1b2592e06ac05f27cb69cde0827433
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
