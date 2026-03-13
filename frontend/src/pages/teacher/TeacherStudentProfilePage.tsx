@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Star, AlertCircle, MessageSquare, X } from 'lucide-react';
+import { ArrowLeft, Star, AlertCircle, MessageSquare, X, ClipboardList, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSidebar';
 import TeacherMobileNav from '../../components/common/TeacherMobileNav';
@@ -54,8 +54,11 @@ export default function TeacherStudentProfilePage() {
   const [pendingDeleteFeedbackId, setPendingDeleteFeedbackId] = useState<number | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<ConversationMessage | null>(null);
   const [teacherMaxFeedbackCharacters, setTeacherMaxFeedbackCharacters] = useState(1000);
+  const [showEvaluationList, setShowEvaluationList] = useState(false);
   const [globalRatingScale, setGlobalRatingScale] = useState(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
+  const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
+  const [evaluationFeedback, setEvaluationFeedback] = useState<any[]>([]);
 
   // Initialize teacher ID
   useEffect(() => {
@@ -93,6 +96,19 @@ export default function TeacherStudentProfilePage() {
       if (response.ok) setTeacherNotifications(Array.isArray(data) ? data : []);
     } catch {}
   }, [teacherId]);
+
+  // Fetch feedback for a specific evaluation
+  const fetchEvaluationFeedback = useCallback(async (evaluationId: number) => {
+    if (!student?.id) return [];
+    try {
+      const response = await fetch(`${API_BASE_URL}/feedbacks/student/${student.id}`);
+      const data = await response.json();
+      if (response.ok && Array.isArray(data)) {
+        return data.filter((fb: any) => Number(fb.evaluation_id) === evaluationId);
+      }
+    } catch {}
+    return [];
+  }, [student?.id]);
 
   // Fetch student data
   useEffect(() => {
@@ -364,14 +380,104 @@ export default function TeacherStudentProfilePage() {
                   </span>
                   <span className="text-xs font-bold text-slate-400 tracking-wider">ID: {studentIdDisplay}</span>
                 </div>
-                <button
-                  onClick={() => navigate('/teacher/messages', { state: { selectedContactId: Number(student.id) } })}
-                  className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
-                >
-                  <MessageSquare className="w-4 h-4" /> Message Student
-                </button>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => navigate('/teacher/messages', { state: { selectedContactId: Number(student.id) } })}
+                    className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Message Student
+                  </button>
+                  <button
+                    onClick={() => setShowEvaluationList(!showEvaluationList)}
+                    className="px-6 py-3 bg-white border-2 border-primary text-primary hover:bg-primary/5 font-bold text-sm rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    {showEvaluationList ? 'Hide Evaluation List' : 'Evaluation List'}
+                    {showEvaluationList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
+            </div>
+
+            {/* Inline Evaluation List Section */}
+            {showEvaluationList && (
+              <motion.div 
+                initial={{ opacity: 0, y: -20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -20 }}
+                className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden"
+              >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                      <ClipboardList className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">Evaluation History</h3>
+                      <p className="text-xs text-slate-500">{evaluations.length} evaluation(s) found</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {evaluations.length > 0 ? (
+                    <div className="space-y-4">
+                      {evaluations.map((evalItem: any, index: number) => (
+                        <motion.button
+                          key={evalItem.id}
+                          type="button"
+                          onClick={async () => {
+                            const feedback = await fetchEvaluationFeedback(evalItem.id);
+                            setEvaluationFeedback(feedback);
+                            setViewingEvaluation(evalItem);
+                          }}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          className="w-full text-left p-5 rounded-2xl border border-slate-200 bg-white hover:border-primary/40 hover:shadow-lg transition-all shadow-sm"
+                        >
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-start gap-4 flex-1 min-w-0">
+                              <div className="size-12 rounded-xl bg-primary/5 flex items-center justify-center text-primary shrink-0">
+                                <ClipboardList className="w-6 h-6" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-base font-black text-slate-900 truncate">{evalItem.period || `Evaluation #${evaluations.length - index}`}</p>
+                                <div className="flex items-center gap-2 mt-1 text-slate-500">
+                                  <span className="text-xs">
+                                    Finished: {new Date(evalItem.submitted_at || evalItem.created_at).toLocaleDateString('en-US', { 
+                                      year: 'numeric', month: 'short', day: 'numeric'
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-medium text-slate-600">
+                                    {evalItem.criteria_count || (evalItem.responses?.length || 0)} criteria
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="flex items-center gap-0.5">
+                                {Array.from({ length: globalRatingScale }).map((_, i) => (
+                                  <Star key={i} className={`w-4 h-4 ${i < Math.floor(evalItem.average_score) ? 'text-primary fill-primary' : 'text-slate-200'}`} />
+                                ))}
+                              </div>
+                              <span className="text-lg font-black text-slate-900">{Number(evalItem.average_score).toFixed(1)}</span>
+                            </div>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                      <p className="text-sm font-bold text-slate-500">No evaluations found</p>
+                      <p className="text-xs text-slate-400 mt-1">This student hasn't submitted any evaluations yet.</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Left Column */}
@@ -528,6 +634,120 @@ export default function TeacherStudentProfilePage() {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                   <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Student Reflection</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700 italic">{activeCriterion.reflection ? `"${activeCriterion.reflection}"` : 'No reflection provided.'}</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Detailed Evaluation Report Modal */}
+      <AnimatePresence>
+        {viewingEvaluation && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { setViewingEvaluation(null); setEvaluationFeedback([]); }} className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" />
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden z-[100]">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                    <ClipboardList className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">{viewingEvaluation.period || 'Evaluation Report'}</h3>
+                    <p className="text-xs text-slate-500">
+                      Submitted: {new Date(viewingEvaluation.submitted_at || viewingEvaluation.created_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', month: 'long', day: 'numeric' 
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-primary">{Number(viewingEvaluation.average_score).toFixed(1)}</p>
+                    <p className="text-xs text-slate-400">Average Score</p>
+                  </div>
+                  <button type="button" onClick={() => { setViewingEvaluation(null); setEvaluationFeedback([]); }} 
+                    className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column - Criteria Scores */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Criteria Breakdown</h4>
+                    {viewingEvaluation.responses?.length > 0 ? (
+                      <div className="space-y-3">
+                        {viewingEvaluation.responses.map((response: any, index: number) => {
+                          const criterion = globalCriteria.find((c: any) => 
+                            String(c.id || '').trim() === String(response.criterion_id || '').trim() ||
+                            String(c.name || '').trim().toLowerCase() === String(response.criterion_name || '').trim().toLowerCase()
+                          );
+                          return (
+                            <div key={response.criterion_id || index} className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-bold text-slate-700">{response.criterion_name || criterion?.name || `Criterion ${index + 1}`}</span>
+                                <div className="flex items-center gap-1">
+                                  {Array.from({ length: globalRatingScale }).map((_, i) => (
+                                    <Star key={i} className={`w-3 h-3 ${i < Math.floor(response.star_value) ? 'text-primary fill-primary' : 'text-slate-200'}`} />
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-500">{response.star_value}/{globalRatingScale} Stars</p>
+                              {response.reflection && (
+                                <p className="text-xs text-slate-600 mt-2 italic line-clamp-2">"{response.reflection}"</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                        <p className="text-sm">No detailed criteria data available.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column - Teacher Feedback */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Teacher Feedback</h4>
+                    {evaluationFeedback.length > 0 ? (
+                      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                        {evaluationFeedback.map((feedback: any) => (
+                          <div key={feedback.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                                {feedback.teacher_profile_image ? (
+                                  <img src={feedback.teacher_profile_image} alt={feedback.teacher_name || 'Teacher'} className="w-full h-full object-cover rounded-lg" />
+                                ) : (
+                                  <Users className="w-4 h-4" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
+                                <p className="text-[10px] text-slate-400">{new Date(feedback.created_at).toLocaleDateString('en-US', { 
+                                  year: 'numeric', month: 'short', day: 'numeric' 
+                                })}</p>
+                              </div>
+                              {Number(feedback.teacher_id) === teacherId && (
+                                <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">You</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-700 leading-relaxed">{feedback.comment}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                        <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm">No feedback yet for this evaluation.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </motion.div>
