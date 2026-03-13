@@ -253,7 +253,7 @@ export default function TeacherStudentProfilePage() {
       const res = await fetch(`${API_BASE_URL}/feedbacks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teacher_id: teacherId, student_id: student.id, evaluation_id: latestEval?.id || null, comment: finalComment })
+        body: JSON.stringify({ teacher_id: teacherId, student_id: student.id, evaluation_id: selectedEvaluation?.id || latestEval?.id || null, comment: finalComment })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Failed to save feedback');
@@ -261,6 +261,12 @@ export default function TeacherStudentProfilePage() {
       setFeedbackDraft('');
       setReplyToMessage(null);
       void loadTeacherFeedbacks();
+      // Also refresh evaluation-specific feedback
+      const evalId = selectedEvaluation?.id || latestEval?.id;
+      if (evalId) {
+        const feedback = await fetchEvaluationFeedback(evalId);
+        setEvaluationFeedback(feedback);
+      }
     } catch (err: any) {
       setFeedbackError(err.message || 'Error saving feedback');
     } finally {
@@ -550,6 +556,29 @@ export default function TeacherStudentProfilePage() {
                     )) : (
                       <div className="text-center py-6 text-sm text-slate-400">No feedback for this evaluation yet</div>
                     )}
+                  </div>
+                  
+                  {/* Feedback Input Form */}
+                  <div className="mt-4 space-y-3">
+                    <textarea 
+                      rows={3} 
+                      placeholder={`Write feedback for ${selectedEvaluation?.period || 'this evaluation'}...`} 
+                      value={feedbackDraft} 
+                      onChange={(e) => setFeedbackDraft(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-slate-400">{feedbackDraft.length}/{teacherMaxFeedbackCharacters}</span>
+                      <button 
+                        onClick={handleSubmitFeedback} 
+                        disabled={isSubmittingFeedback || !feedbackDraft.trim()}
+                        className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors"
+                      >
+                        {isSubmittingFeedback ? 'Sending...' : 'Send Feedback'}
+                      </button>
+                    </div>
+                    {feedbackError && <p className="text-xs text-rose-600">{feedbackError}</p>}
+                    {feedbackSuccess && <p className="text-xs text-emerald-600">{feedbackSuccess}</p>}
                   </div>
                 </div>
               </div>
