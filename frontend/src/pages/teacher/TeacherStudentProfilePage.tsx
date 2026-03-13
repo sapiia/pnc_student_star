@@ -57,8 +57,8 @@ export default function TeacherStudentProfilePage() {
   const [showEvaluationList, setShowEvaluationList] = useState(false);
   const [globalRatingScale, setGlobalRatingScale] = useState(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
-  const [viewingEvaluation, setViewingEvaluation] = useState<any>(null);
   const [evaluationFeedback, setEvaluationFeedback] = useState<any[]>([]);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
 
   // Initialize teacher ID
   useEffect(() => {
@@ -293,33 +293,40 @@ export default function TeacherStudentProfilePage() {
     const activeGlobal = globalCriteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
     if (!activeGlobal.length) return { data: [], maxValue: globalRatingScale };
     
+    // Use selected evaluation if available, otherwise use latest
+    const evalToShow = selectedEvaluation || latestEval;
+    
     const data = activeGlobal.map((criterion: any, index: number) => {
-      const response = (latestEval?.responses || []).find((r: any) => 
+      const response = (evalToShow?.responses || []).find((r: any) => 
         String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
         String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
       );
       return { subject: String(criterion.name || `Criterion ${index + 1}`), score: response ? Math.max(0, Number(response.star_value || 0)) : 0 };
     });
     return { data, maxValue: globalRatingScale };
-  }, [latestEval, globalCriteria, globalRatingScale]);
+  }, [latestEval, selectedEvaluation, globalCriteria, globalRatingScale]);
 
   const selectedCriteria = useMemo(() => {
     const activeGlobal = globalCriteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
+    // Use selected evaluation if available, otherwise use latest
+    const evalToShow = selectedEvaluation || latestEval;
+    
     return activeGlobal.map((criterion: any, index: number) => {
-      const response = (latestEval?.responses || []).find((r: any) => 
+      const response = (evalToShow?.responses || []).find((r: any) => 
         String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
         String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
       );
       return {
         criterion_key: criterion.id || criterion.name || `criterion-${index}`,
-        criterion_name: criterion.name,
-        criterion_icon: criterion.icon,
-        star_value: response ? Number(response.star_value || 0) : 0,
+        criterion_name: criterion.name || `Criterion ${index + 1}`,
+        criterion_icon: criterion.icon || 'Star',
+        criterion_color: criterion.color || CRITERIA_COLOR_STYLES[index % CRITERIA_COLOR_STYLES.length].iconText.replace('text-', ''),
+        star_value: response ? Math.max(0, Number(response.star_value || 0)) : 0,
         reflection: response ? String(response.reflection || '').trim() : '',
         tip_snapshot: response ? String(response.tip_snapshot || '').trim() : '',
       };
     });
-  }, [globalCriteria, latestEval]);
+  }, [globalCriteria, latestEval, selectedEvaluation]);
 
   // Loading state
   if (isLoading) {
@@ -427,13 +434,19 @@ export default function TeacherStudentProfilePage() {
                           key={evalItem.id}
                           type="button"
                           onClick={async () => {
+                            // Set selected evaluation to update radar and criteria breakdown
+                            setSelectedEvaluation(evalItem);
+                            // Fetch feedback for this evaluation
                             const feedback = await fetchEvaluationFeedback(evalItem.id);
                             setEvaluationFeedback(feedback);
-                            setViewingEvaluation(evalItem);
                           }}
                           whileHover={{ scale: 1.01 }}
                           whileTap={{ scale: 0.99 }}
-                          className="w-full text-left p-5 rounded-2xl border border-slate-200 bg-white hover:border-primary/40 hover:shadow-lg transition-all shadow-sm"
+                          className={`w-full text-left p-5 rounded-2xl border-2 transition-all shadow-sm ${
+                            selectedEvaluation?.id === evalItem.id 
+                              ? 'border-primary bg-primary/5 shadow-lg' 
+                              : 'border-slate-200 bg-white hover:border-primary/40 hover:shadow-lg'
+                          }`}
                         >
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="flex items-start gap-4 flex-1 min-w-0">
@@ -492,62 +505,51 @@ export default function TeacherStudentProfilePage() {
                       <div className="text-center p-6 text-sm font-bold text-slate-400">No evaluation data available.</div>
                     )}
                   </div>
-                  {latestEval && (
+                  {selectedEvaluation && (
                     <div className="mt-6 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Latest Average Score</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                        {selectedEvaluation.period || 'Selected'} Average Score
+                      </p>
                       <div className="text-3xl font-black text-slate-900">
-                        {Number(latestEval.average_score).toFixed(1)} <span className="text-sm text-slate-400">/ {latestEval.rating_scale}</span>
+                        {Number(selectedEvaluation.average_score).toFixed(1)} <span className="text-sm text-slate-400">/ {selectedEvaluation.rating_scale || globalRatingScale}</span>
                       </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {new Date(selectedEvaluation.submitted_at || selectedEvaluation.created_at).toLocaleDateString()}
+                      </p>
                     </div>
                   )}
                 </div>
 
-                {/* Feedback Chat Section - Simplified inline */}
+                {/* Evaluation-Specific Feedback Section */}
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <h4 className="text-sm font-bold text-slate-900">Teacher Feedback</h4>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{conversationMessages.length} messages</span>
-                    </div>
-                    <div className="max-h-80 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      {conversationMessages.length > 0 ? conversationMessages.map((message) => (
-                        <div key={message.id} className={cn('flex', message.source === 'teacher' ? 'justify-end' : 'justify-start')}>
-                          <div className={cn('max-w-[90%] rounded-2xl border px-3 py-2', message.source === 'teacher' ? 'bg-primary text-white border-primary/40' : 'bg-white text-slate-700 border-slate-200')}>
-                            <p className={cn('text-[10px] font-black uppercase tracking-widest', message.source === 'teacher' ? 'text-white/80' : 'text-slate-400')}>
-                              {message.source === 'teacher' ? 'Teacher' : 'Student'} • {formatShortDate(message.createdAt)}
-                            </p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm">{message.text}</p>
-                            <div className="mt-2 flex gap-2">
-                              <button onClick={() => setReplyToMessage(message)} className={cn('text-[10px] font-black uppercase', message.source === 'teacher' ? 'text-white/80' : 'text-slate-500')}>Reply</button>
-                              {message.source === 'teacher' && message.feedbackId && (
-                                <button onClick={() => handleHideFeedbackForMe(Number(message.feedbackId))} className={cn('text-[10px] font-black uppercase', message.source === 'teacher' ? 'text-white/80' : 'text-slate-500')}>Hide</button>
-                              )}
-                            </div>
-                          </div>
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <h4 className="text-sm font-bold text-slate-900">{selectedEvaluation?.period || 'Evaluation'} Feedback</h4>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{evaluationFeedback.length} messages</span>
+                  </div>
+                  <div className="max-h-64 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    {evaluationFeedback.length > 0 ? evaluationFeedback.map((feedback: any) => (
+                      <div key={feedback.id} className="flex gap-3 p-3 bg-white rounded-xl border border-slate-200">
+                        <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          {feedback.teacher_profile_image ? (
+                            <img src={feedback.teacher_profile_image} alt={feedback.teacher_name || 'Teacher'} className="w-full h-full object-cover rounded-lg" />
+                          ) : (
+                            <Users className="w-4 h-4" />
+                          )}
                         </div>
-                      )) : (
-                        <div className="text-center py-4 text-sm text-slate-400">No messages yet</div>
-                      )}
-                    </div>
-                    {replyToMessage && (
-                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-2">
-                        <div className="flex justify-between">
-                          <p className="text-xs text-primary">Replying to {replyToMessage.source}</p>
-                          <button onClick={() => setReplyToMessage(null)}><X className="w-4 h-4" /></button>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
+                            {Number(feedback.teacher_id) === teacherId && (
+                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">You</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400">{new Date(feedback.created_at).toLocaleDateString()}</p>
+                          <p className="text-sm text-slate-700 mt-1">{feedback.comment}</p>
                         </div>
                       </div>
+                    )) : (
+                      <div className="text-center py-6 text-sm text-slate-400">No feedback for this evaluation yet</div>
                     )}
-                    <textarea rows={3} placeholder="Write feedback..." value={feedbackDraft} onChange={(e) => setFeedbackDraft(e.target.value)}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-slate-400">{feedbackDraft.length}/{teacherMaxFeedbackCharacters}</span>
-                      <button onClick={handleSubmitFeedback} disabled={isSubmittingFeedback || !feedbackDraft.trim()}
-                        className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                        {isSubmittingFeedback ? 'Sending...' : 'Send'}
-                      </button>
-                    </div>
-                    {feedbackError && <p className="text-xs text-rose-600">{feedbackError}</p>}
-                    {feedbackSuccess && <p className="text-xs text-emerald-600">{feedbackSuccess}</p>}
                   </div>
                 </div>
               </div>
@@ -557,7 +559,11 @@ export default function TeacherStudentProfilePage() {
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Criteria Breakdown</h3>
-                    {latestEval && <span className="text-xs font-bold text-slate-400">From {new Date(latestEval.created_at).toLocaleDateString()}</span>}
+                    {selectedEvaluation ? (
+                      <span className="text-xs font-bold text-primary">{selectedEvaluation.period} • {new Date(selectedEvaluation.submitted_at || selectedEvaluation.created_at).toLocaleDateString()}</span>
+                    ) : latestEval ? (
+                      <span className="text-xs font-bold text-slate-400">From {new Date(latestEval.created_at).toLocaleDateString()}</span>
+                    ) : null}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -634,120 +640,6 @@ export default function TeacherStudentProfilePage() {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                   <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Student Reflection</p>
                   <p className="text-sm font-medium leading-relaxed text-slate-700 italic">{activeCriterion.reflection ? `"${activeCriterion.reflection}"` : 'No reflection provided.'}</p>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Detailed Evaluation Report Modal */}
-      <AnimatePresence>
-        {viewingEvaluation && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-            <motion.button type="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { setViewingEvaluation(null); setEvaluationFeedback([]); }} className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" />
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden z-[100]">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <ClipboardList className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black text-slate-900">{viewingEvaluation.period || 'Evaluation Report'}</h3>
-                    <p className="text-xs text-slate-500">
-                      Submitted: {new Date(viewingEvaluation.submitted_at || viewingEvaluation.created_at).toLocaleDateString('en-US', { 
-                        year: 'numeric', month: 'long', day: 'numeric' 
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-2xl font-black text-primary">{Number(viewingEvaluation.average_score).toFixed(1)}</p>
-                    <p className="text-xs text-slate-400">Average Score</p>
-                  </div>
-                  <button type="button" onClick={() => { setViewingEvaluation(null); setEvaluationFeedback([]); }} 
-                    className="size-10 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Left Column - Criteria Scores */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Criteria Breakdown</h4>
-                    {viewingEvaluation.responses?.length > 0 ? (
-                      <div className="space-y-3">
-                        {viewingEvaluation.responses.map((response: any, index: number) => {
-                          const criterion = globalCriteria.find((c: any) => 
-                            String(c.id || '').trim() === String(response.criterion_id || '').trim() ||
-                            String(c.name || '').trim().toLowerCase() === String(response.criterion_name || '').trim().toLowerCase()
-                          );
-                          return (
-                            <div key={response.criterion_id || index} className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-bold text-slate-700">{response.criterion_name || criterion?.name || `Criterion ${index + 1}`}</span>
-                                <div className="flex items-center gap-1">
-                                  {Array.from({ length: globalRatingScale }).map((_, i) => (
-                                    <Star key={i} className={`w-3 h-3 ${i < Math.floor(response.star_value) ? 'text-primary fill-primary' : 'text-slate-200'}`} />
-                                  ))}
-                                </div>
-                              </div>
-                              <p className="text-xs text-slate-500">{response.star_value}/{globalRatingScale} Stars</p>
-                              {response.reflection && (
-                                <p className="text-xs text-slate-600 mt-2 italic line-clamp-2">"{response.reflection}"</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
-                        <p className="text-sm">No detailed criteria data available.</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column - Teacher Feedback */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Teacher Feedback</h4>
-                    {evaluationFeedback.length > 0 ? (
-                      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                        {evaluationFeedback.map((feedback: any) => (
-                          <div key={feedback.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                                {feedback.teacher_profile_image ? (
-                                  <img src={feedback.teacher_profile_image} alt={feedback.teacher_name || 'Teacher'} className="w-full h-full object-cover rounded-lg" />
-                                ) : (
-                                  <Users className="w-4 h-4" />
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
-                                <p className="text-[10px] text-slate-400">{new Date(feedback.created_at).toLocaleDateString('en-US', { 
-                                  year: 'numeric', month: 'short', day: 'numeric' 
-                                })}</p>
-                              </div>
-                              {Number(feedback.teacher_id) === teacherId && (
-                                <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">You</span>
-                              )}
-                            </div>
-                            <p className="text-sm text-slate-700 leading-relaxed">{feedback.comment}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
-                        <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                        <p className="text-sm">No feedback yet for this evaluation.</p>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             </motion.div>
