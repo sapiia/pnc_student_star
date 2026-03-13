@@ -1940,6 +1940,37 @@ const hardDeleteAllUsers = async (req, res) => {
   }
 };
 
+// Update class name for all students in a class
+const updateClassNameForStudents = async (req, res) => {
+  try {
+    const { oldClassName, newClassName } = req.body;
+
+    if (!oldClassName || !newClassName) {
+      return res.status(400).json({ error: "Both oldClassName and newClassName are required." });
+    }
+
+    if (oldClassName === newClassName) {
+      return res.status(400).json({ error: "New class name must be different from the old class name." });
+    }
+
+    // Update all users with the old class name
+    const [result] = await db.query(
+      "UPDATE users SET class = ?, updated_at = CURRENT_TIMESTAMP() WHERE class = ? AND role = 'student'",
+      [newClassName, oldClassName]
+    );
+
+    return res.json({
+      message: `Class name updated successfully.`,
+      affectedRows: result.affectedRows,
+      oldClassName,
+      newClassName
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update class name." });
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -1962,7 +1993,11 @@ module.exports = {
   commitUsersBulkInvite,
   validateInvite,
   completeInviteRegistration,
+<<<<<<< HEAD
   getTeacherClasses,
   getStudentsByClass,
   getTeacherStudents
+=======
+  updateClassNameForStudents
+>>>>>>> d880429b5f1b2592e06ac05f27cb69cde0827433
 };

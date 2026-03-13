@@ -14,8 +14,12 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
+<<<<<<< HEAD
   ArrowUpDown,
   Filter
+=======
+  Shield
+>>>>>>> d880429b5f1b2592e06ac05f27cb69cde0827433
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -62,11 +66,6 @@ const STUDENT_STATS = {
   }
 };
 
-const STATS = [
-  { label: 'Evaluation Period', value: 'Oct 01 - Dec 15', trend: 'Active', icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50' },
-  { label: 'System Health', value: '99.9%', trend: 'Online', icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-];
-
 const RECENT_USERS = [
   { id: 101, name: 'Amin Pisal', email: 'amin.pisal@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'AP', color: 'bg-blue-100 text-blue-700' },
   { id: 127, name: 'Ang Thyda', email: 'ang.thyda@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'AT', color: 'bg-indigo-100 text-indigo-700' },
@@ -84,6 +83,7 @@ export default function AdminDashboardPage() {
   const navigate = useNavigate();
   const [studentStats, setStudentStats] = useState<any>(null);
   const [teacherCount, setTeacherCount] = useState(0);
+  const [adminCount, setAdminCount] = useState(0);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [sortBy, setSortBy] = useState<string>('generation');
   const [sortOrder, setSortOrder] = useState<string>('desc');
@@ -96,7 +96,9 @@ export default function AdminDashboardPage() {
         if (Array.isArray(data)) {
           const students = data.filter((u: any) => u.role.toLowerCase() === 'student');
           const teachers = data.filter((u: any) => u.role.toLowerCase() === 'teacher');
+          const admins = data.filter((u: any) => u.role.toLowerCase() === 'admin');
           setTeacherCount(teachers.length);
+          setAdminCount(admins.length);
           
           const genStats: Record<string, any> = {};
           students.forEach(s => {
@@ -256,7 +258,7 @@ export default function AdminDashboardPage() {
                     <UserCheck className="w-6 h-6" />
                   </div>
                   <button 
-                    onClick={() => navigate('/admin/users')}
+                    onClick={() => navigate('/admin/teachers')}
                     className="flex items-center gap-1 text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
                   >
                     View All
@@ -272,32 +274,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             </motion.div>
-
-            {/* Other Stats */}
-            {STATS.map((stat, idx) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: (idx + 2) * 0.1 }}
-                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className={cn("size-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110", stat.bg, stat.color)}>
-                    <stat.icon className="w-6 h-6" />
-                  </div>
-                  <div className={cn(
-                    "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                    stat.trend === 'Active' ? "bg-emerald-50 text-emerald-600" : 
-                    stat.trend === 'Online' ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-500"
-                  )}>
-                    {stat.trend}
-                  </div>
-                </div>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className="text-2xl font-black text-slate-900">{stat.value}</p>
-              </motion.div>
-            ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
