@@ -1,18 +1,18 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const userRoutes = require('../routes/userRoutes');
-const evaluationRoutes = require('../routes/evaluationRoutes');
-const feedbackRoutes = require('../routes/feedbackRoutes');
-const meetingScheduleRoutes = require('../routes/meetingScheduleRoutes');
-const notificationRoutes = require('../routes/notificationRoutes');
-const questionRoutes = require('../routes/questionRoutes');
-const settingRoutes = require('../routes/settingRoutes');
-const db = require('../config/database');
+const userRoutes = require('./routes/userRoutes');
+const evaluationRoutes = require('./routes/evaluationRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
+const meetingScheduleRoutes = require('./routes/meetingScheduleRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const questionRoutes = require('./routes/questionRoutes');
+const settingRoutes = require('./routes/settingRoutes');
+const db = require('./config/database');
 
 const app = express();
 
-// Middleware to parse JSON bodies
+// Middleware to parse JSON bodies and form data
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -33,3 +33,4 @@ app.get('/health', (req, res) => {
 });
 
 module.exports = app;
+
