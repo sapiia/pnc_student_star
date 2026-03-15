@@ -3,8 +3,12 @@ const CriterionConfig = require('../models/CriterionConfig');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { emitNotificationEvent } = require('../realtime');
+const { getCache, setCache, delCache, getOrSetCache } = require('../utils/cache');
 
 const lastSentNotification = new Map();
+
+const SETTINGS_CACHE_KEY = 'settings:all';
+const CRITERIA_CACHE_KEY = 'settings:criteria';
 
 const notifyEvaluationChange = async (message) => {
   // Prevent duplicate identical notifications within a 60 second window
@@ -45,7 +49,9 @@ const notifyEvaluationChange = async (message) => {
 
 const getAllSettings = async (req, res) => {
   try {
-    const settings = await Setting.findAll();
+    const settings = await getOrSetCache(SETTINGS_CACHE_KEY, async () => {
+      return await Setting.findAll();
+    });
     res.json(settings);
   } catch (err) {
     console.error(err);
@@ -82,6 +88,7 @@ const getSettingByKey = async (req, res) => {
 const createSetting = async (req, res) => {
   try {
     const settingId = await Setting.create(req.body);
+    await delCache(SETTINGS_CACHE_KEY);
     res.status(201).json({ 
       message: "Setting created successfully", 
       settingId 
@@ -98,6 +105,7 @@ const updateSetting = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ message: "Setting not found" });
     }
+    await delCache(SETTINGS_CACHE_KEY);
     res.json({ message: "Setting updated successfully" });
   } catch (err) {
     console.error(err);
@@ -113,6 +121,14 @@ const updateSettingByKey = async (req, res) => {
     const updated = await Setting.updateByKey(key, value);
     if (!updated) {
       return res.status(404).json({ message: "Setting not found" });
+    }
+
+    await delCache(SETTINGS_CACHE_KEY);
+
+    // Invalidate specific user profile cache if it's a department setting
+    if (key.startsWith('profile_department_')) {
+      const userId = key.replace('profile_department_', '');
+      await delCache(`user:profile:${userId}`);
     }
 
     // Notify about evaluation process changes
@@ -134,10 +150,18 @@ const updateSettingByKey = async (req, res) => {
 
 const deleteSetting = async (req, res) => {
   try {
+    const setting = await Setting.findById(req.params.id);
     const deleted = await Setting.delete(req.params.id);
     if (!deleted) {
       return res.status(404).json({ message: "Setting not found" });
     }
+    
+    await delCache(SETTINGS_CACHE_KEY);
+    if (setting && setting.key && setting.key.startsWith('profile_department_')) {
+      const userId = setting.key.replace('profile_department_', '');
+      await delCache(`user:profile:${userId}`);
+    }
+
     res.json({ message: "Setting deleted successfully" });
   } catch (err) {
     console.error(err);
@@ -147,10 +171,18 @@ const deleteSetting = async (req, res) => {
 
 const deleteSettingByKey = async (req, res) => {
   try {
-    const deleted = await Setting.deleteByKey(req.params.key);
+    const { key } = req.params;
+    const deleted = await Setting.deleteByKey(key);
     if (!deleted) {
       return res.status(404).json({ message: "Setting not found" });
     }
+    
+    await delCache(SETTINGS_CACHE_KEY);
+    if (key.startsWith('profile_department_')) {
+      const userId = key.replace('profile_department_', '');
+      await delCache(`user:profile:${userId}`);
+    }
+
     res.json({ message: "Setting deleted successfully" });
   } catch (err) {
     console.error(err);
@@ -160,7 +192,9 @@ const deleteSettingByKey = async (req, res) => {
 
 const getEvaluationCriteriaConfig = async (_req, res) => {
   try {
-    const config = await CriterionConfig.getConfig();
+    const config = await getOrSetCache(CRITERIA_CACHE_KEY, async () => {
+      return await CriterionConfig.getConfig();
+    });
     res.json(config);
   } catch (err) {
     console.error(err);
@@ -174,6 +208,8 @@ const saveEvaluationCriteriaConfig = async (req, res) => {
       ratingScale: req.body?.ratingScale,
       criteria: req.body?.criteria
     });
+
+    await delCache(CRITERIA_CACHE_KEY);
 
     await notifyEvaluationChange('The evaluation criteria have been updated by the administrator. Please review the new criteria for your next self-evaluation.');
 

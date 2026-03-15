@@ -7,7 +7,24 @@ const XLSX = require('xlsx');
 const saltRounds = 10;
 const Notification = require('../models/Notification');
 const { emitNotificationEvent } = require('../realtime');
+const { getCache, setCache, delCache, getOrSetCache } = require('../utils/cache');
 
+const USERS_ALL_CACHE_KEY = 'users:all';
+const USER_PROFILE_CACHE_PREFIX = 'user:profile:';
+const USER_BY_ID_CACHE_PREFIX = 'user:id:';
+
+const invalidateUserCache = async (userId) => {
+  try {
+    const keys = [USERS_ALL_CACHE_KEY];
+    if (userId) {
+      keys.push(`${USER_PROFILE_CACHE_PREFIX}${userId}`);
+      keys.push(`${USER_BY_ID_CACHE_PREFIX}${userId}`);
+    }
+    await delCache(keys);
+  } catch (err) {
+    console.error('Error invalidating user cache:', err);
+  }
+};
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
@@ -630,6 +647,8 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     queryExecutor
   });
 
+  await invalidateUserCache();
+
   if (isConfigured && transporter && !options.skipSendEmail) {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
@@ -748,22 +767,25 @@ const validateBulkInviteRows = async (rows, options = {}) => {
 // Get all users
 const getAllUsers = async (req, res) => {
   try {
-    const columns = await getUsersTableColumns();
-    try {
-      const [rows] = await db.query(`
-        SELECT
-          u.*,
-          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
-        FROM users u
-        LEFT JOIN students s ON s.user_id = u.id
-        ORDER BY u.created_at DESC
-      `);
-      return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
-    } catch (_err) {
-      // Backward-compatible fallback when migrations/tables are not yet applied.
-      const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
-      return res.json(rows.map((row) => normalizeUserStatusForResponse(row, columns)));
-    }
+    const usersData = await getOrSetCache(USERS_ALL_CACHE_KEY, async () => {
+      const columns = await getUsersTableColumns();
+      try {
+        const [rows] = await db.query(`
+          SELECT
+            u.*,
+            COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+          FROM users u
+          LEFT JOIN students s ON s.user_id = u.id
+          ORDER BY u.created_at DESC
+        `);
+        return rows.map((row) => normalizeUserStatusForResponse(row, columns));
+      } catch (_err) {
+        const [rows] = await db.query("SELECT * FROM users ORDER BY created_at DESC");
+        return rows.map((row) => normalizeUserStatusForResponse(row, columns));
+      }
+    });
+
+    return res.json(usersData);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database Error" });
@@ -772,28 +794,33 @@ const getAllUsers = async (req, res) => {
 
 // Get user by ID
 const getUserById = async (req, res) => {
+  const userId = req.params.id;
+  const cacheKey = `${USER_BY_ID_CACHE_PREFIX}${userId}`;
   try {
-    const columns = await getUsersTableColumns();
-    try {
-      const [rows] = await db.query(`
-        SELECT
-          u.*,
-          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
-        FROM users u
-        LEFT JOIN students s ON s.user_id = u.id
-        WHERE u.id = ?
-      `, [req.params.id]);
-      if (rows.length === 0) {
-        return res.status(404).json({ message: "User not found" });
+    const userData = await getOrSetCache(cacheKey, async () => {
+      const columns = await getUsersTableColumns();
+      try {
+        const [rows] = await db.query(`
+          SELECT
+            u.*,
+            COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+          FROM users u
+          LEFT JOIN students s ON s.user_id = u.id
+          WHERE u.id = ?
+        `, [userId]);
+        if (rows.length === 0) return null;
+        return normalizeUserStatusForResponse(rows[0], columns);
+      } catch (_err) {
+        const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [userId]);
+        if (rows.length === 0) return null;
+        return normalizeUserStatusForResponse(rows[0], columns);
       }
-      return res.json(normalizeUserStatusForResponse(rows[0], columns));
-    } catch (_err) {
-      const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [req.params.id]);
-      if (rows.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      return res.json(normalizeUserStatusForResponse(rows[0], columns));
+    });
+
+    if (!userData) {
+      return res.status(404).json({ message: "User not found" });
     }
+    return res.json(userData);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -834,6 +861,8 @@ const createUser = async (req, res) => {
       isRegistered: true
     });
 
+    await invalidateUserCache();
+
     res.status(201).json({
       message: "User created successfully",
       userId: result.insertId
@@ -869,6 +898,8 @@ const updateUser = async (req, res) => {
 
     const sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, role = ?, class = ?, student_id = ?, gender = ? WHERE id = ?";
     await db.query(sql, [firstName, lastName, email, normalizedRole, class_name || null, normalizedStudentId || null, gender || null, userId]);
+
+    await invalidateUserCache(userId);
 
     // Construct notification message
     if (oldUser) {
@@ -1030,6 +1061,7 @@ const commitBulkInviteRows = async (rows) => {
     }
 
     await connection.commit();
+    await invalidateUserCache();
   } catch (err) {
     await connection.rollback();
     throw err;
@@ -1308,43 +1340,49 @@ const getUserProfile = async (req, res) => {
     return res.status(400).json({ error: "Invalid user id." });
   }
 
+  const cacheKey = `${USER_PROFILE_CACHE_PREFIX}${userId}`;
   try {
-    const columns = await getUsersTableColumns();
-    const hasStudentId = columns.has('student_id');
-    const hasClass = columns.has('class');
-    const [rows] = await db.query(`
-      SELECT
-        u.*,
-        COALESCE(NULLIF(u.student_id, ''), st.student_no) AS resolved_student_id,
-        s.value AS department
-      FROM users u
-      LEFT JOIN students st ON st.user_id = u.id
-      LEFT JOIN settings s ON s.key = CONCAT('profile_department_', u.id)
-      WHERE u.id = ?
-      LIMIT 1
-    `, [userId]);
+    const profileData = await getOrSetCache(cacheKey, async () => {
+      const columns = await getUsersTableColumns();
+      const hasStudentId = columns.has('student_id');
+      const hasClass = columns.has('class');
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), st.student_no) AS resolved_student_id,
+          s.value AS department
+        FROM users u
+        LEFT JOIN students st ON st.user_id = u.id
+        LEFT JOIN settings s ON s.key = CONCAT('profile_department_', u.id)
+        WHERE u.id = ?
+        LIMIT 1
+      `, [userId]);
 
-    if (!rows.length) {
+      if (!rows.length) return null;
+
+      const user = rows[0];
+      return {
+        id: user.id,
+        name: getDisplayNameFromUserRow(user) || user.email,
+        first_name: (user.first_name || '').toString().trim() || null,
+        last_name: (user.last_name || '').toString().trim() || null,
+        email: user.email,
+        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        role: normalizeRole(user.role),
+        department: (user.department || '').toString().trim(),
+        student_id: hasStudentId ? ((user.student_id || user.resolved_student_id || '') || null) : null,
+        class: hasClass ? (user.class || null) : null,
+        is_active: Number(user.is_active ?? 1),
+        is_deleted: Number(user.is_deleted ?? 0),
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      };
+    });
+
+    if (!profileData) {
       return res.status(404).json({ error: "User not found." });
     }
-
-    const user = rows[0];
-    return res.json({
-      id: user.id,
-      name: getDisplayNameFromUserRow(user) || user.email,
-      first_name: (user.first_name || '').toString().trim() || null,
-      last_name: (user.last_name || '').toString().trim() || null,
-      email: user.email,
-      profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
-      role: normalizeRole(user.role),
-      department: (user.department || '').toString().trim(),
-      student_id: hasStudentId ? ((user.student_id || user.resolved_student_id || '') || null) : null,
-      class: hasClass ? (user.class || null) : null,
-      is_active: Number(user.is_active ?? 1),
-      is_deleted: Number(user.is_deleted ?? 0),
-      created_at: user.created_at,
-      updated_at: user.updated_at
-    });
+    return res.json(profileData);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message || "Failed to load profile." });
@@ -1440,6 +1478,8 @@ const updateUserProfile = async (req, res) => {
       await db.query("DELETE FROM settings WHERE `key` = ?", [departmentKey]);
     }
 
+    await invalidateUserCache(userId);
+
     const [rows] = await db.query(`
       SELECT
         u.*,
@@ -1513,6 +1553,8 @@ const updateUserProfileImage = async (req, res) => {
       [publicUrl, userId]
     );
 
+    await invalidateUserCache(userId);
+
     const [rows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
     const user = rows[0];
 
@@ -1585,6 +1627,8 @@ const changeUserPassword = async (req, res) => {
       "UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
       [hashedPassword, userId]
     );
+
+    await invalidateUserCache(userId);
 
     return res.json({ message: "Password changed successfully." });
   } catch (err) {
@@ -1715,6 +1759,8 @@ const setUserActive = async (req, res) => {
       return res.status(404).json({ error: hasIsDeleted ? "User not found or already deleted." : "User not found." });
     }
 
+    await invalidateUserCache(req.params.id);
+
     return res.json({ message: is_active ? "User enabled successfully." : "User disabled successfully." });
   } catch (err) {
     console.error(err);
@@ -1774,6 +1820,8 @@ const deleteUser = async (req, res) => {
       return res.status(409).json({ error: "User is already disabled." });
     }
 
+    await invalidateUserCache(userId);
+
     return res.json({ message: "User deleted (archived) successfully." });
   } catch (err) {
     console.error(err);
@@ -1802,6 +1850,8 @@ const hardDeleteUser = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "User not found." });
     }
+
+    await invalidateUserCache(userId);
 
     return res.json({ message: "User permanently deleted from database." });
   } catch (err) {
@@ -1843,6 +1893,8 @@ const deleteAllUsers = async (req, res) => {
 
     const [result] = await db.query(sql);
 
+    await invalidateUserCache();
+
     return res.json({
       message: result.affectedRows === 0
         ? "No active users to delete."
@@ -1859,6 +1911,9 @@ const deleteAllUsers = async (req, res) => {
 const disableAllUsers = async (req, res) => {
   try {
     const [result] = await db.query("UPDATE users SET is_active = 0, is_disable = 1, updated_at = CURRENT_TIMESTAMP() WHERE (is_deleted IS NULL OR is_deleted = 0)");
+    
+    await invalidateUserCache();
+
     return res.json({ message: `${result.affectedRows} users disabled successfully.`, affectedRows: result.affectedRows });
   } catch (err) {
     console.error(err);
@@ -1870,6 +1925,9 @@ const disableAllUsers = async (req, res) => {
 const hardDeleteAllUsers = async (req, res) => {
   try {
     const [result] = await db.query("DELETE FROM users WHERE role <> 'admin'");
+    
+    await invalidateUserCache();
+
     return res.json({ message: `${result.affectedRows} non-admin users permanently deleted.`, affectedRows: result.affectedRows });
   } catch (err) {
     console.error(err);
@@ -1895,6 +1953,8 @@ const updateClassNameForStudents = async (req, res) => {
       "UPDATE users SET class = ?, updated_at = CURRENT_TIMESTAMP() WHERE class = ? AND role = 'student'",
       [newClassName, oldClassName]
     );
+
+    await invalidateUserCache();
 
     return res.json({
       message: `Class name updated successfully.`,
