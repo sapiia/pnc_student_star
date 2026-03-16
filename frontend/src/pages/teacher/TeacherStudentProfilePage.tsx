@@ -623,7 +623,7 @@ export default function TeacherStudentProfilePage() {
               </motion.div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Left Column */}
               <div className="lg:col-span-1 space-y-8">
                 {/* Radar Chart */}
@@ -659,7 +659,7 @@ export default function TeacherStudentProfilePage() {
                       {evaluationFeedback.length} feedback · {evaluationStudentReplies.length} replies
                     </span>
                   </div>
-                  <div className="max-h-64 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="max-h-96 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     {/* Combined feedback and replies, sorted by date */}
                     {(() => {
                       const allMessages = [
@@ -821,7 +821,7 @@ export default function TeacherStudentProfilePage() {
               </div>
 
               {/* Right Column - Criteria */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="lg:col-span-1 space-y-8">
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Criteria Breakdown</h3>
