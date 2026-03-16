@@ -131,7 +131,7 @@ const composeDirectMessage = (payload: DirectMessage) => (
 export default function TeacherMessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const passedState = location.state as { selectedContactId?: number, isMobileChatOpen?: boolean } | null;
+  const passedState = location.state as { selectedContactId?: number, selectedContactName?: string, isMobileChatOpen?: boolean } | null;
   const queryContactToken = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return String(params.get('contactId') || params.get('studentId') || '').trim();
@@ -457,6 +457,16 @@ export default function TeacherMessagesPage() {
     const existsInContacts = contactPool.some((contact) => contact.id === selectedContactId);
 
     if (!existsInContacts && selectedContactId !== null) {
+      if (passedState?.selectedContactName) {
+        const byName = contactPool.find(
+          (c) => c.name.toLowerCase() === passedState.selectedContactName?.toLowerCase()
+        );
+        if (byName) {
+          setSelectedContactId(byName.id);
+          updateContactInUrl(byName.id);
+          return;
+        }
+      }
       if (!hasRequestedContact) {
         const fallbackId = contactPool[0]?.id ?? null;
         setSelectedContactId(fallbackId);
@@ -471,7 +481,7 @@ export default function TeacherMessagesPage() {
       setSelectedContactId(contactPool[0].id);
       updateContactInUrl(contactPool[0].id);
     }
-  }, [contacts, filteredContacts, hasRequestedContact, isLoading, selectedContactId, updateContactInUrl]);
+  }, [contacts, filteredContacts, hasRequestedContact, isLoading, passedState?.selectedContactName, selectedContactId, updateContactInUrl]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 

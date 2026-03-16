@@ -585,24 +585,40 @@ export default function TeacherStudentListPage() {
                 </span>
               </td>
               <td className="px-6 py-5">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedId(student.id);
+                      setIsPerformanceOpen(true);
+                    }}
+                    className={cn(
+                      'text-xs font-bold transition-colors px-3 py-1 rounded-lg border border-slate-200',
+                      selectedStudent?.id === student.id
+                        ? 'text-primary bg-primary/5 border-primary/30'
+                        : 'text-slate-500 hover:text-primary hover:border-primary/30'
+                    )}
+                  >
+                    View Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       navigate(`/teacher/students/${student.id}`);
                     }}
-                    className="px-3 py-1.5 rounded-lg border border-primary/20 text-primary text-xs font-bold hover:bg-primary/5 transition-colors"
+                    className="text-xs font-bold px-3 py-1 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-colors"
                   >
                     View Profile
                   </button>
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
+                    onClick={(e) => {
+                      e.stopPropagation();
                       navigate(`/teacher/messages?contactId=${Number(student.id)}`);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition-colors"
+                    className="text-xs font-bold px-3 py-1 rounded-lg border border-primary/40 text-primary hover:bg-primary/5 transition-colors flex items-center gap-1"
                   >
                     Message
                   </button>

@@ -9,7 +9,7 @@ import EvaluationResultPage from './pages/student/EvaluationResultPage';
 import EvaluationHistoryPage from './pages/student/EvaluationHistoryPage';
 import HelpCenterPage from './pages/shared/HelpCenterPage';
 import FeedbackPage from './pages/student/FeedbackPage';
-import NotificationsPage from './pages/shared/NotificationsPage';
+import NotificationsPage from './pages/student/NotificationsPage';
 import ProfilePage from './pages/shared/ProfilePage';
 import FAQPage from './pages/shared/FAQPage';
 import MeetingPage from './pages/shared/MeetingPage';
@@ -29,6 +29,7 @@ import AdminTeacherRecordsPage from './pages/admin/AdminTeacherRecordsPage';
 import AdminRecordsPage from './pages/admin/AdminRecordsPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
 import AdminMessagesPage from './pages/admin/AdminMessagesPage';
+import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 
 export default function App() {
   return (
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/admin/evaluations" element={<AdminDashboardPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
         <Route path="/admin/messages" element={<AdminMessagesPage />} />
+        <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
         <Route path="/admin/settings" element={<AdminSettingsPage />} />
         
         <Route path="*" element={<Navigate to="/" replace />} />

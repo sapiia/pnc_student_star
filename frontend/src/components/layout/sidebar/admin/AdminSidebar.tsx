@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Calendar, BarChart3, Settings, MessageSquare, User, HelpCircle, Info } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, BarChart3, Settings, MessageSquare, User, HelpCircle, Info, Bell } from 'lucide-react';
 import BaseSidebar from '../BaseSidebar';
 import { useProfileData } from '../../../../hooks/useProfileData';
 
@@ -12,7 +12,8 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
-    { icon: MessageSquare, label: 'Messages', path: '/admin/messages', hasNotification: true },
+    { icon: MessageSquare, label: 'Messager', path: '/admin/messages', hasNotification: true },
+    { icon: Bell, label: 'Notifications', path: '/admin/notifications' },
     { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
     { icon: Settings, label: 'System Settings', path: '/admin/settings' },
   ];
