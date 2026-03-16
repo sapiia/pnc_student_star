@@ -130,7 +130,7 @@ const composeDirectMessage = (payload: DirectMessage) => (
 export default function TeacherMessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const passedState = location.state as { selectedContactId?: number, isMobileChatOpen?: boolean } | null;
+  const passedState = location.state as { selectedContactId?: number, selectedContactName?: string, isMobileChatOpen?: boolean } | null;
   
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [teacherName, setTeacherName] = useState('Teacher');
@@ -375,10 +375,20 @@ export default function TeacherMessagesPage() {
 
     const exists = filteredContacts.some((contact) => contact.id === selectedContactId);
     if (!exists) {
-      // If the preferred contact isn't available, fall back to the first in list.
+      // Try name-based match if id not found (e.g., navigated from notification with name only)
+      if (passedState?.selectedContactName) {
+        const byName = filteredContacts.find(
+          (c) => c.name.toLowerCase() === passedState.selectedContactName?.toLowerCase()
+        );
+        if (byName) {
+          setSelectedContactId(byName.id);
+          return;
+        }
+      }
+      // Fall back to the first in list.
       setSelectedContactId(filteredContacts[0].id);
     }
-  }, [filteredContacts, selectedContactId]);
+  }, [filteredContacts, selectedContactId, passedState]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 
