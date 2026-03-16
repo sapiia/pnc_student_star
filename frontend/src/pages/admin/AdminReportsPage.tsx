@@ -1,4 +1,7 @@
 import { useNavigate } from 'react-router-dom';
+import { useRef } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -77,6 +80,7 @@ const getAverageScores = (scoresList: number[][]) => {
 
 export default function AdminReportsPage() {
   const navigate = useNavigate();
+  const reportRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'teachers'>('overview');
   
   // Student Report State
