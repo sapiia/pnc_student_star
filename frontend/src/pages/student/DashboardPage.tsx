@@ -137,259 +137,42 @@ export default function DashboardPage() {
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
-  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState<number>(1);
-  const canStartEvaluation = !latestEvaluation || daysLeft === 0;
+      const usedCount = evaluationsInWindow.length;
+      setEvaluationsUsed(usedCount);
 
-  const currentStatusCriteria = useMemo(() => {
-    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+      let nextAvailableDate: Date | null = null;
 
-    // Create a mapping from criterion key to CRIT-XXX ID for matching
-    const keyToIdMap = new Map<string, string>();
-    activeGlobal.forEach((c: any) => {
-      if (c.id) {
-        // Generate camelCase key from name (same logic as toCriterionKey)
-        const camelKey = String(c.name || '')
-          .toLowerCase()
-          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
-          .replace(/[^a-zA-Z0-9]/g, '');
-        keyToIdMap.set(camelKey, c.id);
-        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      if (usedCount < resolvedMaxEvaluations) {
+        setDaysLeft(0);
+      } else {
+        const earliestTimestamp = evaluationsInWindow.reduce((min, evaluation) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          if (!Number.isFinite(timestamp)) return min;
+          return Math.min(min, timestamp);
+        }, Number.POSITIVE_INFINITY);
+
+        if (!Number.isFinite(earliestTimestamp)) {
+          setDaysLeft(0);
+        } else {
+          const nextDate = new Date(earliestTimestamp);
+          nextDate.setDate(nextDate.getDate() + resolvedCycle);
+          nextAvailableDate = nextDate;
+          const remaining = nextDate.getTime() - now;
+          setDaysLeft(Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24))));
+        }
       }
-    });
-
-    return activeGlobal.map((criterion, index) => {
-      const criterionId = String(criterion.id || '');
-      const criterionName = String(criterion.name || '').trim().toLowerCase();
-      
-      // Try to find a matching response using multiple strategies
-      const response = (latestEvaluation?.responses || []).find(r => {
-        const responseKey = String(r.criterion_key || '').trim();
-        const responseId = String(r.criterion_id || '').trim();
-        const responseName = String(r.criterion_name || '').trim().toLowerCase();
-        
-        // Match by: criterion_id directly, criterion_key mapping, or name
-        return responseId === criterionId || 
-               keyToIdMap.get(responseKey) === criterionId ||
-               responseName === criterionName;
-      });
-
-      return {
-        key: String(criterion.id || criterion.name || `criterion-${index}`),
-        label: String(criterion.name || 'Unnamed Criterion'),
-        icon: String(criterion.icon || 'Star'),
-        score: response ? Number(response.star_value || 0) : 0,
-        reflection: response ? String(response.reflection || '').trim() : '',
-        tip: response ? String(response.tip_snapshot || '').trim() : '',
-        ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
-      };
-    });
-  }, [globalCriteria, latestEvaluation]);
-
-  const historicalComparison = useMemo(() => {
-    const sortedEvaluations = [...evaluations].sort((left, right) => (
-      getEvaluationSortValue(left) - getEvaluationSortValue(right)
-    ));
-
-    if (sortedEvaluations.length === 0) {
-      return { data: [], dataKeys: [] as { key: string; name: string; color: string; fill: string }[], maxValue: globalRatingScale };
-    }
-
-    const comparedEvaluations = sortedEvaluations.length === 1
-      ? [sortedEvaluations[0]]
-      : sortedEvaluations.slice(-2);
-
-    const maxValue = globalRatingScale;
-    const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
-
-    // Create a mapping from criterion key to CRIT-XXX ID for matching
-    const keyToIdMap = new Map<string, string>();
-    activeGlobal.forEach((c: any) => {
-      if (c.id) {
-        // Generate camelCase key from name (same logic as toCriterionKey)
-        const camelKey = String(c.name || '')
-          .toLowerCase()
-          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
-          .replace(/[^a-zA-Z0-9]/g, '');
-        keyToIdMap.set(camelKey, c.id);
-        keyToIdMap.set(c.id, c.id); // Also map id to itself
-      }
-    });
-
-    const data = activeGlobal.map((criterion, index) => {
-      const row: Record<string, string | number> = {
-        subject: String(criterion.name || `Criterion ${index + 1}`),
-      };
-      const criterionId = String(criterion.id || '');
-      const criterionName = String(criterion.name || '').trim().toLowerCase();
-
-      comparedEvaluations.forEach((evaluation, evaluationIndex) => {
-        const chartKey = comparedEvaluations.length === 1
-          ? 'current'
-          : evaluationIndex === 0
-            ? 'previous'
-            : 'current';
-            
-        // Try to find a matching response using multiple strategies
-        const response = (evaluation.responses || []).find(r => {
-          const responseKey = String(r.criterion_key || '').trim();
-          const responseId = String(r.criterion_id || '').trim();
-          const responseName = String(r.criterion_name || '').trim().toLowerCase();
-          
-          // Match by: criterion_id directly, criterion_key mapping, or name
-          return responseId === criterionId || 
-                 keyToIdMap.get(responseKey) === criterionId ||
-                 responseName === criterionName;
-        });
-        row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
-      });
-      return row;
-    });
-
-    const dataKeys = comparedEvaluations.map((evaluation, index) => ({
-      key: comparedEvaluations.length === 1 ? 'current' : index === 0 ? 'previous' : 'current',
-      name: index === 0 && comparedEvaluations.length > 1 ? 'Baseline' : formatPeriodLabel(evaluation.period),
-      color: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
-      fill: comparedEvaluations.length === 1 || index === comparedEvaluations.length - 1 ? '#5d5fef' : '#cbd5e1',
-    }));
-
-    return { data, dataKeys, maxValue };
-  }, [evaluations, globalRatingScale, globalCriteria]);
-
-
-  useEffect(() => { setShowUrgentNotification(daysLeft <= 3); }, [daysLeft]);
-
-  const loadRecentFeedback = useCallback(async () => {
-    if (!studentUserId) { setRecentFeedback([]); return; }
-    try {
-      const [visibilityRes, feedbackRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
-        fetch(`${API_BASE_URL}/feedbacks/student/${studentUserId}`)
-      ]);
-      const visibilityData = await visibilityRes.json().catch(() => ({}));
-      const feedbackData = await feedbackRes.json().catch(() => []);
-      const canView = !['false', '0'].includes(String(visibilityData?.value || 'true').trim().toLowerCase());
-      if (!canView || !feedbackRes.ok || !Array.isArray(feedbackData)) { setRecentFeedback([]); return; }
-      const normalized = [...feedbackData].sort((a, b) => new Date(String(b.created_at || '')).getTime() - new Date(String(a.created_at || '')).getTime()).slice(0, 3);
-      setRecentFeedback(normalized);
-    } catch { setRecentFeedback([]); }
-  }, [studentUserId]);
-
-  const loadIdentity = useCallback(async () => {
-    try {
-      const raw = localStorage.getItem('auth_user');
-      if (!raw) return;
-      const authUser = JSON.parse(raw);
-      const userId = Number(authUser?.id);
-      if (!Number.isInteger(userId) || userId <= 0) return;
-
-      setStudentUserId(userId);
-      const localName = String(authUser?.name || '').trim();
-      const localStudentId = String(authUser?.student_id || '').trim();
-      if (localName) setStudentName(localName);
-      if (localStudentId) setStudentId(localStudentId);
-
-      const prefsRaw = localStorage.getItem(`student_notify_${userId}`);
-      const prefs = prefsRaw ? JSON.parse(prefsRaw) : null;
-      const remindersEnabled = prefs?.remindersEnabled !== false;
-
-      const [
-        response,
-        intervalResponse,
-        evaluationsResponse,
-        studentFeedbackVisibilityResponse,
-        reminderNotificationsResponse,
-        feedbackResponse,
-        notificationsResponse,
-        criteriaConfigResponse,
-        settingsResponse,
-      ] = await Promise.all([
-        fetch(`${API_BASE_URL}/users/${userId}`),
-        fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
-        fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
-        fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
-        fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
-        fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
-        fetch(`${API_BASE_URL}/notifications/user/${userId}`),
-        fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
-        fetch(`${API_BASE_URL}/settings`)
-      ]);
-
-      const data = await response.json().catch(() => ({}));
-      const intervalData = await intervalResponse.json().catch(() => ({}));
-      const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
-      const visibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
-      const reminderData = await reminderNotificationsResponse.json().catch(() => ({}));
-      const feedbackData = await feedbackResponse.json().catch(() => ([]));
-      const notifData = await notificationsResponse.json().catch(() => ([]));
-      const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
-      const settingsData = await settingsResponse.json().catch(() => ([]));
-
-      const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
-      setGlobalRatingScale(nextRatingScale);
-      setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
-
-      // Find studentMaxEvaluationsPerCycle setting
-      const maxEvaluationsSetting = Array.isArray(settingsData) 
-        ? settingsData.find(s => s.key === 'studentMaxEvaluationsPerCycle') 
-        : null;
-      const maxEvaluationsPerCycleValue = Number(maxEvaluationsSetting?.value) || 1;
-      setMaxEvaluationsPerCycle(maxEvaluationsPerCycleValue);
-
-      const sortedEvals = Array.isArray(evaluationsData) ? [...evaluationsData].sort((a, b) => getEvaluationSortValue(b) - getEvaluationSortValue(a)) : [];
-      const latestEval = sortedEvals.length > 0 ? sortedEvals[0] : null;
-
-      const resolvedName = String(data?.name || '').trim() || [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim() || localName || 'Student';
-      const resolvedStudentId = String(data?.student_id || data?.resolved_student_id || localStudentId || '').trim();
-
-      setStudentName(resolvedName);
-      setStudentId(resolvedStudentId);
-      setEvaluations(sortedEvals);
-
-      const canViewFeedback = !['false', '0'].includes(String(visibilityData?.value || 'true').trim().toLowerCase());
-      if (canViewFeedback && Array.isArray(feedbackData)) {
-        const normalized = [...feedbackData].sort((a, b) => new Date(String(b.created_at || '')).getTime() - new Date(String(a.created_at || '')).getTime()).slice(0, 3);
-        setRecentFeedback(normalized);
-      }
-
-      const notifications = Array.isArray(notifData) ? notifData : [];
-      setUnreadNotificationCount(notifications.filter(n => Number(n.is_read) !== 1).length);
-
-      const resolvedCycle = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
-      setCycleDays(resolvedCycle);
-
-      const evalDateKey = `last_evaluation_submitted_at_${userId}`;
-      const lastDateRaw = String(latestEval?.submitted_at || latestEval?.created_at || '').trim() || String(localStorage.getItem(evalDateKey) || '').trim();
-      setLatestEvaluation(latestEval);
-
-      if (!lastDateRaw) { setDaysLeft(0); return; }
-      const lastDate = new Date(lastDateRaw);
-      if (Number.isNaN(lastDate.getTime())) { setDaysLeft(0); return; }
-
-      // If multiple evaluations are allowed, immediately unlock the student
-      if (maxEvaluationsPerCycleValue > 1) {
-        // IMMEDIATE UNLOCK: Allow evaluation regardless of any previous locks
-        setDaysLeft(0); // Always 0 days when multiple evaluations allowed
-        console.log('🔓 Dashboard: Student unlocked - Multiple evaluations per cycle enabled');
-        return;
-      }
-
-      // Original time-based logic for single evaluation mode
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(nextDate.getDate() + resolvedCycle);
-      const remaining = nextDate.getTime() - Date.now();
-      setDaysLeft(Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24))));
 
       const adminAllowsReminders = !['false', '0'].includes(String(reminderData?.value || 'true').trim().toLowerCase());
-      const daysUntil = Math.ceil(remaining / (1000 * 60 * 60 * 24));
-      if (adminAllowsReminders && remindersEnabled && daysUntil === 3) {
-        const msg = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextDate)}.`;
+      if (adminAllowsReminders && remindersEnabled && usedCount >= resolvedMaxEvaluations && daysLeft === 3 && nextAvailableDate) {
+        const msg = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextAvailableDate)}.`;
         if (!notifications.some(n => String(n.message || '').trim() === msg)) {
           const res = await fetch(`${API_BASE_URL}/notifications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, message: msg, is_read: 0 }) });
           if (res.ok) { setUnreadNotificationCount(c => c + 1); window.dispatchEvent(new Event('student-notifications-updated')); }
         }
       }
     } catch {
-      setStudentUserId(null); setCycleDays(90); setDaysLeft(0); setEvaluations([]); setRecentFeedback([]); setUnreadNotificationCount(0); setLatestEvaluation(null);
+      setStudentUserId(null); setCycleDays(90); setDaysLeft(0); setEvaluations([]); setRecentFeedback([]); setUnreadNotificationCount(0); setLatestEvaluation(null); setMaxEvaluationsPerCycle(1); setEvaluationsUsed(0);
     }
   }, []);
 
@@ -477,7 +260,14 @@ export default function DashboardPage() {
                   <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-2">Hello, {studentName}! Ready for your {currentPeriodLabel} Evaluation?</h2>
                   {studentId && <p className="text-[10px] md:text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Student ID: {studentId}</p>}
                   <p className="text-sm md:text-base text-slate-600 mb-6 max-w-xl">Track your progress across 8 key areas. Regular reflection helps you stay focused on your goals.</p>
-                  {!canStartEvaluation && <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-amber-600 mb-6">Next evaluation unlocks in {daysLeft} day{daysLeft === 1 ? '' : 's'}</p>}
+                  {!canStartEvaluation && (
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-amber-600 mb-6">
+                      Next evaluation unlocks in {daysLeft} day{daysLeft === 1 ? '' : 's'}.
+                      <span className="block mt-2 text-amber-500">
+                        {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations used this cycle
+                      </span>
+                    </p>
+                  )}
                   <div className="flex justify-center md:justify-start">
                     <button onClick={() => canStartEvaluation && navigate('/evaluate')} disabled={!canStartEvaluation} className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50 text-sm shadow-lg shadow-primary/20">
                       <PlusCircle className="w-5 h-5" />{canStartEvaluation ? 'Start Evaluation' : `Available In ${daysLeft} Days`}
@@ -500,6 +290,7 @@ export default function DashboardPage() {
                     <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100))}%` }} transition={{ duration: 0.5 }} className="h-full bg-primary" />
                   </div>
                   <div className="flex justify-between text-[8px] md:text-[10px] font-black text-slate-500 uppercase"><span>Cycle: {cycleDays} Days</span><span>{Math.round(Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100)))}% Remaining</span></div>
+                  <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500">Used {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations</div>
                 </div>
               </div>
             </motion.div>

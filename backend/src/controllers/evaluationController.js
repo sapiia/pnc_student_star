@@ -43,6 +43,9 @@ const createEvaluation = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    if (err?.status) {
+      return res.status(err.status).json({ error: err.message, ...(err.meta || {}) });
+    }
     res.status(500).json({ error: err.message });
   }
 };
