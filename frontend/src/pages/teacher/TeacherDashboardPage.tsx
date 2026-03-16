@@ -8,16 +8,17 @@ import StatsCard from '../../components/teacher/StatsCard';
 
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { getRealtimeSocket, type NotificationRealtimePayload } from '../../lib/realtime';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { useTeacherNotifications } from '../../hooks/useTeacherNotifications';
 import { 
   API_BASE_URL, 
+  DEFAULT_AVATAR,
   toDisplayName, 
   extractGeneration, 
   extractClassNameLegacy,
   getEvaluationSortValue,
   formatShortDateWithTime,
   getStudentStatus,
-  getTeacherIdFromStorage
 } from '../../lib/teacher/utils';
 import type { GenderOption } from '../../lib/teacher/types';
 
@@ -34,14 +35,6 @@ interface StudentData {
   lastEval: string;
 }
 
-interface NotificationRecord {
-  id: number;
-  user_id: number;
-  message: string;
-  is_read: number;
-  created_at?: string;
-}
-
 export default function TeacherDashboardPage() {
   const navigate = useNavigate();
   const [selectedGen, setSelectedGen] = useState('All Generations');
@@ -50,15 +43,10 @@ export default function TeacherDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDropdown, setActiveDropdown] = useState<'gen' | 'class' | 'gender' | null>(null);
 
-  const [teacherId, setTeacherId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-
-  useEffect(() => {
-    const id = getTeacherIdFromStorage();
-    setTeacherId(id);
-  }, []);
+  const { teacherId } = useTeacherIdentity();
+  const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -98,7 +86,7 @@ export default function TeacherDashboardPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
                 generation: extractGeneration(user),
                 class: extractClassNameLegacy(user),
                 gender: String(user.gender || '').trim().toLowerCase() || null,
@@ -121,45 +109,6 @@ export default function TeacherDashboardPage() {
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
-
-  const loadNotifications = useCallback(async () => {
-    if (!teacherId) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/notifications/user/${teacherId}`);
-      const data = await response.json().catch(() => []);
-      if (response.ok && Array.isArray(data)) {
-        setNotifications(data);
-      }
-    } catch {
-      // Ignore
-    }
-  }, [teacherId]);
-
-  useEffect(() => {
-    void loadNotifications();
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    if (!teacherId) return;
-    const socket = getRealtimeSocket();
-    const subscription = { userId: teacherId };
-    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
-      if (Number(payload.userId) !== teacherId) return;
-      void loadNotifications();
-    };
-
-    socket.emit('notification:subscribe', subscription);
-    socket.on('notification:created', handleNotificationEvent);
-    socket.on('notification:updated', handleNotificationEvent);
-    socket.on('notification:deleted', handleNotificationEvent);
-
-    return () => {
-      socket.emit('notification:unsubscribe', subscription);
-      socket.off('notification:created', handleNotificationEvent);
-      socket.off('notification:updated', handleNotificationEvent);
-      socket.off('notification:deleted', handleNotificationEvent);
-    };
-  }, [loadNotifications, teacherId]);
 
   const gens = useMemo(() => ['All Generations', ...Array.from(new Set(students.map(s => s.generation))).sort()], [students]);
   const classes = useMemo(() => {
@@ -196,8 +145,6 @@ export default function TeacherDashboardPage() {
         return a.name.localeCompare(b.name);
       });
   }, [students, selectedGen, selectedClass, selectedGender, searchQuery]);
-
-  const unreadNotificationCount = notifications.filter(n => Number(n.is_read) !== 1).length;
 
   const STATS = useMemo(() => {
     const ratedStudents = filteredStudents.filter(s => s.rating !== null);

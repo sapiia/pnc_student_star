@@ -6,7 +6,9 @@ import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSideb
 import TeacherMobileNav from '../../components/common/TeacherMobileNav';
 import RadarChart from '../../components/ui/RadarChart';
 import { cn } from '../../lib/utils';
-import { getRealtimeSocket } from '../../lib/realtime';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { useTeacherFeedbacks } from '../../hooks/useTeacherFeedbacks';
+import { useTeacherNotifications } from '../../hooks/useTeacherNotifications';
 import { 
   API_BASE_URL, 
   toDisplayName, 
@@ -14,23 +16,12 @@ import {
   DEFAULT_AVATAR,
   formatShortDate,
   parseStudentReplyNotification,
-  getTeacherIdFromStorage,
+  RADAR_COLORS,
+  CRITERIA_COLOR_STYLES,
   getHiddenFeedbackIds,
   setHiddenFeedbackIds
 } from '../../lib/teacher/utils';
 import type { ConversationMessage } from '../../lib/teacher/types';
-
-const RADAR_COLORS = [
-  { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' },
-];
-
-const CRITERIA_COLOR_STYLES = [
-  { iconBg: 'bg-blue-100', iconText: 'text-blue-600', detailText: 'text-blue-600', stars: 'text-blue-500', hover: 'hover:border-blue-300' },
-  { iconBg: 'bg-emerald-100', iconText: 'text-emerald-600', detailText: 'text-emerald-600', stars: 'text-emerald-500', hover: 'hover:border-emerald-300' },
-  { iconBg: 'bg-amber-100', iconText: 'text-amber-600', detailText: 'text-amber-600', stars: 'text-amber-500', hover: 'hover:border-amber-300' },
-  { iconBg: 'bg-rose-100', iconText: 'text-rose-600', detailText: 'text-rose-600', stars: 'text-rose-500', hover: 'hover:border-rose-300' },
-  { iconBg: 'bg-cyan-100', iconText: 'text-cyan-600', detailText: 'text-cyan-600', stars: 'text-cyan-500', hover: 'hover:border-cyan-300' },
-] as const;
 
 export default function TeacherStudentProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -46,10 +37,9 @@ export default function TeacherStudentProfilePage() {
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
-  const [teacherId, setTeacherId] = useState<number | null>(null);
-
-  const [feedbackHistory, setFeedbackHistory] = useState<any[]>([]);
-  const [teacherNotifications, setTeacherNotifications] = useState<any[]>([]);
+  const { teacherId } = useTeacherIdentity();
+  const { feedbacks: feedbackHistory, setFeedbacks: setFeedbackHistory, reload: reloadTeacherFeedbacks } = useTeacherFeedbacks(teacherId);
+  const { notifications: teacherNotifications, setNotifications: setTeacherNotifications } = useTeacherNotifications(teacherId);
   const [hiddenFeedbackIds, setHiddenFeedbackIdsState] = useState<number[]>([]);
   const [pendingDeleteFeedbackId, setPendingDeleteFeedbackId] = useState<number | null>(null);
   const [replyToMessage, setReplyToMessage] = useState<ConversationMessage | null>(null);
@@ -59,12 +49,6 @@ export default function TeacherStudentProfilePage() {
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const [evaluationFeedback, setEvaluationFeedback] = useState<any[]>([]);
   const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
-
-  // Initialize teacher ID
-  useEffect(() => {
-    const tid = getTeacherIdFromStorage();
-    setTeacherId(tid);
-  }, []);
 
   // Load hidden feedback IDs
   useEffect(() => {
@@ -78,24 +62,6 @@ export default function TeacherStudentProfilePage() {
     if (!teacherId) return;
     setHiddenFeedbackIds(teacherId, hiddenFeedbackIds);
   }, [hiddenFeedbackIds, teacherId]);
-
-  const loadTeacherFeedbacks = useCallback(async () => {
-    if (!teacherId) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/feedbacks/teacher/${teacherId}`);
-      const data = await response.json();
-      if (response.ok) setFeedbackHistory(Array.isArray(data) ? data : []);
-    } catch {}
-  }, [teacherId]);
-
-  const loadTeacherNotifications = useCallback(async () => {
-    if (!teacherId) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/notifications/user/${teacherId}`);
-      const data = await response.json();
-      if (response.ok) setTeacherNotifications(Array.isArray(data) ? data : []);
-    } catch {}
-  }, [teacherId]);
 
   // Fetch feedback for a specific evaluation
   const fetchEvaluationFeedback = useCallback(async (evaluationId: number) => {
@@ -169,36 +135,7 @@ export default function TeacherStudentProfilePage() {
     </header>
   );
 
-  // Load feedback and notifications
-  useEffect(() => {
-    if (teacherId) {
-      void loadTeacherFeedbacks();
-      void loadTeacherNotifications();
-    }
-  }, [teacherId, loadTeacherFeedbacks, loadTeacherNotifications]);
-
-  // Realtime subscriptions
-  useEffect(() => {
-    if (!teacherId) return;
-    const socket = getRealtimeSocket();
-    const handleUpdate = () => { void loadTeacherFeedbacks(); void loadTeacherNotifications(); };
-    socket.emit('feedback:subscribe', { teacherId });
-    socket.emit('notification:subscribe', { userId: teacherId });
-    socket.on('feedback:created', handleUpdate);
-    socket.on('feedback:updated', handleUpdate);
-    socket.on('feedback:deleted', handleUpdate);
-    socket.on('notification:created', handleUpdate);
-    socket.on('notification:read', handleUpdate);
-    return () => {
-      socket.emit('feedback:unsubscribe', { teacherId });
-      socket.emit('notification:unsubscribe', { userId: teacherId });
-      socket.off('feedback:created', handleUpdate);
-      socket.off('feedback:updated', handleUpdate);
-      socket.off('feedback:deleted', handleUpdate);
-      socket.off('notification:created', handleUpdate);
-      socket.off('notification:read', handleUpdate);
-    };
-  }, [teacherId, loadTeacherFeedbacks, loadTeacherNotifications]);
+  // Realtime subscriptions are handled in hooks.
 
   // Computed data
   const visibleStudentFeedbackHistory = useMemo(() => {
@@ -260,7 +197,7 @@ export default function TeacherStudentProfilePage() {
       setFeedbackSuccess('Feedback submitted successfully!');
       setFeedbackDraft('');
       setReplyToMessage(null);
-      void loadTeacherFeedbacks();
+      void reloadTeacherFeedbacks();
       // Also refresh evaluation-specific feedback
       const evalId = selectedEvaluation?.id || latestEval?.id;
       if (evalId) {

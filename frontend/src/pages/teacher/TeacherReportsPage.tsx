@@ -1,40 +1,45 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Users, 
-  Calendar, 
-  Download, 
-  Filter, 
+import {
+  BarChart3,
+  TrendingUp,
+  Users,
+  Download,
+  Filter,
   ChevronDown,
   Bell,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 
 import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSidebar';
 import TeacherMobileNav from '../../components/common/TeacherMobileNav';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
 
 import { motion } from 'motion/react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
   Cell,
   PieChart,
   Pie,
-  Legend
 } from 'recharts';
-import { cn } from '../../lib/utils';
 import { CRITERIA } from '../../constants';
+import {
+  API_BASE_URL,
+  toDisplayName,
+  extractClassName,
+  extractGeneration,
+  normalizeGender,
+} from '../../lib/teacher/utils';
 
 type GenderOption = 'All' | 'Male' | 'Female';
 
@@ -56,100 +61,30 @@ interface StudentData {
   id: number;
   name: string;
   email: string;
-  class: string;
+  className: string;
+  generation: string;
   student_id: string;
   gender: string;
 }
 
-// API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 const GENERATION_HINTS = ['2026', '2027'];
+const DEFAULT_CLASS_FALLBACK = ['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D'];
 
-// Default mock data for fallback
-const DEFAULT_TREND_DATA = {
-  'All': [
-    { name: 'Week 1', avg: 3.2, completion: 65 },
-    { name: 'Week 2', avg: 3.5, completion: 72 },
-    { name: 'Week 3', avg: 3.4, completion: 80 },
-    { name: 'Week 4', avg: 3.8, completion: 78 },
-    { name: 'Week 5', avg: 4.0, completion: 85 },
-    { name: 'Week 6', avg: 4.2, completion: 92 },
-  ],
-  'Male': [
-    { name: 'Week 1', avg: 3.0, completion: 60 },
-    { name: 'Week 2', avg: 3.3, completion: 68 },
-    { name: 'Week 3', avg: 3.2, completion: 75 },
-    { name: 'Week 4', avg: 3.6, completion: 72 },
-    { name: 'Week 5', avg: 3.8, completion: 80 },
-    { name: 'Week 6', avg: 4.0, completion: 88 },
-  ],
-  'Female': [
-    { name: 'Week 1', avg: 3.4, completion: 70 },
-    { name: 'Week 2', avg: 3.7, completion: 76 },
-    { name: 'Week 3', avg: 3.6, completion: 85 },
-    { name: 'Week 4', avg: 4.0, completion: 84 },
-    { name: 'Week 5', avg: 4.2, completion: 90 },
-    { name: 'Week 6', avg: 4.4, completion: 96 },
-  ]
+const buildAuthHeaders = () => {
+  const authToken = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
 };
 
-const DEFAULT_CRITERIA_DATA = {
-  'All': [
-    { name: 'Living', value: 4.2, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.5, color: '#10b981' },
-    { name: 'Human & Support', value: 3.8, color: '#f59e0b' },
-    { name: 'Health', value: 4.0, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.5, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 3.9, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.1, color: '#06b6d4' },
-  ],
-  'Male': [
-    { name: 'Living', value: 4.0, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.3, color: '#10b981' },
-    { name: 'Human & Support', value: 3.6, color: '#f59e0b' },
-    { name: 'Health', value: 4.2, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.3, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 3.7, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.0, color: '#06b6d4' },
-  ],
-  'Female': [
-    { name: 'Living', value: 4.4, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.7, color: '#10b981' },
-    { name: 'Human & Support', value: 4.0, color: '#f59e0b' },
-    { name: 'Health', value: 3.8, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.7, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 4.1, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.2, color: '#06b6d4' },
-  ]
-};
-
-const DEFAULT_ENGAGEMENT_DATA = {
-  'All': [
-    { name: 'Completed', value: 85, fill: '#5d5fef' },
-    { name: 'Pending', value: 10, fill: '#94a3b8' },
-    { name: 'Overdue', value: 5, fill: '#ef4444' },
-  ],
-  'Male': [
-    { name: 'Completed', value: 80, fill: '#5d5fef' },
-    { name: 'Pending', value: 12, fill: '#94a3b8' },
-    { name: 'Overdue', value: 8, fill: '#ef4444' },
-  ],
-  'Female': [
-    { name: 'Completed', value: 90, fill: '#5d5fef' },
-    { name: 'Pending', value: 7, fill: '#94a3b8' },
-    { name: 'Overdue', value: 3, fill: '#ef4444' },
-  ]
-};
+const normalizeGenerationValue = (value: string) => String(value || '').replace(/gen\s*/i, '').trim();
 
 export default function TeacherReportsPage() {
   const navigate = useNavigate();
   const [selectedGen, setSelectedGen] = useState('All');
   const [selectedClass, setSelectedClass] = useState('All');
   const [selectedGender, setSelectedGender] = useState<GenderOption>('All');
-  const [generations, setGenerations] = useState<string[]>(GENERATION_HINTS);
+  const { teacherId } = useTeacherIdentity();
   
   // Data state
-  const [classes, setClasses] = useState<string[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,70 +93,82 @@ export default function TeacherReportsPage() {
 
   // Fetch data on mount
   useEffect(() => {
+    if (!teacherId) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch classes
-        const classesRes = await fetch(`${API_BASE_URL}/users/teachers/classes/1`);
-        const classesData = await classesRes.json();
-        if (Array.isArray(classesData)) {
-          setClasses(classesData);
-        }
+        const authHeaders = buildAuthHeaders();
 
-        // Fetch all students
-        const studentsRes = await fetch(`${API_BASE_URL}/users/teachers/students/1`);
-        const studentsData = await studentsRes.json();
-        if (Array.isArray(studentsData)) {
-          setStudents(studentsData);
-          
-          // Extract unique generations from students
-          const uniqueGenerations = [...new Set(studentsData
-            .map((s: any) => String(s.class || '').match(/gen\s*(\d{4})/i)?.[1])
-            .filter(Boolean))] as string[];
-          const mergedGenerations = Array.from(new Set([...uniqueGenerations, ...GENERATION_HINTS])).sort();
-          setGenerations(mergedGenerations);
-        }
+        // Fetch users (students) and evaluations
+        const [usersRes, evalRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/users`, { headers: { ...authHeaders } }),
+          fetch(`${API_BASE_URL}/evaluations`, { headers: { ...authHeaders } }),
+        ]);
 
-        // Fetch all evaluations
-        const evalRes = await fetch(`${API_BASE_URL}/evaluations`);
+        const usersData = await usersRes.json();
         const evalData = await evalRes.json();
+
+        if (Array.isArray(usersData)) {
+          const mappedStudents: StudentData[] = usersData
+            .filter((u: any) => String(u.role || '').toLowerCase() === 'student')
+            .map((u: any) => ({
+              id: Number(u.id),
+              name: toDisplayName(u),
+              email: String(u.email || '').trim(),
+              student_id: String(u.student_id || u.resolved_student_id || '').trim() || `STU-${u.id}`,
+              className: extractClassName(u),
+              generation: extractGeneration(u),
+              gender: normalizeGender(u.gender),
+            }));
+
+          setStudents(mappedStudents);
+        }
+
         if (Array.isArray(evalData)) {
           setEvaluations(evalData);
         }
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError('Failed to load data. Using demo data.');
-        // Load demo data on error
-        setClasses(['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D']);
-        setGenerations(GENERATION_HINTS);
+        setError('Failed to load data. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [teacherId]);
+
+  const generations = useMemo(() => {
+    const uniqueGenerations = new Set(
+      students
+        .map((s) => normalizeGenerationValue(s.generation))
+        .filter(Boolean)
+    );
+    return Array.from(new Set([...uniqueGenerations, ...GENERATION_HINTS])).sort();
+  }, [students]);
+
+  const classes = useMemo(() => (
+    Array.from(new Set(students.map((s) => s.className).filter(Boolean)))
+  ), [students]);
 
   // Process data based on filters
   const processedData = useMemo(() => {
     let filteredStudents = students;
-    let filteredEvals = evaluations;
 
-    // Filter by generation
     if (selectedGen !== 'All') {
-      filteredStudents = filteredStudents.filter((s: StudentData) => 
-        s.class?.includes(`Gen ${selectedGen}`)
-      );
+      filteredStudents = filteredStudents.filter((s: StudentData) => {
+        const gen = normalizeGenerationValue(s.generation);
+        return gen === selectedGen;
+      });
     }
 
-    // Filter by class
     if (selectedClass !== 'All') {
-      filteredStudents = filteredStudents.filter((s: StudentData) => s.class === selectedClass);
+      filteredStudents = filteredStudents.filter((s: StudentData) => s.className === selectedClass);
     }
 
-    // Filter by gender
     if (selectedGender !== 'All') {
       filteredStudents = filteredStudents.filter((s: StudentData) => 
         s.gender?.toLowerCase() === selectedGender.toLowerCase()
@@ -229,9 +176,8 @@ export default function TeacherReportsPage() {
     }
 
     const studentIds = new Set(filteredStudents.map((s: StudentData) => s.id));
-    filteredEvals = evaluations.filter((e: EvaluationData) => studentIds.has(e.user_id));
+    const filteredEvals = evaluations.filter((e: EvaluationData) => studentIds.has(e.user_id));
 
-    // Calculate criteria averages
     const criteriaMap: Record<string, { total: number; count: number }> = {};
     
     filteredEvals.forEach(eval_ => {
@@ -249,41 +195,36 @@ export default function TeacherReportsPage() {
       value: criteriaMap[c.key] 
         ? Number((criteriaMap[c.key].total / criteriaMap[c.key].count).toFixed(1))
         : 0,
-      color: c.bgColor.replace('bg-', '#').replace('-500', '').replace('-100', '')
+      color: c.bgColor,
     }));
 
-    // If no real data, use defaults based on gender
-    const genderKey = selectedGender;
     if (filteredEvals.length === 0) {
       return {
-        trend: DEFAULT_TREND_DATA[genderKey] || DEFAULT_TREND_DATA['All'],
-        criteria: DEFAULT_CRITERIA_DATA[genderKey] || DEFAULT_CRITERIA_DATA['All'],
-        engagement: DEFAULT_ENGAGEMENT_DATA[genderKey] || DEFAULT_ENGAGEMENT_DATA['All'],
+        trend: [],
+        criteria: criteriaData,
+        engagement: [],
         stats: {
-          totalStudents: filteredStudents.length || 45,
-          avgScore: selectedGender === 'Male' ? 4.0 : selectedGender === 'Female' ? 4.4 : 4.2,
-          completionRate: selectedGender === 'Male' ? 88 : selectedGender === 'Female' ? 96 : 92
+          totalStudents: filteredStudents.length,
+          avgScore: 0,
+          completionRate: 0
         }
       };
     }
 
-    // Calculate engagement
     const totalStudents = filteredStudents.length || 1;
     const completedEvals = filteredEvals.length;
     const completionRate = Math.round((completedEvals / totalStudents) * 100);
     
     const engagementData = [
       { name: 'Completed', value: completionRate, fill: '#5d5fef' },
-      { name: 'Pending', value: Math.max(0, 100 - completionRate - 5), fill: '#94a3b8' },
-      { name: 'Overdue', value: 5, fill: '#ef4444' },
+      { name: 'Pending', value: Math.max(0, 100 - completionRate), fill: '#94a3b8' },
+      { name: 'Overdue', value: 0, fill: '#ef4444' },
     ];
 
-    // Calculate average score
     const avgScore = filteredEvals.length > 0
       ? Number((filteredEvals.reduce((sum, e) => sum + e.average_score, 0) / filteredEvals.length).toFixed(1))
       : 0;
 
-    // Generate trend data from evaluation periods
     const periodMap: Record<string, { totalScore: number; count: number }> = {};
     filteredEvals.forEach(eval_ => {
       const period = eval_.period || 'Unknown';
@@ -298,35 +239,31 @@ export default function TeacherReportsPage() {
       name: period,
       avg: Number((data.totalScore / data.count).toFixed(1)),
       completion: Math.round((data.count / totalStudents) * 100)
-    })).slice(0, 6);
-
-    // Fill with default trend if not enough data
-    while (trendData.length < 6) {
-      trendData.push({ name: `Week ${trendData.length + 1}`, avg: 3.5 + Math.random() * 0.5, completion: 70 + trendData.length * 5 });
-    }
+    }));
 
     return {
       trend: trendData,
-      criteria: criteriaData.length > 0 ? criteriaData : DEFAULT_CRITERIA_DATA['All'],
+      criteria: criteriaData,
       engagement: engagementData,
       stats: {
         totalStudents,
-        avgScore: avgScore || 4.2,
-        completionRate: completionRate || 92
+        avgScore,
+        completionRate
       }
     };
-  }, [selectedClass, selectedGender, students, evaluations]);
-
-  const currentData = processedData;
+  }, [selectedClass, selectedGender, selectedGen, students, evaluations]);
 
   // Get available classes
-  const availableClasses = classes.length > 0 ? classes : ['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D'];
+  const availableClasses = classes.length > 0 ? classes : DEFAULT_CLASS_FALLBACK;
+  const { trend, criteria, engagement, stats } = processedData;
 
   // Export handler
   const handleExport = async () => {
     try {
       setExporting(true);
-      
+
+      const authHeaders = buildAuthHeaders();
+
       // Build query params from current filters
       const params = new URLSearchParams();
       if (selectedClass !== 'All') params.append('class', selectedClass);
@@ -334,7 +271,8 @@ export default function TeacherReportsPage() {
       if (selectedGen !== 'All') params.append('generation', selectedGen);
       
       const response = await fetch(`${API_BASE_URL}/evaluations/report/export?${params.toString()}`, {
-        method: 'GET'
+        method: 'GET',
+        headers: { ...authHeaders },
       });
       
       if (!response.ok) {
@@ -342,25 +280,23 @@ export default function TeacherReportsPage() {
         throw new Error(`Export failed: ${response.status} - ${errorText}`);
       }
       
-      // Get content type to verify it's an Excel file
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('spreadsheet')) {
-        throw new Error('Invalid response format. Expected Excel file.');
-      }
-      
-      // Create blob and download
+      const contentDisposition = response.headers.get('content-disposition') || '';
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
+      const fallbackName = `Teacher_Report_${new Date().toISOString().slice(0, 10)}`;
+      const filename = decodeURIComponent(filenameMatch?.[1] || filenameMatch?.[2] || `${fallbackName}.xlsx`);
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Teacher_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err: any) {
       console.error('Export error:', err);
-      alert(err.message || 'Failed to export report. Please try again.');
+      alert(err?.message || 'Failed to export report. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -450,17 +386,17 @@ export default function TeacherReportsPage() {
       <div className="flex items-center gap-6 text-sm">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-primary" />
-          <span className="font-bold text-slate-700">{currentData.stats.totalStudents}</span>
+          <span className="font-bold text-slate-700">{stats.totalStudents}</span>
           <span className="text-slate-400">Students</span>
         </div>
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-500" />
-          <span className="font-bold text-slate-700">{currentData.stats.avgScore}</span>
+          <span className="font-bold text-slate-700">{stats.avgScore}</span>
           <span className="text-slate-400">Avg Score</span>
         </div>
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-amber-500" />
-          <span className="font-bold text-slate-700">{currentData.stats.completionRate}%</span>
+          <span className="font-bold text-slate-700">{stats.completionRate}%</span>
           <span className="text-slate-400">Completion</span>
         </div>
       </div>
@@ -527,7 +463,7 @@ export default function TeacherReportsPage() {
                   
                   <div className="h-[250px] md:h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={currentData.trend}>
+                      <LineChart data={trend}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis 
                           dataKey="name" 
@@ -580,7 +516,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <div className="h-[250px] md:h-[300px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={currentData.criteria} layout="vertical">
+                        <BarChart data={criteria} layout="vertical">
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                           <XAxis type="number" hide />
                           <YAxis 
@@ -596,7 +532,7 @@ export default function TeacherReportsPage() {
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                           />
                           <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={20}>
-                            {currentData.criteria.map((entry, index) => (
+                            {criteria.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                           </Bar>
@@ -615,7 +551,7 @@ export default function TeacherReportsPage() {
                     <div className="flex items-center justify-between mb-8">
                       <h3 className="text-xl font-black text-slate-900 tracking-tight">Engagement Status</h3>
                       <div className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-lg">
-                        {currentData.stats.completionRate >= 80 ? 'Healthy' : currentData.stats.completionRate >= 50 ? 'Moderate' : 'Low'}
+                        {stats.completionRate >= 80 ? 'Healthy' : stats.completionRate >= 50 ? 'Moderate' : 'Low'}
                       </div>
                     </div>
                     <div className="flex flex-col md:flex-row items-center gap-8">
@@ -623,7 +559,7 @@ export default function TeacherReportsPage() {
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
-                              data={currentData.engagement}
+                              data={engagement}
                               cx="50%"
                               cy="50%"
                               innerRadius={60}
@@ -631,7 +567,7 @@ export default function TeacherReportsPage() {
                               paddingAngle={8}
                               dataKey="value"
                             >
-                              {currentData.engagement.map((entry, index) => (
+                              {engagement.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                               ))}
                             </Pie>
@@ -640,7 +576,7 @@ export default function TeacherReportsPage() {
                         </ResponsiveContainer>
                       </div>
                       <div className="w-full md:w-1/2 space-y-4">
-                        {currentData.engagement.map((item) => (
+                        {engagement.map((item) => (
                           <div key={item.name} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                             <div className="flex items-center gap-3">
                               <div className="size-3 rounded-full" style={{ backgroundColor: item.fill }} />
@@ -663,7 +599,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-emerald-900 mb-2">Academic Performance</h4>
                     <p className="text-sm text-emerald-700 leading-relaxed">
-                      Class average is at {currentData.stats.avgScore}/5.0 with {currentData.stats.completionRate}% completion rate across all criteria.
+                      Class average is at {stats.avgScore}/5.0 with {stats.completionRate}% completion rate across all criteria.
                     </p>
                   </div>
                   <div className="p-6 bg-amber-50 border border-amber-100 rounded-2xl">
@@ -673,7 +609,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-amber-900 mb-2">Evaluation Progress</h4>
                     <p className="text-sm text-amber-700 leading-relaxed">
-                      {100 - currentData.stats.completionRate}% of students still need to submit their evaluations. Follow up with pending students.
+                      {100 - stats.completionRate}% of students still need to submit their evaluations. Follow up with pending students.
                     </p>
                   </div>
                   <div className="p-6 bg-primary/5 border border-primary/10 rounded-2xl">
@@ -683,7 +619,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-slate-900 mb-2">Q4 Evaluations</h4>
                     <p className="text-sm text-slate-600 leading-relaxed">
-                      Final quarter evaluations in progress. Current prep-rate is at {currentData.stats.completionRate}% across all departments.
+                      Final quarter evaluations in progress. Current prep-rate is at {stats.completionRate}% across all departments.
                     </p>
                   </div>
                 </div>

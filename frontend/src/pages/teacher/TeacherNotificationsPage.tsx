@@ -16,23 +16,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useEffect, useState, useMemo } from 'react';
 import { API_BASE_URL } from '../../lib/teacher/utils';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { mapApiNotifications, type MappedNotification } from '../../lib/notifications/mapper';
 
 type NotificationType = 'message' | 'system' | 'alert';
-
-interface Notification {
-  id: string;
-  type: NotificationType;
-  user_id?: number | null;
-  sender: {
-    id?: number;
-    name: string;
-    role: 'Student' | 'Admin' | 'Teacher';
-    avatar: string;
-  };
-  content: string;
-  time: string;
-  isRead: boolean;
-}
+type Notification = MappedNotification;
 
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
@@ -43,20 +31,7 @@ export default function TeacherNotificationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);
-  const MAX_NOTIFICATIONS = 100;
-  const [teacherId, setTeacherId] = useState<number | null>(null);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('auth_user');
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      const id = Number(parsed?.id);
-      if (Number.isFinite(id) && id > 0) setTeacherId(id);
-    } catch {
-      setTeacherId(null);
-    }
-  }, []);
+  const { teacherId } = useTeacherIdentity();
 
   const loadNotifications = async () => {
     setIsLoading(true);
@@ -68,46 +43,14 @@ export default function TeacherNotificationsPage() {
         throw new Error(data?.error || 'Failed to load notifications.');
       }
 
-      const mapped: Notification[] = Array.isArray(data)
-        ? data.map((n: any) => {
-            const rawType = String(n.type || '').toLowerCase();
-            const normalizedType: NotificationType =
-              rawType === 'alert' ? 'alert' : rawType === 'system' ? 'system' : 'message';
-
-            const backendContent = String(n.content || '').trim();
-            const backendFromName = String(n.from_name || '').trim();
-            const backendFromRole = String(n.from_role || '').trim().toLowerCase();
-            const backendFromAvatar = String(n.from_avatar || '').trim();
-
-            return {
-              id: String(n.id),
-              type: normalizedType,
-              sender: {
-                id: Number(n.from_id) || undefined,
-                name: backendFromName || String(n.sender_name || 'Unknown'),
-                role: (backendFromRole === 'admin'
-                  ? 'Admin'
-                  : backendFromRole === 'teacher'
-                  ? 'Teacher'
-                  : 'Student') as Notification['sender']['role'],
-                avatar: backendFromAvatar || String(n.sender_avatar || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'),
-              },
-              content: backendContent || String(n.message || n.content || '').trim() || 'No content',
-              time: String(n.created_at || ''),
-              // keep original target
-              user_id: Number(n.user_id) || null,
-              isRead: Number(n.is_read) === 1,
-            };
-          })
-        : [];
-
+      const mapped: Notification[] = mapApiNotifications(data);
       const teacherStudentOnly = mapped.filter((n) => {
         const isMessageBetweenTeacherStudent = n.type === 'message' && (n.sender.role === 'Student' || n.sender.role === 'Teacher');
         const isForMe = teacherId ? n.user_id === teacherId : true;
         return isMessageBetweenTeacherStudent && isForMe;
       });
 
-      setNotifications(teacherStudentOnly.slice(0, MAX_NOTIFICATIONS));
+      setNotifications(teacherStudentOnly);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load notifications.');
       setNotifications([]);
@@ -118,7 +61,7 @@ export default function TeacherNotificationsPage() {
 
   useEffect(() => {
     void loadNotifications();
-  }, []);
+  }, [teacherId]);
 
   const filteredNotifications = useMemo(() => (
     notifications.filter((n) => {
