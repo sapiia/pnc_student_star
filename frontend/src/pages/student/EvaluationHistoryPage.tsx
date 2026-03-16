@@ -9,7 +9,8 @@ import {
   Settings,
   Star,
   TrendingUp,
-  Clock3
+  Clock3,
+  Pencil
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
@@ -100,6 +101,7 @@ export default function EvaluationHistoryPage() {
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const [showOverview, setShowOverview] = useState(false);
   const [activeCriterionId, setActiveCriterionId] = useState<string | null>(null);
+  const [canEditAfterSubmit, setCanEditAfterSubmit] = useState(false);
 
   useEffect(() => {
     const loadEvaluationHistory = async () => {
@@ -125,22 +127,25 @@ export default function EvaluationHistoryPage() {
           return;
         }
 
-        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse] = await Promise.all([
+        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse, editPermissionResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${userId}`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
           fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
-          fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`)
         ]);
 
         const userData = await userResponse.json().catch(() => ({}));
         const intervalData = await intervalResponse.json().catch(() => ({}));
         const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
         const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+        const editPermissionData = await editPermissionResponse.json().catch(() => ({}));
 
         const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
         const ratingScale = nextRatingScale;
         setGlobalRatingScale(nextRatingScale);
         setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+        setCanEditAfterSubmit(!['false', '0'].includes(String(editPermissionData?.value || 'false').trim().toLowerCase()));
 
         const resolvedName =
           String(userData?.name || '').trim() ||
@@ -251,6 +256,7 @@ export default function EvaluationHistoryPage() {
       };
     });
   }, [globalCriteria, latestEvaluationRecord]);
+
 
   const activeCriterion = overviewCriteria.find((criterion) => criterion.id === activeCriterionId) || null;
   const activeCriterionProgress = useMemo(() => {
@@ -539,6 +545,17 @@ export default function EvaluationHistoryPage() {
                               >
                                 View Full Report
                               </button>
+                              {canEditAfterSubmit && (
+                                <button
+                                  onClick={() => {
+                                    navigate(`/evaluate?edit=${evalItem.id}`);
+                                  }}
+                                  className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                  Edit
+                                </button>
+                              )}
                             </div>
                           </div>
                         </motion.div>
@@ -597,6 +614,7 @@ export default function EvaluationHistoryPage() {
           </div>
         </div>
       </main>
+
     </div>
   );
 }
