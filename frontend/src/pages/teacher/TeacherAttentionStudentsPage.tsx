@@ -7,16 +7,17 @@ import TeacherMobileNav from '../../components/common/TeacherMobileNav';
 import StudentCard from '../../components/teacher/StudentCard';
 
 import { motion } from 'motion/react';
-import { getRealtimeSocket, type NotificationRealtimePayload } from '../../lib/realtime';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { useTeacherNotifications } from '../../hooks/useTeacherNotifications';
 import { 
   API_BASE_URL, 
+  DEFAULT_AVATAR,
   toDisplayName, 
   extractGeneration, 
   extractClassNameLegacy,
   getEvaluationSortValue,
   formatShortDateWithTime,
-  getStudentStatus,
-  getTeacherIdFromStorage
+  getStudentStatus
 } from '../../lib/teacher/utils';
 import type { Gender } from '../../lib/teacher/types';
 
@@ -36,15 +37,10 @@ interface StudentData {
 export default function TeacherAttentionStudentsPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [teacherId, setTeacherId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
-
-  useEffect(() => {
-    const id = getTeacherIdFromStorage();
-    setTeacherId(id);
-  }, []);
+  const { teacherId } = useTeacherIdentity();
+  const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true);
@@ -84,7 +80,7 @@ export default function TeacherAttentionStudentsPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
                 generation: extractGeneration(user),
                 className: extractClassNameLegacy(user),
                 gender: (String(user.gender || '').trim().toLowerCase() as Gender) || 'unknown',
@@ -114,45 +110,6 @@ export default function TeacherAttentionStudentsPage() {
     void loadDashboardData();
   }, [loadDashboardData]);
 
-  const loadNotifications = useCallback(async () => {
-    if (!teacherId) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/notifications/user/${teacherId}`);
-      const data = await response.json().catch(() => []);
-      if (response.ok && Array.isArray(data)) {
-        setNotifications(data);
-      }
-    } catch {
-      // Ignore
-    }
-  }, [teacherId]);
-
-  useEffect(() => {
-    void loadNotifications();
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    if (!teacherId) return;
-    const socket = getRealtimeSocket();
-    const subscription = { userId: teacherId };
-    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
-      if (Number(payload.userId) !== teacherId) return;
-      void loadNotifications();
-    };
-
-    socket.emit('notification:subscribe', subscription);
-    socket.on('notification:created', handleNotificationEvent);
-    socket.on('notification:updated', handleNotificationEvent);
-    socket.on('notification:deleted', handleNotificationEvent);
-
-    return () => {
-      socket.emit('notification:unsubscribe', subscription);
-      socket.off('notification:created', handleNotificationEvent);
-      socket.off('notification:updated', handleNotificationEvent);
-      socket.off('notification:deleted', handleNotificationEvent);
-    };
-  }, [loadNotifications, teacherId]);
-
   const filteredStudents = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     return students.filter(student => {
@@ -163,8 +120,6 @@ export default function TeacherAttentionStudentsPage() {
       return matchesSearch;
     });
   }, [students, searchQuery]);
-
-  const unreadNotificationCount = notifications.filter(n => Number(n.is_read) !== 1).length;
 
   const renderTopBar = () => (
     <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
