@@ -5,6 +5,16 @@ const ensureEvaluationUserForeignKey = async () => {
   const databaseName = databaseRows?.[0]?.database_name;
   if (!databaseName) return;
 
+  const [indexRows] = await db.query(
+    `
+      SELECT INDEX_NAME, NON_UNIQUE
+      FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'evaluations'
+    `,
+    [databaseName]
+  );
+
   const [constraintRows] = await db.query(
     `
       SELECT
@@ -26,12 +36,27 @@ const ensureEvaluationUserForeignKey = async () => {
     currentConstraint.REFERENCED_TABLE_NAME !== 'users' ||
     currentConstraint.REFERENCED_COLUMN_NAME !== 'id';
 
-  if (!shouldRecreate) {
-    return;
-  }
+  const hasUniqueUserPeriod = indexRows.some(
+    (row) => row.INDEX_NAME === 'uq_evaluations_user_period'
+  );
+  const hasUserIdIndex = indexRows.some(
+    (row) => row.INDEX_NAME === 'idx_evaluations_user_id'
+  );
 
   if (currentConstraint?.CONSTRAINT_NAME) {
     await db.query(`ALTER TABLE evaluations DROP FOREIGN KEY \`${currentConstraint.CONSTRAINT_NAME}\``);
+  }
+
+  if (hasUniqueUserPeriod) {
+    await db.query('ALTER TABLE evaluations DROP INDEX uq_evaluations_user_period');
+  }
+
+  if (!hasUserIdIndex) {
+    await db.query('CREATE INDEX idx_evaluations_user_id ON evaluations(user_id)');
+  }
+
+  if (!shouldRecreate && !hasUniqueUserPeriod && hasUserIdIndex) {
+    return;
   }
 
   await db.query(`
@@ -259,6 +284,27 @@ const toPeriodLabel = (value) => {
   return `${now.getUTCFullYear()}-Q${quarter}`;
 };
 
+const getSettingNumber = async (key, fallback, min, max) => {
+  const [rows] = await db.query("SELECT `value` FROM settings WHERE `key` = ? LIMIT 1", [key]);
+  const parsed = Number(rows?.[0]?.value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+};
+
+const buildLimitError = (message, meta) => {
+  const err = new Error(message);
+  err.status = 403;
+  err.meta = meta;
+  return err;
+};
+
+const buildValidationError = (message, meta) => {
+  const err = new Error(message);
+  err.status = 400;
+  err.meta = meta;
+  return err;
+};
+
 class Evaluation {
   static async ensureSchema() {
     await ensureTables();
@@ -294,6 +340,38 @@ class Evaluation {
       throw new Error('A valid user_id is required.');
     }
 
+    const intervalDays = await getSettingNumber('evaluation_interval_days', 90, 30, 365);
+    const maxPerCycle = await getSettingNumber('student_max_evaluations_per_cycle', 1, 1, 12);
+    const maxReflectionChars = await getSettingNumber('student_max_reflection_characters', 500, 100, 5000);
+
+    const [limitRows] = await db.query(
+      `
+        SELECT
+          COUNT(*) AS count,
+          MIN(COALESCE(submitted_at, created_at)) AS earliest
+        FROM evaluations
+        WHERE user_id = ?
+          AND COALESCE(submitted_at, created_at) >= DATE_SUB(NOW(), INTERVAL ? DAY)
+      `,
+      [userId, intervalDays]
+    );
+
+    const cycleCount = Number(limitRows?.[0]?.count || 0);
+    if (cycleCount >= maxPerCycle) {
+      const earliest = limitRows?.[0]?.earliest ? new Date(limitRows[0].earliest) : null;
+      let nextAvailableAt = null;
+      if (earliest && !Number.isNaN(earliest.getTime())) {
+        const nextDate = new Date(earliest);
+        nextDate.setDate(nextDate.getDate() + intervalDays);
+        nextAvailableAt = nextDate.toISOString();
+      }
+
+      throw buildLimitError(
+        `Evaluation limit reached for the current ${intervalDays}-day cycle.`,
+        { nextAvailableAt, maxPerCycle, intervalDays }
+      );
+    }
+
     const responses = Array.isArray(evaluationData?.responses) ? evaluationData.responses : [];
     if (responses.length === 0) {
       throw new Error('At least one evaluation response is required.');
@@ -309,11 +387,23 @@ class Evaluation {
       tip_snapshot: String(response?.tip_snapshot || '').trim(),
     }));
 
+    const overLimit = normalizedResponses.find((response) => response.reflection.length > maxReflectionChars);
+    if (overLimit) {
+      throw buildValidationError(
+        `Reflection exceeds ${maxReflectionChars} characters.`,
+        { maxReflectionCharacters: maxReflectionChars, criterion_key: overLimit.criterion_key }
+      );
+    }
+
     const ratingScale = Math.max(1, Number(evaluationData?.rating_scale || 5));
     const criteriaCount = normalizedResponses.length;
     const totalScore = normalizedResponses.reduce((sum, response) => sum + response.star_value, 0);
     const averageScore = criteriaCount > 0 ? Number((totalScore / criteriaCount).toFixed(2)) : 0;
-    const period = toPeriodLabel(evaluationData?.period);
+    let period = toPeriodLabel(evaluationData?.period);
+    if (!String(evaluationData?.period || '').trim()) {
+      const year = new Date().getFullYear();
+      period = `${year}-Q${cycleCount + 1}`;
+    }
 
     const connection = await db.getConnection();
     try {

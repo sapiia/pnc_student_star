@@ -73,6 +73,9 @@ export default function EvaluationFormPage() {
   const [canEvaluate, setCanEvaluate] = useState(true);
   const [daysUntilAvailable, setDaysUntilAvailable] = useState(0);
   const [nextAvailableLabel, setNextAvailableLabel] = useState('');
+  const [maxReflectionChars, setMaxReflectionChars] = useState(500);
+  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState(1);
+  const [evaluationsUsed, setEvaluationsUsed] = useState(0);
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,36 +93,67 @@ export default function EvaluationFormPage() {
           return;
         }
 
-        const [intervalResponse, evaluationsResponse] = await Promise.all([
+        const [intervalResponse, maxEvalResponse, maxReflectionResponse, evaluationsResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_evaluations_per_cycle`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_reflection_characters`),
           fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
         ]);
 
         const intervalData = await intervalResponse.json().catch(() => ({}));
+        const maxEvalData = await maxEvalResponse.json().catch(() => ({}));
+        const maxReflectionData = await maxReflectionResponse.json().catch(() => ({}));
         const evaluations = await evaluationsResponse.json().catch(() => ([]));
-        const latestEvaluation = Array.isArray(evaluations) && evaluations.length > 0 ? evaluations[0] : null;
-
-        if (!latestEvaluation) {
-          setCanEvaluate(true);
-          setDaysUntilAvailable(0);
-          setNextAvailableLabel('');
-          return;
-        }
-
         const intervalDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
-        const latestSubmittedAt = String(latestEvaluation?.submitted_at || latestEvaluation?.created_at || '').trim();
-        const latestDate = new Date(latestSubmittedAt);
+        const maxPerCycle = Math.min(12, Math.max(1, Number(maxEvalData?.value || 1)));
+        const reflectionMax = Math.min(5000, Math.max(100, Number(maxReflectionData?.value || 500)));
 
-        if (Number.isNaN(latestDate.getTime())) {
+        setMaxEvaluationsPerCycle(maxPerCycle);
+        setMaxReflectionChars(reflectionMax);
+
+        if (!Array.isArray(evaluations) || evaluations.length === 0) {
+          setCanEvaluate(true);
+          setDaysUntilAvailable(0);
+          setNextAvailableLabel('');
+          setEvaluationsUsed(0);
+          return;
+        }
+
+        const now = Date.now();
+        const windowStart = now - intervalDays * 24 * 60 * 60 * 1000;
+        const evaluationsInWindow = evaluations.filter((evaluation: any) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          return Number.isFinite(timestamp) && timestamp >= windowStart;
+        });
+
+        const usedCount = evaluationsInWindow.length;
+        setEvaluationsUsed(usedCount);
+
+        if (usedCount < maxPerCycle) {
           setCanEvaluate(true);
           setDaysUntilAvailable(0);
           setNextAvailableLabel('');
           return;
         }
 
-        const nextAvailableDate = new Date(latestDate);
+        const earliestTimestamp = evaluationsInWindow.reduce((min: number, evaluation: any) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          if (!Number.isFinite(timestamp)) return min;
+          return Math.min(min, timestamp);
+        }, Number.POSITIVE_INFINITY);
+
+        if (!Number.isFinite(earliestTimestamp)) {
+          setCanEvaluate(true);
+          setDaysUntilAvailable(0);
+          setNextAvailableLabel('');
+          return;
+        }
+
+        const nextAvailableDate = new Date(earliestTimestamp);
         nextAvailableDate.setDate(nextAvailableDate.getDate() + intervalDays);
-        const remainingDays = Math.max(0, Math.ceil((nextAvailableDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+        const remainingDays = Math.max(0, Math.ceil((nextAvailableDate.getTime() - now) / (1000 * 60 * 60 * 24)));
 
         setCanEvaluate(remainingDays === 0);
         setDaysUntilAvailable(remainingDays);
@@ -205,9 +239,6 @@ export default function EvaluationFormPage() {
         throw new Error('Student account information is missing.');
       }
 
-      const now = new Date();
-      const quarter = Math.floor(now.getMonth() / 3) + 1;
-      const period = `${now.getFullYear()}-Q${quarter}`;
       const responses = criteria.map((item) => {
         const starValue = scores[item.key] || 0;
         return {
@@ -228,7 +259,6 @@ export default function EvaluationFormPage() {
         },
         body: JSON.stringify({
           user_id: userId,
-          period,
           rating_scale: ratingScale,
           responses,
         }),
@@ -312,6 +342,9 @@ export default function EvaluationFormPage() {
               <p className="mt-3 md:mt-4 text-sm md:text-base text-slate-600 font-bold leading-relaxed px-2">
                 Your next self-evaluation will open in {daysUntilAvailable} day{daysUntilAvailable === 1 ? '' : 's'}.
                 {nextAvailableLabel ? ` The next available date is ${nextAvailableLabel}.` : ''}
+              </p>
+              <p className="mt-3 text-[11px] md:text-xs font-black uppercase tracking-widest text-amber-500">
+                {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations used in this cycle
               </p>
             </div>
             <div className="bg-amber-50 px-6 md:px-8 py-5 md:py-6 flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3">
@@ -421,9 +454,9 @@ export default function EvaluationFormPage() {
                     </label>
                     <span className={cn(
                       "text-[10px] font-black uppercase tracking-widest",
-                      (reflections[criterion.key]?.length || 0) >= 50 ? "text-emerald-500" : "text-slate-400"
+                      (reflections[criterion.key]?.length || 0) >= maxReflectionChars ? "text-rose-500" : "text-slate-400"
                     )}>
-                      {reflections[criterion.key]?.length || 0} / 50 min
+                      {reflections[criterion.key]?.length || 0} / {maxReflectionChars} max
                     </span>
                   </div>
                   <textarea 
@@ -431,8 +464,12 @@ export default function EvaluationFormPage() {
                     id="reflection" 
                     placeholder={`Describe your ${criterion.label.toLowerCase()} situation...`}
                     rows={5}
+                    maxLength={maxReflectionChars}
                     value={reflections[criterion.key] || ''}
-                    onChange={(e) => setReflections({ ...reflections, [criterion.key]: e.target.value })}
+                    onChange={(e) => {
+                      const nextValue = e.target.value.slice(0, maxReflectionChars);
+                      setReflections({ ...reflections, [criterion.key]: nextValue });
+                    }}
                   />
                 </div>
 
