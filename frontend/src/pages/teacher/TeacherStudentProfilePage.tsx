@@ -60,6 +60,11 @@ export default function TeacherStudentProfilePage() {
   const [evaluationFeedback, setEvaluationFeedback] = useState<any[]>([]);
   const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
 
+  // Edit feedback state
+  const [editingFeedbackId, setEditingFeedbackId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [isUpdatingFeedback, setIsUpdatingFeedback] = useState(false);
+
   // Initialize teacher ID
   useEffect(() => {
     const tid = getTeacherIdFromStorage();
@@ -278,21 +283,87 @@ export default function TeacherStudentProfilePage() {
     setHiddenFeedbackIdsState((prev) => prev.includes(feedbackId) ? prev : [feedbackId, ...prev]);
   };
 
-  const confirmDeleteFeedbackForEveryone = async () => {
-    if (!pendingDeleteFeedbackId) return;
-    try {
-      await fetch(`${API_BASE_URL}/feedbacks/${pendingDeleteFeedbackId}`, { method: 'DELETE' });
-      setFeedbackHistory((prev) => prev.filter((fb: any) => Number(fb.id) !== pendingDeleteFeedbackId));
-      setHiddenFeedbackIdsState((prev) => prev.filter((id) => id !== pendingDeleteFeedbackId));
-      setPendingDeleteFeedbackId(null);
-    } catch {}
-  };
-
   const handleMarkReplyAsRead = async (notificationId: number) => {
     try {
       await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, { method: 'PUT' });
       setTeacherNotifications((current) => current.map((n: any) => Number(n.id) === notificationId ? { ...n, is_read: 1 } : n));
     } catch {}
+  };
+
+  // Start editing a feedback
+  const handleStartEdit = (feedback: any) => {
+    setEditingFeedbackId(Number(feedback.id));
+    setEditDraft(String(feedback.comment || ''));
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingFeedbackId(null);
+    setEditDraft('');
+  };
+
+  // Save edited feedback
+  const handleSaveEdit = async (feedbackId: number) => {
+    const trimmedEdit = editDraft.trim();
+    if (!trimmedEdit) {
+      setFeedbackError('Feedback cannot be empty.');
+      return;
+    }
+    if (trimmedEdit.length > teacherMaxFeedbackCharacters) {
+      setFeedbackError(`Feedback must be ${teacherMaxFeedbackCharacters} characters or fewer.`);
+      return;
+    }
+
+    setIsUpdatingFeedback(true);
+    setFeedbackError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/feedbacks/${feedbackId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: trimmedEdit })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to update feedback');
+
+      // Update local state
+      setFeedbackHistory((prev) => prev.map((fb: any) => 
+        Number(fb.id) === feedbackId ? { ...fb, comment: trimmedEdit } : fb
+      ));
+      setEvaluationFeedback((prev) => prev.map((fb: any) => 
+        Number(fb.id) === feedbackId ? { ...fb, comment: trimmedEdit } : fb
+      ));
+      
+      setEditingFeedbackId(null);
+      setEditDraft('');
+      setFeedbackSuccess('Feedback updated successfully!');
+      setTimeout(() => setFeedbackSuccess(''), 3000);
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Error updating feedback');
+    } finally {
+      setIsUpdatingFeedback(false);
+    }
+  };
+
+  // Confirm delete feedback
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteFeedbackId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/feedbacks/${pendingDeleteFeedbackId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to delete feedback');
+      }
+      
+      setFeedbackHistory((prev) => prev.filter((fb: any) => Number(fb.id) !== pendingDeleteFeedbackId));
+      setEvaluationFeedback((prev) => prev.filter((fb: any) => Number(fb.id) !== pendingDeleteFeedbackId));
+      setHiddenFeedbackIdsState((prev) => prev.filter((id) => id !== pendingDeleteFeedbackId));
+      setPendingDeleteFeedbackId(null);
+      setFeedbackSuccess('Feedback deleted successfully!');
+      setTimeout(() => setFeedbackSuccess(''), 3000);
+    } catch (err: any) {
+      setFeedbackError(err.message || 'Error deleting feedback');
+      setPendingDeleteFeedbackId(null);
+    }
   };
 
   const radarData = useMemo(() => {
@@ -302,12 +373,42 @@ export default function TeacherStudentProfilePage() {
     // Use selected evaluation if available, otherwise use latest
     const evalToShow = selectedEvaluation || latestEval;
     
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    const nameToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+        nameToIdMap.set(String(c.name || '').trim().toLowerCase(), c.id);
+      }
+    });
+    
     const data = activeGlobal.map((criterion: any, index: number) => {
-      const response = (evalToShow?.responses || []).find((r: any) => 
-        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-      );
-      return { subject: String(criterion.name || `Criterion ${index + 1}`), score: response ? Math.max(0, Number(response.star_value || 0)) : 0 };
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
+      
+      // Try to find a matching response using multiple strategies
+      const response = (evalToShow?.responses || []).find((r: any) => {
+        const responseKey = String(r.criterion_key || '').trim();
+        const responseId = String(r.criterion_id || '').trim();
+        const responseName = String(r.criterion_name || '').trim().toLowerCase();
+        
+        // Match by: criterion_id directly, criterion_key mapping, or name
+        return responseId === criterionId || 
+               keyToIdMap.get(responseKey) === criterionId ||
+               responseName === criterionName;
+      });
+      
+      return { 
+        subject: String(criterion.name || `Criterion ${index + 1}`), 
+        score: response ? Math.max(0, Number(response.star_value || 0)) : 0 
+      };
     });
     return { data, maxValue: globalRatingScale };
   }, [latestEval, selectedEvaluation, globalCriteria, globalRatingScale]);
@@ -317,11 +418,36 @@ export default function TeacherStudentProfilePage() {
     // Use selected evaluation if available, otherwise use latest
     const evalToShow = selectedEvaluation || latestEval;
     
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+    
     return activeGlobal.map((criterion: any, index: number) => {
-      const response = (evalToShow?.responses || []).find((r: any) => 
-        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-      );
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
+      
+      // Try to find a matching response using multiple strategies
+      const response = (evalToShow?.responses || []).find((r: any) => {
+        const responseKey = String(r.criterion_key || '').trim();
+        const responseId = String(r.criterion_id || '').trim();
+        const responseName = String(r.criterion_name || '').trim().toLowerCase();
+        
+        // Match by: criterion_id directly, criterion_key mapping, or name
+        return responseId === criterionId || 
+               keyToIdMap.get(responseKey) === criterionId ||
+               responseName === criterionName;
+      });
+      
       return {
         criterion_key: criterion.id || criterion.name || `criterion-${index}`,
         criterion_name: criterion.name || `Criterion ${index + 1}`,
@@ -333,6 +459,13 @@ export default function TeacherStudentProfilePage() {
       };
     });
   }, [globalCriteria, latestEval, selectedEvaluation]);
+
+  // Get student replies for the current evaluation's feedbacks
+  const evaluationStudentReplies = useMemo(() => {
+    if (!selectedEvaluation || evaluationFeedback.length === 0) return [];
+    const feedbackIds = evaluationFeedback.map((fb: any) => Number(fb.id));
+    return studentReplyHistory.filter((reply: any) => feedbackIds.includes(Number(reply.feedbackId)));
+  }, [selectedEvaluation, evaluationFeedback, studentReplyHistory]);
 
   // Loading state
   if (isLoading) {
@@ -530,32 +663,144 @@ export default function TeacherStudentProfilePage() {
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <h4 className="text-sm font-bold text-slate-900">{selectedEvaluation?.period || 'Evaluation'} Feedback</h4>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{evaluationFeedback.length} messages</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      {evaluationFeedback.length} feedback · {evaluationStudentReplies.length} replies
+                    </span>
                   </div>
                   <div className="max-h-64 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    {evaluationFeedback.length > 0 ? evaluationFeedback.map((feedback: any) => (
-                      <div key={feedback.id} className="flex gap-3 p-3 bg-white rounded-xl border border-slate-200">
-                        <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                          {feedback.teacher_profile_image ? (
-                            <img src={feedback.teacher_profile_image} alt={feedback.teacher_name || 'Teacher'} className="w-full h-full object-cover rounded-lg" />
-                          ) : (
-                            <Users className="w-4 h-4" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-slate-900">{feedback.teacher_name || 'Teacher'}</p>
-                            {Number(feedback.teacher_id) === teacherId && (
-                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">You</span>
-                            )}
+                    {/* Combined feedback and replies, sorted by date */}
+                    {(() => {
+                      const allMessages = [
+                        ...evaluationFeedback.filter((fb: any) => !hiddenFeedbackIds.includes(Number(fb.id))).map((fb: any) => ({
+                          type: 'feedback' as const,
+                          id: fb.id,
+                          content: fb.comment,
+                          createdAt: fb.created_at,
+                          teacherId: fb.teacher_id,
+                          teacherName: fb.teacher_name,
+                          teacherProfileImage: fb.teacher_profile_image,
+                        })),
+                        ...evaluationStudentReplies.map((reply: any) => ({
+                          type: 'reply' as const,
+                          id: reply.notificationId,
+                          content: reply.message,
+                          createdAt: reply.createdAt,
+                          feedbackId: reply.feedbackId,
+                        })),
+                      ].sort((a, b) => new Date(String(a.createdAt || '')).getTime() - new Date(String(b.createdAt || '')).getTime());
+
+                      return allMessages.length > 0 ? allMessages.map((msg: any) => (
+                        msg.type === 'feedback' ? (
+                          // Teacher Feedback
+                          <div key={`feedback-${msg.id}`} className="flex gap-3 p-3 bg-white rounded-xl border border-slate-200">
+                            <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                              {msg.teacherProfileImage ? (
+                                <img src={msg.teacherProfileImage} alt={msg.teacherName || 'Teacher'} className="w-full h-full object-cover rounded-lg" />
+                              ) : (
+                                <Users className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-bold text-slate-900">{msg.teacherName || 'Teacher'}</p>
+                                <div className="flex items-center gap-1">
+                                  {Number(msg.teacherId) === teacherId && (
+                                    <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">You</span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-400">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                              
+                              {/* Edit Mode */}
+                              {editingFeedbackId === Number(msg.id) ? (
+                                <div className="mt-2 space-y-2">
+                                  <textarea
+                                    rows={3}
+                                    value={editDraft}
+                                    onChange={(e) => setEditDraft(e.target.value)}
+                                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                                    disabled={isUpdatingFeedback}
+                                  />
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] text-slate-400">{editDraft.length}/{teacherMaxFeedbackCharacters}</span>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={handleCancelEdit}
+                                        disabled={isUpdatingFeedback}
+                                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => handleSaveEdit(Number(msg.id))}
+                                        disabled={isUpdatingFeedback || !editDraft.trim()}
+                                        className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold disabled:opacity-50 transition-colors"
+                                      >
+                                        {isUpdatingFeedback ? 'Saving...' : 'Save'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm text-slate-700 mt-1 flex-1">{msg.content}</p>
+                                  {Number(msg.teacherId) === teacherId && (
+                                    <div className="flex items-center gap-1 shrink-0 mt-1">
+                                      <button
+                                        onClick={() => handleStartEdit(msg)}
+                                        className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                        title="Edit feedback"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => setPendingDeleteFeedbackId(Number(msg.id))}
+                                        className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                        title="Delete feedback"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => handleHideFeedbackForMe(Number(msg.id))}
+                                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                        title="Hide feedback"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-[10px] text-slate-400">{new Date(feedback.created_at).toLocaleDateString()}</p>
-                          <p className="text-sm text-slate-700 mt-1">{feedback.comment}</p>
-                        </div>
-                      </div>
-                    )) : (
-                      <div className="text-center py-6 text-sm text-slate-400">No feedback for this evaluation yet</div>
-                    )}
+                        ) : (
+                          // Student Reply
+                          <div key={`reply-${msg.id}`} className="flex gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                            <div className="size-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-bold text-emerald-700">Student Reply</p>
+                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded">Reply</span>
+                              </div>
+                              <p className="text-[10px] text-emerald-500">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                              <p className="text-sm text-slate-700 mt-1">{msg.content}</p>
+                            </div>
+                          </div>
+                        )
+                      )) : (
+                        <div className="text-center py-6 text-sm text-slate-400">No feedback for this evaluation yet</div>
+                      );
+                    })()}
                   </div>
                   
                   {/* Feedback Input Form */}
@@ -631,6 +876,53 @@ export default function TeacherStudentProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {pendingDeleteFeedbackId && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+              onClick={() => setPendingDeleteFeedbackId(null)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 z-10"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="size-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">Delete Feedback?</h3>
+              </div>
+              <p className="text-sm text-slate-600 mb-6">
+                Are you sure you want to delete this feedback? This action cannot be undone and the feedback will be permanently removed for everyone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setPendingDeleteFeedbackId(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Criterion Detail Modal */}
       <AnimatePresence>
