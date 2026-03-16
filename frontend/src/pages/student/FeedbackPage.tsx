@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Bell, Search, Send, Settings, Trash2, Users, X, ArrowLeft } from 'lucide-react';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
 import StudentMobileNav from '../../components/common/StudentMobileNav';
@@ -90,11 +90,13 @@ export default function FeedbackPage() {
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [replyStatus, setReplyStatus] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<ChatEntry | null>(null);
+  const [replyToFeedbackId, setReplyToFeedbackId] = useState<number | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const [seenByTeacher, setSeenByTeacher] = useState<Record<string, string>>({});
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const loadFeedbacks = useCallback(async () => {
     if (!studentId) {
@@ -359,13 +361,15 @@ export default function FeedbackPage() {
     setReplyDraft('');
     setReplyStatus('');
     setReplyToMessage(null);
+    setReplyToFeedbackId(null);
   }, [selectedTeacherId]);
 
   const handleHideMessage = (messageId: string) => {
     setHiddenMessageIds((current) => (current.includes(messageId) ? current : [messageId, ...current]));
   };
 
-  const handleQuickReply = async () => {
+  const handleQuickReply = async (e?: MouseEvent) => {
+    e?.preventDefault();
     if (!studentId || !selectedTeacherId) return;
 
     const trimmedReply = replyDraft.trim();
@@ -374,16 +378,15 @@ export default function FeedbackPage() {
       return;
     }
 
-    const latestFeedbackId = Number(selectedTeacherFeedbacks[selectedTeacherFeedbacks.length - 1]?.id || 0);
-    if (!Number.isInteger(latestFeedbackId) || latestFeedbackId <= 0) {
+    // Use the specific feedback being replied to, or fall back to latest
+    const targetFeedbackId = replyToFeedbackId ?? Number(selectedTeacherFeedbacks[selectedTeacherFeedbacks.length - 1]?.id || 0);
+    if (!Number.isInteger(targetFeedbackId) || targetFeedbackId <= 0) {
       setReplyStatus('No teacher feedback found for this conversation.');
       return;
     }
 
-    const replyPrefix = replyToMessage
-      ? `Replying to ${replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'} (${formatDateLabel(replyToMessage.createdAt)}): "${replyToMessage.text.slice(0, 120)}"\n\n`
-      : '';
-    const finalReply = `${replyPrefix}${trimmedReply}`;
+    // Store clean message - link to feedback via feedback_id, no need for prefix
+    const cleanReply = trimmedReply;
 
     setIsSubmittingReply(true);
     setReplyStatus('');
@@ -397,7 +400,7 @@ export default function FeedbackPage() {
         body: JSON.stringify({
           user_id: selectedTeacherId,
           is_read: 0,
-          message: `[StudentReply] feedback_id=${latestFeedbackId}; student_id=${studentId}; student_name=${studentName}; message=${finalReply}`,
+          message: `[StudentReply] feedback_id=${targetFeedbackId}; student_id=${studentId}; student_name=${studentName}; message=${cleanReply}`,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -407,8 +410,30 @@ export default function FeedbackPage() {
 
       setReplyDraft('');
       setReplyToMessage(null);
+      setReplyToFeedbackId(null);
       setReplyStatus('Sent.');
+
+      // Optimistically add the sent message to chat immediately
+      const optimisticReply: StudentReplyItem = {
+        id: Date.now(), // temporary id until API refresh
+        feedback_id: targetFeedbackId,
+        student_id: studentId,
+        student_name: studentName,
+        reply_message: cleanReply,
+        created_at: new Date().toISOString(),
+        is_read: 0,
+      };
+      setTeacherReplies((current) => [...current, optimisticReply]);
+
       void loadTeacherReplies();
+      // Scroll to bottom of chat - use longer timeout to ensure render completes
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+          }
+        }, 50);
+      });
     } catch (error) {
       setReplyStatus(error instanceof Error ? error.message : 'Failed to send reply.');
     } finally {
@@ -555,7 +580,7 @@ export default function FeedbackPage() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 bg-slate-50">
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 bg-slate-50">
             {isLoadingReplies ? (
               <div className="text-sm font-medium text-slate-500">Loading conversation...</div>
             ) : chatEntries.length > 0 ? chatEntries.map((entry) => (
@@ -588,7 +613,10 @@ export default function FeedbackPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setReplyToMessage(entry)}
+                      onClick={() => {
+                        setReplyToMessage(entry);
+                        setReplyToFeedbackId(entry.kind === 'teacher' ? entry.feedbackId ?? null : null);
+                      }}
                       className={cn(
                         'rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
                         entry.kind === 'student'
@@ -641,7 +669,10 @@ export default function FeedbackPage() {
                   <p className="text-[11px] font-bold text-primary">
                     Replying to {replyToMessage.kind === 'teacher' ? 'teacher' : 'my message'}: "{replyToMessage.text.slice(0, 120)}"
                   </p>
-                  <button type="button" onClick={() => setReplyToMessage(null)} className="text-slate-400 hover:text-slate-600">
+                  <button type="button" onClick={() => {
+                    setReplyToMessage(null);
+                    setReplyToFeedbackId(null);
+                  }} className="text-slate-400 hover:text-slate-600">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -665,7 +696,7 @@ export default function FeedbackPage() {
               </p>
               <button
                 type="button"
-                onClick={handleQuickReply}
+                onClick={(e) => handleQuickReply(e)}
                 disabled={isSubmittingReply || !selectedTeacher}
                 className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-60"
               >

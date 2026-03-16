@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import {
   Star,
   Bell,
@@ -141,11 +142,35 @@ export default function DashboardPage() {
   const currentStatusCriteria = useMemo(() => {
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+
     return activeGlobal.map((criterion, index) => {
-      const response = (latestEvaluation?.responses || []).find(r =>
-        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-      );
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
+      
+      // Try to find a matching response using multiple strategies
+      const response = (latestEvaluation?.responses || []).find(r => {
+        const responseKey = String(r.criterion_key || '').trim();
+        const responseId = String(r.criterion_id || '').trim();
+        const responseName = String(r.criterion_name || '').trim().toLowerCase();
+        
+        // Match by: criterion_id directly, criterion_key mapping, or name
+        return responseId === criterionId || 
+               keyToIdMap.get(responseKey) === criterionId ||
+               responseName === criterionName;
+      });
 
       return {
         key: String(criterion.id || criterion.name || `criterion-${index}`),
@@ -175,10 +200,26 @@ export default function DashboardPage() {
     const maxValue = globalRatingScale;
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+
     const data = activeGlobal.map((criterion, index) => {
       const row: Record<string, string | number> = {
         subject: String(criterion.name || `Criterion ${index + 1}`),
       };
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
 
       comparedEvaluations.forEach((evaluation, evaluationIndex) => {
         const chartKey = comparedEvaluations.length === 1
@@ -186,10 +227,18 @@ export default function DashboardPage() {
           : evaluationIndex === 0
             ? 'previous'
             : 'current';
-        const response = (evaluation.responses || []).find(r => 
-          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-        );
+            
+        // Try to find a matching response using multiple strategies
+        const response = (evaluation.responses || []).find(r => {
+          const responseKey = String(r.criterion_key || '').trim();
+          const responseId = String(r.criterion_id || '').trim();
+          const responseName = String(r.criterion_name || '').trim().toLowerCase();
+          
+          // Match by: criterion_id directly, criterion_key mapping, or name
+          return responseId === criterionId || 
+                 keyToIdMap.get(responseKey) === criterionId ||
+                 responseName === criterionName;
+        });
         row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
       });
       return row;
