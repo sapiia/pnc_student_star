@@ -1,3 +1,4 @@
+const config = require('../config/index');
 const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -26,10 +27,10 @@ const invalidateUserCache = async (userId) => {
   }
 };
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
-const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
-const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
+const FRONTEND_URL = config.server.frontend_url || 'http://localhost:3000';
+const INVITE_SECRET = config.server.invite_secret || 'change-this-invite-secret';
+const INVITE_EXPIRES_HOURS = Number(config.server.invite_expires_hours || 72);
+const ADMIN_INVITER_EMAIL = config.admin.inviter_email || 'moeurnsophy55@gmail.com';
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
 
@@ -292,13 +293,14 @@ const verifyInviteToken = (token = '') => {
 };
 
 const createEmailTransporter = () => {
+  const smtpConfig = config.smtp || {};
   const {
-    SMTP_HOST = 'smtp.gmail.com',
-    SMTP_PORT = '587',
-    SMTP_USER,
-    SMTP_PASS,
-    SMTP_SECURE = 'false'
-  } = process.env;
+    host: SMTP_HOST = 'smtp.gmail.com',
+    port: SMTP_PORT = 587,
+    user: SMTP_USER,
+    password: SMTP_PASS,
+    secure: SMTP_SECURE = false
+  } = smtpConfig;
 
   if (!SMTP_USER || !SMTP_PASS) {
     return {
@@ -311,7 +313,7 @@ const createEmailTransporter = () => {
     transporter: nodemailer.createTransport({
       host: SMTP_HOST,
       port: Number(SMTP_PORT),
-      secure: SMTP_SECURE === 'true',
+      secure: SMTP_SECURE === true,
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS

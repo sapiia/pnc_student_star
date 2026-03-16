@@ -1,0 +1,31 @@
+{
+  "server": {
+    "port": 3001,
+    "node_env": "development",
+    "frontend_url": "http://localhost:3000"
+  },
+  "database": {
+    "host": "localhost",
+    "user": "root",
+    "password": "yourpassword",
+    "name": "student_star_db_new"
+  },
+  "redis": {
+    "name": "My Redis",
+    "host": "127.0.0.1",
+    "port": 6379,
+    "password": "",
+    "database": 0
+  },
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "secure": false,
+    "user": "moeurnsophy92@gmail.com",
+    "password": "ouosvwppwplsfrjr",
+    "from": "PNC Student Star <moeurnsophy92@gmail.com>"
+  },
+  "admin": {
+    "inviter_email": "moeurnsophy92@gmail.com"
+  }
+}

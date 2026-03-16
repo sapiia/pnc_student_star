@@ -1,18 +1,37 @@
 const { createClient } = require('redis');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+const config = require('./index');
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
-  socket: {
-    reconnectStrategy: (retries) => {
-      if (retries >= 10) {
-        return false; // Stop retrying after 10 attempts
+let redisOptions = {};
+
+if (config.redis) {
+  const redisConfig = config.redis;
+  redisOptions = {
+    socket: {
+      host: redisConfig.host || '127.0.0.1',
+      port: redisConfig.port || 6379,
+      reconnectStrategy: (retries) => {
+        if (retries >= 10) return false;
+        return Math.min(retries * 100, 3000);
       }
-      return Math.min(retries * 100, 3000);
+    },
+    password: redisConfig.password || undefined,
+    database: redisConfig.database || 0
+  };
+} else {
+  console.warn('⚠️ config.redis not found. Using defaults.');
+  redisOptions = {
+    socket: {
+      host: '127.0.0.1',
+      port: 6379,
+      reconnectStrategy: (retries) => {
+        if (retries >= 10) return false;
+        return Math.min(retries * 100, 3000);
+      }
     }
-  }
-});
+  };
+}
+
+const redisClient = createClient(redisOptions);
 
 let isRedisConnected = false;
 
@@ -23,9 +42,9 @@ redisClient.on('connect', () => {
 
 redisClient.on('error', (err) => {
   isRedisConnected = false;
-  // Silently handle ECONNREFUSED during reconnect attempts
-  if (err.code === 'ECONNREFUSED') {
-    // Suppress logs for connection refusal
+  // Silently handle ECONNREFUSED and "Socket closed unexpectedly"
+  if (err.code === 'ECONNREFUSED' || err.message === 'Socket closed unexpectedly') {
+    // Suppress logs for connection refusal and unexpected closure
   } else {
     console.error('Redis Client Error:', err.message);
   }
