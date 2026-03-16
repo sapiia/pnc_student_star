@@ -45,6 +45,7 @@ type DirectMessage = {
 type Contact = {
   id: number;
   name: string;
+  studentId?: string;
   role: string;
   type: 'Admin' | 'Teacher' | 'Student';
   avatar: string;
@@ -131,14 +132,26 @@ export default function TeacherMessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const passedState = location.state as { selectedContactId?: number, isMobileChatOpen?: boolean } | null;
+  const queryContactToken = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get('contactId') || params.get('studentId') || '').trim();
+  }, [location.search]);
+  const initialContactId = useMemo(() => {
+    const fromState = Number(passedState?.selectedContactId);
+    if (Number.isFinite(fromState) && fromState > 0) return fromState;
+    const parsed = Number(queryContactToken);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [passedState?.selectedContactId, queryContactToken]);
   
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [teacherName, setTeacherName] = useState('Teacher');
   const [teacherAvatar, setTeacherAvatar] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState<number | null>(passedState?.selectedContactId || null);
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(passedState?.isMobileChatOpen || !!passedState?.selectedContactId);
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(initialContactId);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(
+    passedState?.isMobileChatOpen || Boolean(initialContactId)
+  );
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -153,6 +166,7 @@ export default function TeacherMessagesPage() {
   const [isCompactMode, setIsCompactMode] = useState(false);
   const typingStopTimerRef = useRef<number | null>(null);
   const hasSentTypingRef = useRef(false);
+  const hasRequestedContact = Boolean(passedState?.selectedContactId || queryContactToken);
 
   useEffect(() => {
     try {
@@ -244,11 +258,31 @@ export default function TeacherMessagesPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (passedState?.selectedContactId) {
-      // Clear state so it doesn't re-trigger if refreshed
-      navigate(location.pathname, { replace: true, state: {} });
+    if (!passedState?.selectedContactId) return;
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: {} });
+  }, [passedState?.selectedContactId, navigate, location.pathname, location.search]);
+
+  const updateContactInUrl = useCallback((nextId: number | null) => {
+    const params = new URLSearchParams(location.search);
+    const currentId = Number(params.get('contactId') || params.get('studentId') || '');
+    if (nextId && nextId > 0) {
+      if (currentId === nextId) return;
+      params.set('contactId', String(nextId));
+      params.delete('studentId');
+    } else {
+      if (!params.has('contactId') && !params.has('studentId')) return;
+      params.delete('contactId');
+      params.delete('studentId');
     }
-  }, [passedState, navigate, location.pathname]);
+    const nextSearch = params.toString();
+    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true, state: {} });
+  }, [location.pathname, location.search, navigate]);
+
+  const handleSelectContact = useCallback((contactId: number) => {
+    setSelectedContactId(contactId);
+    setIsMobileChatOpen(true);
+    updateContactInUrl(contactId);
+  }, [updateContactInUrl]);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -331,6 +365,7 @@ export default function TeacherMessagesPage() {
       return {
         id: contactId,
         name: toDisplayName(user),
+        studentId: String(user.student_id || user.resolved_student_id || '').trim() || undefined,
         role: toRoleLabel(String(user.role || '')),
         type: toContactType(String(user.role || '')),
         avatar: resolveAvatarUrl(
@@ -348,6 +383,45 @@ export default function TeacherMessagesPage() {
     ));
   }, [directNotifications, teacherId, users]);
 
+  useEffect(() => {
+    if (!passedState?.selectedContactId && !queryContactToken) return;
+
+    let nextId: number | null = null;
+    const fromState = Number(passedState?.selectedContactId);
+    if (Number.isFinite(fromState) && fromState > 0) {
+      nextId = fromState;
+    }
+
+    if (!nextId && queryContactToken) {
+      const numeric = Number(queryContactToken);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        nextId = numeric;
+      }
+    }
+
+    if (queryContactToken) {
+      const normalizedToken = queryContactToken.toLowerCase();
+      if (!nextId || !contacts.some((contact) => contact.id === nextId)) {
+        const matchedByStudentId = contacts.find((contact) => contact.studentId?.toLowerCase() === normalizedToken);
+        if (matchedByStudentId) {
+          nextId = matchedByStudentId.id;
+        }
+      }
+      if (!nextId || !contacts.some((contact) => contact.id === nextId)) {
+        const matchedByName = contacts.find((contact) => contact.name.toLowerCase() === normalizedToken);
+        if (matchedByName) {
+          nextId = matchedByName.id;
+        }
+      }
+    }
+
+    if (nextId) {
+      setSelectedContactId(nextId);
+      setIsMobileChatOpen(true);
+      setSearchQuery('');
+    }
+  }, [contacts, passedState?.selectedContactId, queryContactToken]);
+
   const filteredContacts = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return contacts;
@@ -360,19 +434,31 @@ export default function TeacherMessagesPage() {
   }, [contacts, searchQuery]);
 
   useEffect(() => {
-    // ONLY override selected contact if it's currently invalid (missing entirely from filtered list) AND we have no explicit passed state
-    // We already initialized it in useState(passedState?.selectedContactId).
-    if (filteredContacts.length === 0) {
+    if (isLoading) return;
+    if (contacts.length === 0) {
       setSelectedContactId(null);
+      if (!hasRequestedContact) {
+        updateContactInUrl(null);
+      }
       return;
     }
 
-    const exists = filteredContacts.some((contact) => contact.id === selectedContactId);
-    if (!exists && selectedContactId === null) {
-      // Auto-select the first contact if none is selected
-      setSelectedContactId(filteredContacts[0].id);
+    const existsInContacts = contacts.some((contact) => contact.id === selectedContactId);
+    if (!existsInContacts && selectedContactId !== null) {
+      setSelectedContactId(null);
+      if (!hasRequestedContact) {
+        updateContactInUrl(null);
+      }
+      return;
     }
-  }, [filteredContacts, selectedContactId]);
+
+    if (selectedContactId === null) {
+      if (!hasRequestedContact) {
+        setSelectedContactId(contacts[0].id);
+        updateContactInUrl(contacts[0].id);
+      }
+    }
+  }, [contacts, hasRequestedContact, isLoading, selectedContactId, updateContactInUrl]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 
@@ -681,8 +767,7 @@ export default function TeacherMessagesPage() {
             <button
               key={contact.id}
               onClick={() => {
-                setSelectedContactId(contact.id);
-                setIsMobileChatOpen(true);
+                handleSelectContact(contact.id);
               }}
               className={cn(
                 'w-full text-left border-b border-slate-50 transition-all relative group',

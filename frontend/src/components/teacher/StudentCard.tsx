@@ -109,7 +109,7 @@ export default function StudentCard({
           Profile
         </button>
         <button 
-          onClick={() => onMessageClick ? onMessageClick(id) : navigate('/teacher/messages', { state: { selectedContactId: id } })}
+          onClick={() => onMessageClick ? onMessageClick(id) : navigate(`/teacher/messages?contactId=${Number(id)}`)}
           className={cn(
             "flex-1 py-2.5 border-2 flex justify-center items-center gap-2 rounded-xl text-xs font-bold transition-all shadow-lg",
             status === 'Action Needed' 

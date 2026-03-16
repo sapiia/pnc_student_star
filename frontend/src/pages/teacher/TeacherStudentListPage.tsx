@@ -585,9 +585,28 @@ export default function TeacherStudentListPage() {
                 </span>
               </td>
               <td className="px-6 py-5">
-                <button className={cn('text-xs font-bold transition-colors', selectedStudent?.id === student.id ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600')}>
-                  View Overview
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/teacher/students/${student.id}`);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-primary/20 text-primary text-xs font-bold hover:bg-primary/5 transition-colors"
+                  >
+                    View Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/teacher/messages?contactId=${Number(student.id)}`);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition-colors"
+                  >
+                    Message
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

@@ -528,7 +528,7 @@ export default function TeacherStudentProfilePage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => navigate('/teacher/messages', { state: { selectedContactId: Number(student.id) } })}
+                    onClick={() => navigate(`/teacher/messages?contactId=${Number(student.id)}`)}
                     className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
                   >
                     <MessageSquare className="w-4 h-4" /> Message Student
