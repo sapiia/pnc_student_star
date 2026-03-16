@@ -154,6 +154,8 @@ export default function TeacherMessagesPage() {
   );
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'All' | 'Admin' | 'Teacher' | 'Student'>('All');
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -164,6 +166,7 @@ export default function TeacherMessagesPage() {
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<number[]>([]);
   const [isCompactMode, setIsCompactMode] = useState(false);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
   const typingStopTimerRef = useRef<number | null>(null);
   const hasSentTypingRef = useRef(false);
   const hasRequestedContact = Boolean(passedState?.selectedContactId || queryContactToken);
@@ -321,6 +324,10 @@ export default function TeacherMessagesPage() {
     setConfirmDeleteMessageId(null);
     setReplyToMessageId(null);
     setEditingMessageId(null);
+    // Smoothly focus the conversation area on contact switch
+    if (messagesRef.current) {
+      messagesRef.current.scrollTo({ top: messagesRef.current.scrollHeight, behavior: 'smooth' });
+    }
   }, [selectedContactId]);
 
   const directNotifications = useMemo(() => (
@@ -424,14 +431,17 @@ export default function TeacherMessagesPage() {
 
   const filteredContacts = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return contacts;
-
-    return contacts.filter((contact) => (
-      contact.name.toLowerCase().includes(normalizedQuery) ||
-      contact.role.toLowerCase().includes(normalizedQuery) ||
-      contact.lastMessage.toLowerCase().includes(normalizedQuery)
-    ));
-  }, [contacts, searchQuery]);
+    return contacts.filter((contact) => {
+      const matchesQuery =
+        !normalizedQuery ||
+        contact.name.toLowerCase().includes(normalizedQuery) ||
+        contact.role.toLowerCase().includes(normalizedQuery) ||
+        contact.lastMessage.toLowerCase().includes(normalizedQuery);
+      const matchesRole = roleFilter === 'All' || contact.type === roleFilter;
+      const matchesUnread = !showUnreadOnly || contact.unreadCount > 0;
+      return matchesQuery && matchesRole && matchesUnread;
+    });
+  }, [contacts, roleFilter, searchQuery, showUnreadOnly]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -443,22 +453,25 @@ export default function TeacherMessagesPage() {
       return;
     }
 
-    const existsInContacts = contacts.some((contact) => contact.id === selectedContactId);
+    const contactPool = filteredContacts.length > 0 ? filteredContacts : contacts;
+    const existsInContacts = contactPool.some((contact) => contact.id === selectedContactId);
+
     if (!existsInContacts && selectedContactId !== null) {
-      setSelectedContactId(null);
       if (!hasRequestedContact) {
-        updateContactInUrl(null);
+        const fallbackId = contactPool[0]?.id ?? null;
+        setSelectedContactId(fallbackId);
+        updateContactInUrl(fallbackId);
+      } else {
+        setSelectedContactId(null);
       }
       return;
     }
 
-    if (selectedContactId === null) {
-      if (!hasRequestedContact) {
-        setSelectedContactId(contacts[0].id);
-        updateContactInUrl(contacts[0].id);
-      }
+    if (selectedContactId === null && !hasRequestedContact) {
+      setSelectedContactId(contactPool[0].id);
+      updateContactInUrl(contactPool[0].id);
     }
-  }, [contacts, hasRequestedContact, isLoading, selectedContactId, updateContactInUrl]);
+  }, [contacts, filteredContacts, hasRequestedContact, isLoading, selectedContactId, updateContactInUrl]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 
@@ -519,6 +532,16 @@ export default function TeacherMessagesPage() {
 
     void markRead();
   }, [currentMessages, loadData, selectedContactId, teacherId]);
+
+  const scrollMessagesToBottom = useCallback(() => {
+    if (messagesRef.current) {
+      messagesRef.current.scrollTo({ top: messagesRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    scrollMessagesToBottom();
+  }, [visibleMessages, selectedContactId, scrollMessagesToBottom]);
 
   const unreadTotal = useMemo(() => (
     contacts.reduce((sum, contact) => sum + contact.unreadCount, 0)
@@ -737,7 +760,24 @@ export default function TeacherMessagesPage() {
       'w-full md:w-[300px] lg:w-[350px] border-r border-slate-200 bg-white flex flex-col shrink-0 transition-transform duration-300 md:translate-x-0 pb-20 md:pb-0',
       isMobileChatOpen ? '-translate-x-full absolute md:relative w-full h-full' : 'translate-x-0 relative'
     )}>
-      <div className="p-6">
+      <div className="p-6 space-y-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Inbox Overview</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm font-bold text-slate-900">{filteredContacts.length} contacts</span>
+              <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{unreadTotal} unread</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsCompactMode(!isCompactMode)}
+            className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-primary transition-colors font-semibold"
+          >
+            {isCompactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+            {isCompactMode ? 'Expand' : 'Compact'}
+          </button>
+        </div>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -748,13 +788,32 @@ export default function TeacherMessagesPage() {
             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
           />
         </div>
-        <div className="flex justify-end mt-2">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {(['All', 'Admin', 'Teacher', 'Student'] as const).map((role) => {
+            const active = roleFilter === role;
+            return (
+              <button
+                key={role}
+                onClick={() => setRoleFilter(role)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all',
+                  active ? 'bg-primary text-white border-primary shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-primary/30'
+                )}
+              >
+                {role}
+              </button>
+            );
+          })}
           <button
-            onClick={() => setIsCompactMode(!isCompactMode)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-primary transition-colors font-medium"
+            onClick={() => setShowUnreadOnly((prev) => !prev)}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all flex items-center gap-2',
+              showUnreadOnly ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-amber-200'
+            )}
           >
-            {isCompactMode ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-            {isCompactMode ? 'Expand Cards' : 'Compact Cards'}
+            <span className="size-2 rounded-full bg-amber-400" />
+            Unread only
           </button>
         </div>
       </div>
@@ -790,9 +849,11 @@ export default function TeacherMessagesPage() {
                   <p className={cn('text-slate-500 truncate font-medium', isCompactMode ? 'text-[10px]' : 'text-xs')}>{contact.lastMessage || 'No messages yet'}</p>
                   <div className="mt-1 flex items-center justify-between">
                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{contact.role}</p>
-                    {contact.unreadCount > 0 ? (
-                      <span className="bg-primary text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{contact.unreadCount}</span>
-                    ) : null}
+                    <div className="flex items-center gap-2">
+                      {contact.unreadCount > 0 ? (
+                        <span className="bg-primary text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">{contact.unreadCount}</span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -814,19 +875,38 @@ export default function TeacherMessagesPage() {
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <div className="size-10 md:size-12 rounded-2xl overflow-hidden shrink-0 shadow-sm bg-slate-200">
-          <img src={selectedContact?.avatar} alt={selectedContact?.name} className="w-full h-full object-cover" />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-sm md:text-lg font-black text-slate-900 truncate">{selectedContact?.name}</h3>
-          <p className="text-[10px] md:text-xs font-bold text-slate-500">{selectedContact?.role}</p>
-        </div>
+        <button
+          type="button"
+          disabled={selectedContact?.type !== 'Student'}
+          onClick={() => {
+            if (selectedContact?.type === 'Student') navigate(`/teacher/students/${selectedContact.id}`);
+          }}
+          className={cn(
+            "flex items-center gap-3 md:gap-4 text-left",
+            selectedContact?.type === 'Student'
+              ? "hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-2xl"
+              : "cursor-default"
+          )}
+          aria-label={selectedContact?.type === 'Student' ? `View ${selectedContact?.name} profile` : undefined}
+        >
+          <div className="size-10 md:size-12 rounded-2xl overflow-hidden shrink-0 shadow-sm bg-slate-200">
+            <img src={selectedContact?.avatar} alt={selectedContact?.name} className="w-full h-full object-cover" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm md:text-lg font-black text-slate-900 truncate">{selectedContact?.name}</h3>
+            <p className="text-[10px] md:text-xs font-bold text-slate-500">{selectedContact?.role}</p>
+          </div>
+        </button>
       </div>
     </div>
   );
 
   const renderMessages = () => (
-    <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+    <div
+      ref={messagesRef}
+      className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar"
+      style={{ scrollBehavior: 'smooth' }}
+    >
       {visibleMessages.length > 0 ? (
         visibleMessages.map((msg) => (
           <div key={msg.id} className={cn('flex gap-4 max-w-2xl', msg.isMe ? 'ml-auto flex-row-reverse' : '')}>

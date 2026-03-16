@@ -1,10 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Star, TrendingUp, AlertCircle, Smile, Search } from 'lucide-react';
+import { Star, TrendingUp, AlertCircle, Search } from 'lucide-react';
 
 import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSidebar';
 import TeacherMobileNav from '../../components/common/TeacherMobileNav';
-import TeacherHeader from '../../components/teacher/TeacherHeader';
 import StatsCard from '../../components/teacher/StatsCard';
 
 import { motion } from 'motion/react';
@@ -216,18 +215,10 @@ export default function TeacherDashboardPage() {
 
     const needsAttentionCount = ratedStudents.filter(s => (s.rating as number) < 3).length;
 
-    let feeling = 'No Data';
-    if (ratedStudents.length > 0) {
-       if (avgScore >= 4) feeling = 'Positive';
-       else if (avgScore >= 3) feeling = 'Neutral';
-       else feeling = 'Struggling';
-    }
-
     return [
       { label: 'Avg Feedback Stars', value: avgScore.toFixed(1), total: '/5.0', trend: '', icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
       { label: 'Evaluation Rate', value: `${Math.round(evalRate)}%`, total: '', trend: '', icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/5' },
       { label: 'Needs Attention', value: String(needsAttentionCount), total: 'Students', trend: '', icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-50', actionLabel: 'View Detail', onAction: () => navigate('/teacher/attention') },
-      { label: 'Overall Feeling', value: feeling, total: '', trend: '', icon: Smile, color: 'text-emerald-500', bg: 'bg-emerald-50' },
     ];
   }, [filteredStudents, navigate]);
 
@@ -286,15 +277,15 @@ export default function TeacherDashboardPage() {
         {renderTopBar()}
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
-          <div className="max-w-[1200px] mx-auto space-y-6 md:space-y-8">
+          <div className="space-y-6 md:space-y-8">
             {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 lg:gap-6">
                  {[1,2,3,4].map((i) => (
                    <div key={i} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-32 animate-pulse" />
                  ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 lg:gap-6">
                 {STATS.map((stat, idx) => (
                   <StatsCard key={stat.label} {...stat} index={idx} />
                 ))}
@@ -328,18 +319,24 @@ export default function TeacherDashboardPage() {
             )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <h3 className="text-base md:text-lg font-bold text-slate-900">Student Performance List</h3>
-                <div className="relative flex-1 sm:flex-none w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search students..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-slate-50 border border-transparent rounded-xl text-sm focus:bg-white focus:border-primary/20 focus:ring-4 focus:ring-primary/5 transition-all outline-none w-full"
-                  />
+              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-slate-900">Student Performance List</h3>
+                    <p className="text-[11px] text-slate-500 font-medium">Filter by cohort, class, gender, status or quick search.</p>
+                  </div>
+                  <div className="relative flex-1 sm:flex-none w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search students..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 pr-4 py-2 bg-slate-50 border border-transparent rounded-xl text-sm focus:bg-white focus:border-primary/20 focus:ring-4 focus:ring-primary/5 transition-all outline-none w-full"
+                    />
+                  </div>
                 </div>
+
               </div>
               
               <div className="overflow-x-auto min-h-[300px]">
@@ -348,6 +345,7 @@ export default function TeacherDashboardPage() {
                     <tr className="bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="px-6 py-4">Student Name</th>
                       <th className="px-6 py-4">Gender</th>
+                      <th className="px-6 py-4">Cohort</th>
                       <th className="px-6 py-4">Avg Rating</th>
                       <th className="px-6 py-4">Status</th>
                       <th className="px-6 py-4">Last Evaluation</th>
@@ -357,13 +355,13 @@ export default function TeacherDashboardPage() {
                   <tbody className="divide-y divide-slate-50">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-sm font-bold text-slate-400">
+                        <td colSpan={7} className="px-6 py-12 text-center text-sm font-bold text-slate-400">
                           Loading students data...
                         </td>
                       </tr>
                     ) : filteredStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-sm font-bold text-slate-400">
+                        <td colSpan={7} className="px-6 py-12 text-center text-sm font-bold text-slate-400">
                           No students matching your search criteria.
                         </td>
                       </tr>
@@ -388,6 +386,12 @@ export default function TeacherDashboardPage() {
                           )}>
                             {student.gender ? student.gender.charAt(0).toUpperCase() + student.gender.slice(1) : '--'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col leading-tight">
+                            <span className="text-xs font-bold text-slate-900">{student.generation || '—'}</span>
+                            <span className="text-[10px] text-slate-500">{student.class || 'Unassigned'}</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           {student.rating !== null ? (
