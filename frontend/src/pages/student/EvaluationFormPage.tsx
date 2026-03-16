@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Star, 
   ArrowLeft, 
@@ -64,6 +64,7 @@ const fallbackCriteria: EvaluationCriterion[] = CRITERIA.map((criterion, index) 
 
 export default function EvaluationFormPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentStep, setCurrentStep] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [reflections, setReflections] = useState<Record<string, string>>({});
@@ -80,8 +81,18 @@ export default function EvaluationFormPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [isEditLoading, setIsEditLoading] = useState(false);
+
+  const searchParams = new URLSearchParams(location.search);
+  const editEvaluationId = Number(searchParams.get('edit') || (location.state as { editEvaluationId?: number } | null)?.editEvaluationId);
+  const isEditMode = Number.isInteger(editEvaluationId) && editEvaluationId > 0;
 
   useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
     const loadEligibility = async () => {
       try {
         const raw = localStorage.getItem('auth_user');
@@ -172,7 +183,7 @@ export default function EvaluationFormPage() {
     };
 
     loadEligibility();
-  }, []);
+  }, [isEditMode]);
 
   useEffect(() => {
     const loadCriteriaConfig = async () => {
@@ -210,6 +221,118 @@ export default function EvaluationFormPage() {
 
     loadCriteriaConfig();
   }, []);
+
+  const normalizePeriodInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const normalized = trimmed.replace(/\s+/g, ' ').toUpperCase();
+    const qMatch = normalized.match(/^Q([1-4])\s*(\d{4})$/);
+    if (qMatch) return `${qMatch[2]}-Q${qMatch[1]}`;
+    const altMatch = normalized.match(/^(\d{4})\s*-\s*Q([1-4])$/);
+    if (altMatch) return `${altMatch[1]}-Q${altMatch[2]}`;
+    return trimmed;
+  };
+
+  const formatPeriodInput = (value: string) => {
+    const trimmed = String(value || '').trim();
+    const quarterMatch = trimmed.match(/^(\d{4})-Q([1-4])$/i);
+    if (quarterMatch) return `Q${quarterMatch[2]} ${quarterMatch[1]}`;
+    return trimmed;
+  };
+
+  const applyEvaluationToState = (evaluation: any, activeCriteria: EvaluationCriterion[]) => {
+    const scoresMap: Record<string, number> = {};
+    const reflectionsMap: Record<string, string> = {};
+    const responses = Array.isArray(evaluation?.responses) ? evaluation.responses : [];
+
+    activeCriteria.forEach((criterion) => {
+      const response = responses.find((r: any) =>
+        String(r.criterion_key || '').trim() === String(criterion.key || '').trim() ||
+        String(r.criterion_id || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.label || '').trim().toLowerCase()
+      );
+      scoresMap[criterion.key] = response ? Number(response.star_value || 0) : 0;
+      reflectionsMap[criterion.key] = response ? String(response.reflection || '').trim() : '';
+    });
+
+    setScores(scoresMap);
+    setReflections(reflectionsMap);
+    setEditTitle(formatPeriodInput(String(evaluation?.period || '')));
+  };
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const loadEvaluationForEdit = async () => {
+      setIsEditLoading(true);
+      try {
+        const raw = localStorage.getItem('auth_user');
+        const authUser = raw ? JSON.parse(raw) : null;
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          setSubmitError('Student account information is missing.');
+          return;
+        }
+
+        const [permissionRes, evaluationRes, criteriaRes, reflectionMaxRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`),
+          fetch(`${API_BASE_URL}/evaluations/${editEvaluationId}`),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_reflection_characters`)
+        ]);
+
+        const permissionData = await permissionRes.json().catch(() => ({}));
+        const canEdit = !['false', '0'].includes(String(permissionData?.value || 'false').trim().toLowerCase());
+        if (!canEdit) {
+          setSubmitError('Editing after submit is currently disabled by admin.');
+          return;
+        }
+
+        const evaluation = await evaluationRes.json().catch(() => ({}));
+        if (!evaluationRes.ok) {
+          setSubmitError(evaluation?.error || 'Failed to load evaluation.');
+          return;
+        }
+
+        const criteriaData = await criteriaRes.json().catch(() => ({}));
+        if (Array.isArray(criteriaData?.criteria) && criteriaData.criteria.length > 0) {
+          const activeCriteria = criteriaData.criteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
+          if (activeCriteria.length > 0) {
+            const nextRatingScale = Math.max(1, Number(criteriaData?.ratingScale || 5));
+            setRatingScale(nextRatingScale);
+            const mappedCriteria = activeCriteria.map((c: any, index: number) => {
+              const style = CRITERION_STYLES[index % CRITERION_STYLES.length];
+              return {
+                id: String(c.id || '').trim() || undefined,
+                key: c.key || String(c.id || c.name || `criterion${index + 1}`),
+                label: String(c.name || `Criterion ${index + 1}`),
+                icon: String(c.icon || 'Star'),
+                description: String(c.description || '').trim(),
+                starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(c.starDescriptions?.[starIndex] || '').trim()),
+                ...style,
+              };
+            });
+            setCriteria(mappedCriteria);
+            applyEvaluationToState(evaluation, mappedCriteria);
+          }
+        } else {
+          applyEvaluationToState(evaluation, criteria);
+        }
+
+        const reflectionMaxData = await reflectionMaxRes.json().catch(() => ({}));
+        const reflectionMax = Math.min(5000, Math.max(100, Number(reflectionMaxData?.value || 500)));
+        setMaxReflectionChars(reflectionMax);
+        setCanEvaluate(true);
+      } catch {
+        setSubmitError('Failed to load evaluation.');
+      } finally {
+        setIsEditLoading(false);
+        setIsEligibilityLoading(false);
+      }
+    };
+
+    loadEvaluationForEdit();
+  }, [isEditMode, editEvaluationId]);
 
   const criterion = currentStep >= 0 && currentStep < criteria.length ? criteria[currentStep] : null;
   const selectedRating = criterion ? scores[criterion.key] || 0 : 0;
@@ -252,17 +375,23 @@ export default function EvaluationFormPage() {
         };
       });
 
-      const response = await fetch(`${API_BASE_URL}/evaluations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          rating_scale: ratingScale,
-          responses,
-        }),
-      });
+      const payload = {
+        user_id: userId,
+        period: isEditMode ? normalizePeriodInput(editTitle) : undefined,
+        rating_scale: ratingScale,
+        responses,
+      };
+
+      const response = await fetch(
+        isEditMode ? `${API_BASE_URL}/evaluations/${editEvaluationId}` : `${API_BASE_URL}/evaluations`,
+        {
+          method: isEditMode ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -270,7 +399,11 @@ export default function EvaluationFormPage() {
       }
 
       localStorage.setItem(`last_evaluation_submitted_at_${userId}`, new Date().toISOString());
-      navigate('/results', { state: { scores, reflections, evaluationId: data?.evaluationId } });
+      if (isEditMode) {
+        navigate('/history');
+      } else {
+        navigate('/results', { state: { scores, reflections, evaluationId: data?.evaluationId } });
+      }
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit evaluation.');
       setIsSubmitting(false);
@@ -326,7 +459,7 @@ export default function EvaluationFormPage() {
       {renderTopBar()}
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {isEligibilityLoading ? (
+        {isEligibilityLoading || (isEditMode && isEditLoading) ? (
           <div className="bg-white border border-primary/10 rounded-3xl shadow-xl p-10 text-center">
             <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Checking Evaluation Access</p>
             <p className="mt-4 text-lg font-bold text-slate-900">Loading your evaluation schedule...</p>
@@ -366,6 +499,21 @@ export default function EvaluationFormPage() {
         <>
         {/* Progress Stepper */}
         <div className="mb-6 md:mb-10 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+          {isEditMode && (
+            <div className="mb-4 bg-white border border-primary/10 rounded-2xl px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Edit Evaluation</p>
+                <p className="text-sm font-bold text-slate-900">Update the title and scores below.</p>
+              </div>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Q4 2026"
+                className="w-full md:w-56 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between min-w-[500px] md:min-w-full">
             {criteria.map((c, idx) => {
               const isActive = idx === currentStep;
