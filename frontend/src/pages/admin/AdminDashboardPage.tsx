@@ -125,7 +125,15 @@ export default function AdminDashboardPage() {
             return username.split(/[._-]+/).filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
           };
           
-          const mappedUsers = data.slice(0, 5).map((apiUser: any) => {
+          const mappedUsers = data.filter((u: any) => {
+            const isDeleted = Number(u.is_deleted || 0) === 1;
+            const isDisabled = Number(u.is_disable || 0) === 1;
+            const isPending = typeof u.is_registered !== 'undefined'
+              ? Number(u.is_registered || 0) === 0
+              : (u.registration_status || '').toString().toLowerCase() === 'pending'
+                || (u.account_status || '').toString().toLowerCase() === 'pending';
+            return !isDeleted && isPending;
+          }).slice(0, 5).map((apiUser: any) => {
              const roleLower = (apiUser.role || '').toLowerCase();
              const role = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
              const resolvedName = (apiUser.name || '').trim() || [apiUser.first_name, apiUser.last_name].filter(Boolean).join(' ').trim() || toDisplayNameFromEmail(apiUser.email);
@@ -277,7 +285,7 @@ export default function AdminDashboardPage() {
             <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <h3 className="font-black text-slate-900">User Management</h3>
+                  <h3 className="font-black text-slate-900">Pending users</h3>
                   {/* Sort Dropdown */}
                   <div className="flex items-center gap-2">
                     <ArrowUpDown className="w-4 h-4 text-slate-400" />
@@ -305,7 +313,10 @@ export default function AdminDashboardPage() {
                     Advanced Filters
                   </button>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
+                <button 
+                  onClick={() => navigate('/admin/users', { state: { openInvite: true } })}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+                >
                   <Plus className="w-4 h-4" />
                   Add User
                 </button>
@@ -364,7 +375,7 @@ export default function AdminDashboardPage() {
               </div>
               
               <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing 1 to 4 of 1,440 users</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing {recentUsers.length} pending users</p>
                 <div className="flex gap-2">
                   <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors">Previous</button>
                   <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-900 hover:bg-slate-50 transition-colors">Next</button>

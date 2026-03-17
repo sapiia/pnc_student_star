@@ -114,6 +114,7 @@ export interface ChatMessage {
 export interface Contact {
   id: number;
   name: string;
+  studentId?: string;
   role: string;
   type: 'Admin' | 'Teacher' | 'Student';
   avatar: string;

@@ -20,6 +20,7 @@ import {
   extractClassName,
   getEvaluationSortValue,
   formatShortDate,
+  resolveAvatarUrl,
   buildRadarData,
   parseStudentReplyNotification,
   getHiddenFeedbackIds,
@@ -120,7 +121,7 @@ export default function TeacherStudentListPage() {
             });
         }
 
-        const mappedStudents = Array.isArray(usersData)
+        const mappedStudentsRaw = Array.isArray(usersData)
           ? (usersData as ApiUser[])
               .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
               .map((user) => {
@@ -136,16 +137,19 @@ export default function TeacherStudentListPage() {
                   generation: extractGeneration(user),
                   className: extractClassName(user),
                   gender: normalizeGender(user.gender),
-                  avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
+                  avatar: resolveAvatarUrl(user.profile_image, DEFAULT_AVATAR),
                   averageScore,
                   ratingScale: nextRatingScale,
                   latestEvaluation,
                 } satisfies StudentRecord;
               })
           : [];
+        const mappedStudents = Array.from(
+          new Map(mappedStudentsRaw.map((student) => [student.id, student])).values(),
+        );
 
         setStudents(mappedStudents);
-        setSelectedId((currentSelectedId) => currentSelectedId ?? mappedStudents[0]?.id ?? null);
+setSelectedId((currentSelectedId: number | null) => currentSelectedId ?? mappedStudents[0]?.id ?? null);
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : 'Failed to load students.');
         setStudents([]);
@@ -167,17 +171,17 @@ export default function TeacherStudentListPage() {
     }
   }, [students, passedState, navigate, location.pathname]);
 
-  const generationOptions = useMemo(() => {
-    const derivedGenerations = students.map((s) => s.generation).filter(Boolean);
+const generationOptions = useMemo(() => {
+    const derivedGenerations = students.map((s: StudentRecord) => s.generation).filter(Boolean);
     const uniqueGenerations = new Set([...derivedGenerations, ...GENERATION_HINTS]);
     return ['All Generations', ...Array.from(uniqueGenerations).sort()];
   }, [students]);
 
-  const classOptions = useMemo(() => {
+const classOptions = useMemo(() => {
     const scopedStudents = selectedGeneration === 'All Generations'
       ? students
-      : students.filter((s) => s.generation === selectedGeneration);
-    return ['All Classes', ...Array.from(new Set(scopedStudents.map((s) => s.className))).sort()];
+      : students.filter((s: StudentRecord) => s.generation === selectedGeneration);
+    return ['All Classes', ...Array.from(new Set(scopedStudents.map((s: StudentRecord) => s.className))).sort()];
   }, [selectedGeneration, students]);
 
   const filteredStudents = useMemo(() => {
@@ -196,16 +200,20 @@ export default function TeacherStudentListPage() {
     });
   }, [searchQuery, selectedClass, selectedGender, selectedGeneration, students]);
 
-  useEffect(() => {
+useEffect(() => {
     if (filteredStudents.length === 0) {
       setSelectedId(null);
+      setIsPerformanceOpen(false);
       return;
     }
-    const hasSelectedStudent = filteredStudents.some((s) => s.id === selectedId);
+    const hasSelectedStudent = filteredStudents.some((s: StudentRecord) => s.id === selectedId);
     if (!hasSelectedStudent) setSelectedId(filteredStudents[0].id);
   }, [filteredStudents, selectedId]);
 
   const selectedStudent = filteredStudents.find((s) => s.id === selectedId) || filteredStudents[0] || null;
+  useEffect(() => {
+    if (!selectedStudent) setIsPerformanceOpen(false);
+  }, [selectedStudent]);
   const radarData = useMemo(() => buildRadarData(selectedStudent, globalCriteria, globalRatingScale), [selectedStudent, globalCriteria, globalRatingScale]);
   const selectedCriteria = selectedStudent?.latestEvaluation?.responses || [];
   const latestTeacherFeedback = useMemo(() => {
@@ -216,23 +224,26 @@ export default function TeacherStudentListPage() {
     if (!selectedStudent || !teacherId) return [];
     return feedbackHistory.filter((f) => Number(f.teacher_id) === teacherId && Number(f.student_id) === selectedStudent.id && !hiddenFeedbackIds.includes(Number(f.id)));
   }, [feedbackHistory, hiddenFeedbackIds, selectedStudent, teacherId]);
+  const parsedStudentReplies = useMemo(() => (
+    teacherNotifications
+      .map((n) => parseStudentReplyNotification(n))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+  ), [teacherNotifications]);
   const studentReplyHistory = useMemo(() => {
     if (!selectedStudent) return [];
-    return teacherNotifications
-      .map((n) => parseStudentReplyNotification(n))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item) && Number(item.studentId) === Number(selectedStudent.id))
+    return parsedStudentReplies
+      .filter((item) => Number(item.studentId) === Number(selectedStudent.id))
       .sort((left, right) => new Date(String(right.createdAt || '')).getTime() - new Date(String(left.createdAt || '')).getTime());
-  }, [selectedStudent, teacherNotifications]);
+  }, [parsedStudentReplies, selectedStudent]);
   const unreadReplyCountByStudent = useMemo(() => {
-    return teacherNotifications
-      .map((n) => parseStudentReplyNotification(n))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item) && !item.isRead)
+    return parsedStudentReplies
+      .filter((item) => !item.isRead)
       .reduce<Record<number, number>>((acc, item) => {
         const key = Number(item.studentId);
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       }, {});
-  }, [teacherNotifications]);
+  }, [parsedStudentReplies]);
   const conversationMessages = useMemo<ConversationMessage[]>(() => {
     const teacherMessages: ConversationMessage[] = visibleStudentFeedbackHistory.map((f) => ({
       id: `teacher-${f.id}`, source: 'teacher', text: String(f.comment || '').trim(), createdAt: f.created_at, feedbackId: Number(f.id),
@@ -345,7 +356,6 @@ export default function TeacherStudentListPage() {
     }
   };
 
-
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
@@ -395,7 +405,7 @@ export default function TeacherStudentListPage() {
                     setIsPerformanceOpen(true);
                   }}
                   onViewProfile={(studentId) => navigate(`/teacher/students/${studentId}`)}
-                  onMessageStudent={(studentId) => navigate('/teacher/messages', { state: { selectedContactId: studentId } })}
+onMessageStudent={(studentId) => navigate(`/teacher/messages?contactId=${studentId}`)}
                 />
               </div>
 

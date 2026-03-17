@@ -25,23 +25,34 @@ import {
   getHiddenMessageIds,
   setHiddenMessageIds as saveHiddenMessageIds,
 } from '../../lib/teacher/utils';
-import type {
-  ApiUser,
-  NotificationRecord,
-  Contact,
-  ChatMessage,
-} from '../../lib/teacher/types';
+import type { ApiUser, NotificationRecord, Contact, ChatMessage } from '../../lib/teacher/types';
 
 export default function TeacherMessagesPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const passedState = location.state as { selectedContactId?: number, selectedContactName?: string, isMobileChatOpen?: boolean } | null;
+  const passedState = location.state as {
+    selectedContactId?: number;
+    selectedContactName?: string;
+    isMobileChatOpen?: boolean;
+  } | null;
+  const queryContactToken = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get('contactId') || params.get('studentId') || '').trim();
+  }, [location.search]);
+  const initialContactId = useMemo(() => {
+    const fromState = Number(passedState?.selectedContactId);
+    if (Number.isFinite(fromState) && fromState > 0) return fromState;
+    const parsed = Number(queryContactToken);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [passedState?.selectedContactId, queryContactToken]);
   
   const { teacherId, teacherName, teacherAvatar } = useTeacherIdentity({ defaultName: 'Teacher' });
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState<number | null>(passedState?.selectedContactId || null);
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(passedState?.isMobileChatOpen || !!passedState?.selectedContactId);
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(initialContactId);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(
+    passedState?.isMobileChatOpen || Boolean(initialContactId)
+  );
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'All' | 'Admin' | 'Teacher' | 'Student'>('All');
@@ -59,6 +70,9 @@ export default function TeacherMessagesPage() {
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const typingStopTimerRef = useRef<number | null>(null);
   const hasSentTypingRef = useRef(false);
+  const hasRequestedContact = Boolean(
+    passedState?.selectedContactId || passedState?.selectedContactName || queryContactToken
+  );
 
   useEffect(() => {
     if (!teacherId) {
@@ -115,11 +129,31 @@ export default function TeacherMessagesPage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (passedState?.selectedContactId) {
-      // Clear state so it doesn't re-trigger if refreshed
-      navigate(location.pathname, { replace: true, state: {} });
+    if (!passedState?.selectedContactId) return;
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: {} });
+  }, [passedState?.selectedContactId, navigate, location.pathname, location.search]);
+
+  const updateContactInUrl = useCallback((nextId: number | null) => {
+    const params = new URLSearchParams(location.search);
+    const currentId = Number(params.get('contactId') || params.get('studentId') || '');
+    if (nextId && nextId > 0) {
+      if (currentId === nextId) return;
+      params.set('contactId', String(nextId));
+      params.delete('studentId');
+    } else {
+      if (!params.has('contactId') && !params.has('studentId')) return;
+      params.delete('contactId');
+      params.delete('studentId');
     }
-  }, [passedState, navigate, location.pathname]);
+    const nextSearch = params.toString();
+    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true, state: {} });
+  }, [location.pathname, location.search, navigate]);
+
+  const handleSelectContact = useCallback((contactId: number) => {
+    setSelectedContactId(contactId);
+    setIsMobileChatOpen(true);
+    updateContactInUrl(contactId);
+  }, [updateContactInUrl]);
 
   useEffect(() => {
     if (!teacherId) return;
@@ -206,6 +240,7 @@ export default function TeacherMessagesPage() {
       return {
         id: contactId,
         name: toDisplayName(user),
+        studentId: String(user.student_id || user.resolved_student_id || '').trim() || undefined,
         role: toRoleLabel(String(user.role || '')),
         type: toContactType(String(user.role || '')),
         avatar: resolveAvatarUrl(
@@ -223,6 +258,45 @@ export default function TeacherMessagesPage() {
     ));
   }, [directNotifications, teacherId, users]);
 
+  useEffect(() => {
+    if (!passedState?.selectedContactId && !queryContactToken) return;
+
+    let nextId: number | null = null;
+    const fromState = Number(passedState?.selectedContactId);
+    if (Number.isFinite(fromState) && fromState > 0) {
+      nextId = fromState;
+    }
+
+    if (!nextId && queryContactToken) {
+      const numeric = Number(queryContactToken);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        nextId = numeric;
+      }
+    }
+
+    if (queryContactToken) {
+      const normalizedToken = queryContactToken.toLowerCase();
+      if (!nextId || !contacts.some((contact) => contact.id === nextId)) {
+        const matchedByStudentId = contacts.find((contact) => contact.studentId?.toLowerCase() === normalizedToken);
+        if (matchedByStudentId) {
+          nextId = matchedByStudentId.id;
+        }
+      }
+      if (!nextId || !contacts.some((contact) => contact.id === nextId)) {
+        const matchedByName = contacts.find((contact) => contact.name.toLowerCase() === normalizedToken);
+        if (matchedByName) {
+          nextId = matchedByName.id;
+        }
+      }
+    }
+
+    if (nextId) {
+      setSelectedContactId(nextId);
+      setIsMobileChatOpen(true);
+      setSearchQuery('');
+    }
+  }, [contacts, passedState?.selectedContactId, queryContactToken]);
+
   const filteredContacts = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     return contacts.filter((contact) => {
@@ -238,25 +312,53 @@ export default function TeacherMessagesPage() {
   }, [contacts, roleFilter, searchQuery, showUnreadOnly]);
 
   useEffect(() => {
-    // Preserve externally selected contact; only fallback after contacts load.
-    if (filteredContacts.length === 0) return;
-
-    const exists = filteredContacts.some((contact) => contact.id === selectedContactId);
-    if (!exists) {
-      // Try name-based match if id not found (e.g., navigated from notification with name only)
-      if (passedState?.selectedContactName) {
-        const byName = filteredContacts.find(
-          (c) => c.name.toLowerCase() === passedState.selectedContactName?.toLowerCase()
-        );
-        if (byName) {
-          setSelectedContactId(byName.id);
-          return;
-        }
+    if (isLoading) return;
+    if (contacts.length === 0) {
+      setSelectedContactId(null);
+      if (!hasRequestedContact) {
+        updateContactInUrl(null);
       }
-      // Fall back to the first in list.
-      setSelectedContactId(filteredContacts[0].id);
+      return;
     }
-  }, [filteredContacts, selectedContactId, passedState]);
+
+    const matchedByName = passedState?.selectedContactName
+      ? contacts.find(
+        (contact) => contact.name.toLowerCase() === passedState.selectedContactName?.trim().toLowerCase()
+      )
+      : null;
+
+    const existsInContacts = contacts.some((contact) => contact.id === selectedContactId);
+    if (!existsInContacts && selectedContactId !== null) {
+      if (matchedByName) {
+        setSelectedContactId(matchedByName.id);
+        setIsMobileChatOpen(true);
+        if (!hasRequestedContact) {
+          updateContactInUrl(matchedByName.id);
+        }
+        return;
+      }
+      setSelectedContactId(null);
+      if (!hasRequestedContact) {
+        updateContactInUrl(null);
+      }
+      return;
+    }
+
+    if (selectedContactId === null) {
+      if (matchedByName) {
+        setSelectedContactId(matchedByName.id);
+        setIsMobileChatOpen(true);
+        if (!hasRequestedContact) {
+          updateContactInUrl(matchedByName.id);
+        }
+        return;
+      }
+      if (!hasRequestedContact) {
+        setSelectedContactId(contacts[0].id);
+        updateContactInUrl(contacts[0].id);
+      }
+    }
+  }, [contacts, hasRequestedContact, isLoading, passedState?.selectedContactName, selectedContactId, updateContactInUrl]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 
@@ -518,11 +620,6 @@ export default function TeacherMessagesPage() {
 
   const handleToggleActions = (messageId: number) => {
     setOpenedActionMessageId((current) => (current === messageId ? null : messageId));
-  };
-
-  const handleSelectContact = (contactId: number) => {
-    setSelectedContactId(contactId);
-    setIsMobileChatOpen(true);
   };
 
   const handleCancelEdit = () => {

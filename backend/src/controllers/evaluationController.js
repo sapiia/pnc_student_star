@@ -37,12 +37,15 @@ const getEvaluationsByUserId = async (req, res) => {
 const createEvaluation = async (req, res) => {
   try {
     const evaluationId = await Evaluation.create(req.body);
-    res.status(201).json({ 
-      message: "Evaluation created successfully", 
-      evaluationId 
+    res.status(201).json({
+      message: "Evaluation created successfully",
+      evaluationId
     });
   } catch (err) {
     console.error(err);
+    if (err?.status) {
+      return res.status(err.status).json({ error: err.message, ...(err.meta || {}) });
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -78,13 +81,13 @@ const getReportStats = async (req, res) => {
   try {
     const { class: classFilter, gender, period } = req.query;
     const teacherId = req.user?.id;
-    
+
     const stats = await Evaluation.getReportStats(teacherId, {
       class: classFilter,
       gender,
       period
     });
-    
+
     res.json(stats);
   } catch (err) {
     console.error(err);
@@ -96,12 +99,12 @@ const getReportStats = async (req, res) => {
 const getCriteriaAverages = async (req, res) => {
   try {
     const { class: classFilter, gender } = req.query;
-    
+
     const averages = await Evaluation.getCriteriaAverages({
       class: classFilter,
       gender
     });
-    
+
     res.json(averages);
   } catch (err) {
     console.error(err);
@@ -113,12 +116,12 @@ const getCriteriaAverages = async (req, res) => {
 const getTrendData = async (req, res) => {
   try {
     const { class: classFilter, gender } = req.query;
-    
+
     const trends = await Evaluation.getTrendData({
       class: classFilter,
       gender
     });
-    
+
     res.json(trends);
   } catch (err) {
     console.error(err);
@@ -130,12 +133,12 @@ const getTrendData = async (req, res) => {
 const getEngagementStats = async (req, res) => {
   try {
     const { class: classFilter, gender } = req.query;
-    
+
     const engagement = await Evaluation.getEngagementStats({
       class: classFilter,
       gender
     });
-    
+
     res.json(engagement);
   } catch (err) {
     console.error(err);
@@ -147,12 +150,12 @@ const getEngagementStats = async (req, res) => {
 const getSummaryStats = async (req, res) => {
   try {
     const { class: classFilter, gender } = req.query;
-    
+
     const summary = await Evaluation.getSummaryStats({
       class: classFilter,
       gender
     });
-    
+
     res.json(summary);
   } catch (err) {
     console.error(err);
@@ -164,30 +167,31 @@ const getSummaryStats = async (req, res) => {
 const exportReport = async (req, res) => {
   try {
     const { class: classFilter, gender, generation } = req.query;
-    
+
     // Get all data needed for export
     const filters = { class: classFilter, gender };
-    
+
     // Fetch all data
     const summary = await Evaluation.getSummaryStats(filters);
     const criteriaAverages = await Evaluation.getCriteriaAverages(filters);
     const trends = await Evaluation.getTrendData(filters);
     const engagement = await Evaluation.getEngagementStats(filters);
-    
+
     // Get all evaluations for detailed sheet
     const allEvaluations = await Evaluation.findAll();
-    
+
     // Get user data for evaluations
     const db = require('../config/database');
-    const [userRows] = await db.query('SELECT id, name, email, student_id, class, gender FROM users WHERE role = "student"');
+    const [userRows] = await db.query('SELECT id, first_name, last_name, email, student_id, class, gender FROM users WHERE role = "student"');
     const userMap = {};
     userRows.forEach(user => {
+      user.name = (user.first_name || '') + (user.last_name ? ' ' + user.last_name : '');
       userMap[user.id] = user;
     });
-    
+
     // Create workbook
     const workbook = XLSX.utils.book_new();
-    
+
     // 1. Summary Statistics Sheet
     const summaryData = [
       ['PNC Student Star - Teacher Report'],
@@ -206,7 +210,7 @@ const exportReport = async (req, res) => {
     ];
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-    
+
     // 2. Criteria Averages Sheet
     const criteriaData = [['Criteria Name', 'Average Score', 'Students Count']];
     criteriaAverages.forEach(criteria => {
@@ -214,7 +218,7 @@ const exportReport = async (req, res) => {
     });
     const criteriaSheet = XLSX.utils.aoa_to_sheet(criteriaData);
     XLSX.utils.book_append_sheet(workbook, criteriaSheet, 'Criteria Averages');
-    
+
     // 3. Trend Data Sheet
     const trendData = [['Period', 'Average Score', 'Evaluation Count', 'Student Count']];
     trends.forEach(trend => {
@@ -222,7 +226,7 @@ const exportReport = async (req, res) => {
     });
     const trendSheet = XLSX.utils.aoa_to_sheet(trendData);
     XLSX.utils.book_append_sheet(workbook, trendSheet, 'Trend Data');
-    
+
     // 4. Engagement Stats Sheet
     const engagementData = [
       ['Status', 'Percentage'],
@@ -231,7 +235,7 @@ const exportReport = async (req, res) => {
     ];
     const engagementSheet = XLSX.utils.aoa_to_sheet(engagementData);
     XLSX.utils.book_append_sheet(workbook, engagementSheet, 'Engagement');
-    
+
     // 5. Student Evaluations Sheet
     const evalData = [['Student ID', 'Name', 'Email', 'Class', 'Gender', 'Period', 'Average Score', 'Criteria Count', 'Submitted At']];
     allEvaluations.forEach(eval_ => {
@@ -252,15 +256,15 @@ const exportReport = async (req, res) => {
     });
     const evalSheet = XLSX.utils.aoa_to_sheet(evalData);
     XLSX.utils.book_append_sheet(workbook, evalSheet, 'Student Evaluations');
-    
+
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `Teacher_Report_${timestamp}.xlsx`;
-    
+
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    
+
     // Send the workbook
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     res.send(buffer);

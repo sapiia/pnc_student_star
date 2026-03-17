@@ -190,13 +190,26 @@ export default function TeacherReportsPage() {
       });
     });
 
-    const criteriaData = CRITERIA.map(c => ({
-      name: c.label,
-      value: criteriaMap[c.key] 
-        ? Number((criteriaMap[c.key].total / criteriaMap[c.key].count).toFixed(1))
-        : 0,
-      color: c.bgColor,
-    }));
+    const criteriaColors = [
+      { key: 'living', fill: '#3b82f6' },
+      { key: 'jobStudy', fill: '#f59e0b' },
+      { key: 'humanSupport', fill: '#8b5cf6' },
+      { key: 'health', fill: '#ef4444' },
+      { key: 'feeling', fill: '#ec4899' },
+      { key: 'choiceBehavior', fill: '#06b6d4' },
+      { key: 'moneyPayment', fill: '#10b981' },
+      { key: 'lifeSkill', fill: '#6366f1' },
+    ];
+    const criteriaData = CRITERIA.map(c => {
+      const colorEntry = criteriaColors.find(col => col.key === c.key);
+      return ({
+        name: c.label,
+        value: criteriaMap[c.key] 
+          ? Number((criteriaMap[c.key].total / criteriaMap[c.key].count).toFixed(1))
+          : 0,
+        fill: colorEntry ? colorEntry.fill : '#94a3b8',
+      });
+    }); 
 
     if (filteredEvals.length === 0) {
       return {

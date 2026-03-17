@@ -40,11 +40,19 @@ const getUsersTableColumns = async () => {
   return new Set(rows.map((row) => row.Field));
 };
 
+const getRegistrationColumn = (columns = new Set()) => {
+  if (columns.has('is_registered')) return 'is_registered';
+  if (columns.has('is_register')) return 'is_register';
+  return null;
+};
+
 const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
   const hasIsDisable = columns.has('is_disable');
   const hasIsActive = columns.has('is_active');
   const hasIsDeleted = columns.has('is_deleted');
-  const hasIsRegistered = columns.has('is_registered');
+  const registrationColumn = getRegistrationColumn(columns);
+  const hasIsRegistered = Boolean(registrationColumn);
+  const registrationValue = hasIsRegistered ? userRow[registrationColumn] : undefined;
 
   const isDisabled = hasIsDisable
     ? Number(userRow.is_disable || 0) === 1
@@ -55,7 +63,7 @@ const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
   const isDeleted = hasIsDeleted ? Number(userRow.is_deleted || 0) === 1 : false;
 
   const isRegistered = hasIsRegistered
-    ? Number(userRow.is_registered || 0) === 1
+    ? Number(registrationValue || 0) === 1
     : (() => {
         const createdAt = userRow.created_at ? new Date(userRow.created_at).getTime() : NaN;
         const updatedAt = userRow.updated_at ? new Date(userRow.updated_at).getTime() : NaN;
@@ -77,6 +85,7 @@ const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
     is_disable: isDisabled ? 1 : 0,
     is_deleted: isDeleted ? 1 : 0,
     is_registered: isRegistered ? 1 : 0,
+    is_register: isRegistered ? 1 : 0,
     account_status: accountStatus,
     registration_status: isRegistered ? 'registered' : 'pending'
   };
@@ -96,6 +105,7 @@ const insertUserFlexible = async ({
   queryExecutor = db
 }) => {
   const columns = await getUsersTableColumns();
+  const registrationColumn = getRegistrationColumn(columns);
   const insertColumns = [];
   const insertValues = [];
   const placeholders = [];
@@ -140,8 +150,8 @@ const insertUserFlexible = async ({
     placeholders.push('?');
   }
 
-  if (columns.has('is_registered') && typeof isRegistered !== 'undefined') {
-    insertColumns.push('is_registered');
+  if (registrationColumn && typeof isRegistered !== 'undefined') {
+    insertColumns.push(registrationColumn);
     insertValues.push(isRegistered ? 1 : 0);
     placeholders.push('?');
   }
@@ -176,6 +186,7 @@ const updateUserFlexibleById = async ({
   isRegistered
 }) => {
   const columns = await getUsersTableColumns();
+  const registrationColumn = getRegistrationColumn(columns);
   const updates = [];
   const values = [];
 
@@ -212,8 +223,8 @@ const updateUserFlexibleById = async ({
     values.push(studentIdValue || null);
   }
 
-  if (columns.has('is_registered') && typeof isRegistered !== 'undefined') {
-    updates.push('is_registered = ?');
+  if (registrationColumn && typeof isRegistered !== 'undefined') {
+    updates.push(`${registrationColumn} = ?`);
     values.push(isRegistered ? 1 : 0);
   }
 

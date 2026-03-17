@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import React from 'react';
 import {
   Star,
   Bell,
@@ -136,16 +137,42 @@ export default function DashboardPage() {
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
-  const canStartEvaluation = !latestEvaluation || daysLeft === 0;
+  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState(1);
+  const [evaluationsUsed, setEvaluationsUsed] = useState(0);
+  const canStartEvaluation = daysLeft === 0 && evaluationsUsed < maxEvaluationsPerCycle;
 
   const currentStatusCriteria = useMemo(() => {
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+
     return activeGlobal.map((criterion, index) => {
-      const response = (latestEvaluation?.responses || []).find(r =>
-        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-      );
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
+      
+      // Try to find a matching response using multiple strategies
+      const response = (latestEvaluation?.responses || []).find(r => {
+        const responseKey = String(r.criterion_key || '').trim();
+        const responseId = String(r.criterion_id || '').trim();
+        const responseName = String(r.criterion_name || '').trim().toLowerCase();
+        
+        // Match by: criterion_id directly, criterion_key mapping, or name
+        return responseId === criterionId || 
+               keyToIdMap.get(responseKey) === criterionId ||
+               responseName === criterionName;
+      });
 
       return {
         key: String(criterion.id || criterion.name || `criterion-${index}`),
@@ -175,10 +202,26 @@ export default function DashboardPage() {
     const maxValue = globalRatingScale;
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+
     const data = activeGlobal.map((criterion, index) => {
       const row: Record<string, string | number> = {
         subject: String(criterion.name || `Criterion ${index + 1}`),
       };
+      const criterionId = String(criterion.id || '');
+      const criterionName = String(criterion.name || '').trim().toLowerCase();
 
       comparedEvaluations.forEach((evaluation, evaluationIndex) => {
         const chartKey = comparedEvaluations.length === 1
@@ -186,10 +229,18 @@ export default function DashboardPage() {
           : evaluationIndex === 0
             ? 'previous'
             : 'current';
-        const response = (evaluation.responses || []).find(r => 
-          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-        );
+            
+        // Try to find a matching response using multiple strategies
+        const response = (evaluation.responses || []).find(r => {
+          const responseKey = String(r.criterion_key || '').trim();
+          const responseId = String(r.criterion_id || '').trim();
+          const responseName = String(r.criterion_name || '').trim().toLowerCase();
+          
+          // Match by: criterion_id directly, criterion_key mapping, or name
+          return responseId === criterionId || 
+                 keyToIdMap.get(responseKey) === criterionId ||
+                 responseName === criterionName;
+        });
         row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;
       });
       return row;
@@ -246,6 +297,7 @@ export default function DashboardPage() {
         response,
         intervalResponse,
         evaluationsResponse,
+        maxEvaluationsResponse,
         studentFeedbackVisibilityResponse,
         reminderNotificationsResponse,
         feedbackResponse,
@@ -255,6 +307,7 @@ export default function DashboardPage() {
         fetch(`${API_BASE_URL}/users/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
         fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
+        fetch(`${API_BASE_URL}/settings/key/student_max_evaluations_per_cycle`),
         fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
         fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
         fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
@@ -265,6 +318,7 @@ export default function DashboardPage() {
       const data = await response.json().catch(() => ({}));
       const intervalData = await intervalResponse.json().catch(() => ({}));
       const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      const maxEvaluationsData = await maxEvaluationsResponse.json().catch(() => ({}));
       const visibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
       const reminderData = await reminderNotificationsResponse.json().catch(() => ({}));
       const feedbackData = await feedbackResponse.json().catch(() => []);
@@ -295,32 +349,56 @@ export default function DashboardPage() {
       setUnreadNotificationCount(notifications.filter(n => Number(n.is_read) !== 1).length);
 
       const resolvedCycle = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
+      const resolvedMaxEvaluations = Math.min(12, Math.max(1, Number(maxEvaluationsData?.value || 1)));
       setCycleDays(resolvedCycle);
+      setMaxEvaluationsPerCycle(resolvedMaxEvaluations);
 
-      const evalDateKey = `last_evaluation_submitted_at_${userId}`;
-      const lastDateRaw = String(latestEval?.submitted_at || latestEval?.created_at || '').trim() || String(localStorage.getItem(evalDateKey) || '').trim();
       setLatestEvaluation(latestEval);
 
-      if (!lastDateRaw) { setDaysLeft(0); return; }
-      const lastDate = new Date(lastDateRaw);
-      if (Number.isNaN(lastDate.getTime())) { setDaysLeft(0); return; }
+      const now = Date.now();
+      const windowStart = now - resolvedCycle * 24 * 60 * 60 * 1000;
+      const evaluationsInWindow = sortedEvals.filter((evaluation) => {
+        const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+        const timestamp = new Date(submittedAt).getTime();
+        return Number.isFinite(timestamp) && timestamp >= windowStart;
+      });
 
-      const nextDate = new Date(lastDate);
-      nextDate.setDate(nextDate.getDate() + resolvedCycle);
-      const remaining = nextDate.getTime() - Date.now();
-      setDaysLeft(Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24))));
+      const usedCount = evaluationsInWindow.length;
+      setEvaluationsUsed(usedCount);
+
+      let nextAvailableDate: Date | null = null;
+
+      if (usedCount < resolvedMaxEvaluations) {
+        setDaysLeft(0);
+      } else {
+        const earliestTimestamp = evaluationsInWindow.reduce((min, evaluation) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          if (!Number.isFinite(timestamp)) return min;
+          return Math.min(min, timestamp);
+        }, Number.POSITIVE_INFINITY);
+
+        if (!Number.isFinite(earliestTimestamp)) {
+          setDaysLeft(0);
+        } else {
+          const nextDate = new Date(earliestTimestamp);
+          nextDate.setDate(nextDate.getDate() + resolvedCycle);
+          nextAvailableDate = nextDate;
+          const remaining = nextDate.getTime() - now;
+          setDaysLeft(Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24))));
+        }
+      }
 
       const adminAllowsReminders = !['false', '0'].includes(String(reminderData?.value || 'true').trim().toLowerCase());
-      const daysUntil = Math.ceil(remaining / (1000 * 60 * 60 * 24));
-      if (adminAllowsReminders && remindersEnabled && daysUntil === 3) {
-        const msg = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextDate)}.`;
+      if (adminAllowsReminders && remindersEnabled && usedCount >= resolvedMaxEvaluations && daysLeft === 3 && nextAvailableDate) {
+        const msg = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextAvailableDate)}.`;
         if (!notifications.some(n => String(n.message || '').trim() === msg)) {
           const res = await fetch(`${API_BASE_URL}/notifications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, message: msg, is_read: 0 }) });
           if (res.ok) { setUnreadNotificationCount(c => c + 1); window.dispatchEvent(new Event('student-notifications-updated')); }
         }
       }
     } catch {
-      setStudentUserId(null); setCycleDays(90); setDaysLeft(0); setEvaluations([]); setRecentFeedback([]); setUnreadNotificationCount(0); setLatestEvaluation(null);
+      setStudentUserId(null); setCycleDays(90); setDaysLeft(0); setEvaluations([]); setRecentFeedback([]); setUnreadNotificationCount(0); setLatestEvaluation(null); setMaxEvaluationsPerCycle(1); setEvaluationsUsed(0);
     }
   }, []);
 
@@ -394,7 +472,14 @@ export default function DashboardPage() {
                   <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-2">Hello, {studentName}! Ready for your {currentPeriodLabel} Evaluation?</h2>
                   {studentId && <p className="text-[10px] md:text-xs font-bold text-slate-500 mb-2 uppercase tracking-widest">Student ID: {studentId}</p>}
                   <p className="text-sm md:text-base text-slate-600 mb-6 max-w-xl">Track your progress across 8 key areas. Regular reflection helps you stay focused on your goals.</p>
-                  {!canStartEvaluation && <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-amber-600 mb-6">Next evaluation unlocks in {daysLeft} day{daysLeft === 1 ? '' : 's'}</p>}
+                  {!canStartEvaluation && (
+                    <p className="text-[10px] md:text-xs font-black uppercase tracking-widest text-amber-600 mb-6">
+                      Next evaluation unlocks in {daysLeft} day{daysLeft === 1 ? '' : 's'}.
+                      <span className="block mt-2 text-amber-500">
+                        {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations used this cycle
+                      </span>
+                    </p>
+                  )}
                   <div className="flex justify-center md:justify-start">
                     <button onClick={() => canStartEvaluation && navigate('/evaluate')} disabled={!canStartEvaluation} className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50 text-sm shadow-lg shadow-primary/20">
                       <PlusCircle className="w-5 h-5" />{canStartEvaluation ? 'Start Evaluation' : `Available In ${daysLeft} Days`}
@@ -417,6 +502,7 @@ export default function DashboardPage() {
                     <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100))}%` }} transition={{ duration: 0.5 }} className="h-full bg-primary" />
                   </div>
                   <div className="flex justify-between text-[8px] md:text-[10px] font-black text-slate-500 uppercase"><span>Cycle: {cycleDays} Days</span><span>{Math.round(Math.min(100, Math.max(0, (daysLeft / cycleDays) * 100)))}% Remaining</span></div>
+                  <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-500">Used {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations</div>
                 </div>
               </div>
             </motion.div>
