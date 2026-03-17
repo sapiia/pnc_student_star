@@ -1760,6 +1760,69 @@ const setUserActive = async (req, res) => {
   }
 };
 
+// Enable/disable all students in a generation
+const setGenerationActive = async (req, res) => {
+  const { is_active } = req.body || {};
+  const generation = String(req.params.generation || '').trim();
+
+  if (!generation || !/^\d{4}$/.test(generation)) {
+    return res.status(400).json({ error: "Valid generation is required (YYYY)." });
+  }
+  if (typeof is_active === 'undefined') {
+    return res.status(400).json({ error: "is_active is required." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsDisable = columns.has('is_disable');
+    const hasIsActive = columns.has('is_active');
+    const hasGeneration = columns.has('generation');
+
+    const setClauses = [];
+    const values = [];
+
+    if (hasIsActive) {
+      setClauses.push('is_active = ?');
+      values.push(is_active ? 1 : 0);
+    }
+    if (hasIsDisable) {
+      setClauses.push('is_disable = ?');
+      values.push(is_active ? 0 : 1);
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP()');
+
+    let where = "role = 'student'";
+    if (hasGeneration) {
+      where += " AND (generation = ? OR class LIKE ?)";
+      values.push(generation, `%${generation}%`);
+    } else {
+      where += " AND class LIKE ?";
+      values.push(`%${generation}%`);
+    }
+
+    if (hasIsDeleted) {
+      where += " AND (is_deleted IS NULL OR is_deleted = 0)";
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: "No status columns available to update." });
+    }
+
+    const sql = `UPDATE users SET ${setClauses.join(', ')} WHERE ${where}`;
+    const [result] = await db.query(sql, values);
+
+    return res.json({
+      message: is_active ? `Generation ${generation} enabled successfully.` : `Generation ${generation} disabled successfully.`,
+      affectedRows: result.affectedRows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update generation status." });
+  }
+};
+
 // Delete user
 const deleteUser = async (req, res) => {
   const userId = Number(req.params.id);
@@ -1997,6 +2060,7 @@ module.exports = {
   hardDeleteAllUsers,
   disableAllUsers,
   setUserActive,
+  setGenerationActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,

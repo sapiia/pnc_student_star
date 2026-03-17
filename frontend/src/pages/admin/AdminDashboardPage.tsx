@@ -25,6 +25,13 @@ import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
 
 // Helper function to extract generation from user data
+const normalizeClassLabel = (value: string) =>
+  value
+    .toString()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
 const extractGeneration = (user: any) => {
   const classText = String(user.class || '').trim();
   // Try to extract 4-digit year from class like "Gen 2026 - WEB A" or "2026-WEB-A"
@@ -83,6 +90,7 @@ export default function AdminDashboardPage() {
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [sortBy, setSortBy] = useState<string>('generation');
   const [sortOrder, setSortOrder] = useState<string>('desc');
+  const [generationActionLoading, setGenerationActionLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -99,11 +107,21 @@ export default function AdminDashboardPage() {
           const genStats: Record<string, any> = {};
           students.forEach(s => {
              const gen = extractGeneration(s);
-             const cls = s.class || s.major || 'Unknown Class';
-             if (!genStats[gen]) genStats[gen] = { total: 0, classesMap: {} };
+             const rawClass = s.class || s.major || 'Unknown Class';
+             const cls = normalizeClassLabel(rawClass);
+             if (!genStats[gen]) genStats[gen] = { total: 0, classesMap: {}, activeCount: 0, disabledCount: 0 };
              genStats[gen].total += 1;
              if (!genStats[gen].classesMap[cls]) genStats[gen].classesMap[cls] = 0;
              genStats[gen].classesMap[cls] += 1;
+             const isDeleted = Number(s.is_deleted || 0) === 1;
+             const isDisabled = typeof s.is_disable !== 'undefined'
+               ? Number(s.is_disable || 0) === 1
+               : Number(s.is_active ?? 1) === 0;
+             if (!isDeleted && !isDisabled) {
+               genStats[gen].activeCount += 1;
+             } else if (!isDeleted && isDisabled) {
+               genStats[gen].disabledCount += 1;
+             }
           });
 
           const formattedStats: any = {
@@ -115,7 +133,9 @@ export default function AdminDashboardPage() {
              formattedStats[gen.toLowerCase().replace(/\s/g, '')] = {
                 title: gen,
                 total: genStats[gen].total,
-                classes: Object.keys(clsMap).map(c => ({ name: c, count: clsMap[c] }))
+                classes: Object.keys(clsMap).map(c => ({ name: c, count: clsMap[c] })),
+                activeCount: genStats[gen].activeCount,
+                disabledCount: genStats[gen].disabledCount
              };
           });
           setStudentStats(formattedStats);
@@ -163,6 +183,73 @@ export default function AdminDashboardPage() {
     };
     fetchUsers();
   }, [sortBy, sortOrder]);
+
+  const handleToggleGeneration = async (generation: string, activeCount: number) => {
+    try {
+      setGenerationActionLoading((prev) => ({ ...prev, [generation]: true }));
+      const shouldEnable = activeCount === 0;
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users/generation/${generation}/active`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: shouldEnable })
+        }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to update generation status.');
+        return;
+      }
+      const refreshed = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
+      const data = await refreshed.json();
+      if (Array.isArray(data)) {
+        const students = data.filter((u: any) => u.role.toLowerCase() === 'student');
+        const teachers = data.filter((u: any) => u.role.toLowerCase() === 'teacher');
+        const admins = data.filter((u: any) => u.role.toLowerCase() === 'admin');
+        setTeacherCount(teachers.length);
+        setAdminCount(admins.length);
+
+        const genStats: Record<string, any> = {};
+        students.forEach((s: any) => {
+          const gen = extractGeneration(s);
+          const rawClass = s.class || s.major || 'Unknown Class';
+          const cls = normalizeClassLabel(rawClass);
+          if (!genStats[gen]) genStats[gen] = { total: 0, classesMap: {}, activeCount: 0, disabledCount: 0 };
+          genStats[gen].total += 1;
+          if (!genStats[gen].classesMap[cls]) genStats[gen].classesMap[cls] = 0;
+          genStats[gen].classesMap[cls] += 1;
+          const isDeleted = Number(s.is_deleted || 0) === 1;
+          const isDisabled = typeof s.is_disable !== 'undefined'
+            ? Number(s.is_disable || 0) === 1
+            : Number(s.is_active ?? 1) === 0;
+          if (!isDeleted && !isDisabled) {
+            genStats[gen].activeCount += 1;
+          } else if (!isDeleted && isDisabled) {
+            genStats[gen].disabledCount += 1;
+          }
+        });
+
+        const formattedStats: any = { total: students.length.toLocaleString() };
+        Object.keys(genStats).forEach((gen) => {
+          const clsMap = genStats[gen].classesMap;
+          formattedStats[gen.toLowerCase().replace(/\s/g, '')] = {
+            title: gen,
+            total: genStats[gen].total,
+            classes: Object.keys(clsMap).map((c) => ({ name: c, count: clsMap[c] })),
+            activeCount: genStats[gen].activeCount,
+            disabledCount: genStats[gen].disabledCount
+          };
+        });
+        setStudentStats(formattedStats);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update generation status.');
+    } finally {
+      setGenerationActionLoading((prev) => ({ ...prev, [generation]: false }));
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -220,15 +307,38 @@ export default function AdminDashboardPage() {
                 <p className="text-3xl font-black text-slate-900 mb-4">{studentStats?.total || 0}</p>
                 
                 <div className="space-y-3">
-                  {studentStats && Object.keys(studentStats).filter(k => k !== 'total').map((key) => {
-                    const gen = studentStats[key];
+                  {studentStats && Object.keys(studentStats)
+                    .filter(k => k !== 'total')
+                    .map((key) => studentStats[key])
+                    .filter((gen: any) => Number(gen.activeCount || 0) > 0)
+                    .map((gen: any) => {
                     return (
-                      <div key={key} className="p-3 bg-slate-50 rounded-xl">
+                      <div key={gen.title} className="p-3 bg-slate-50 rounded-xl">
                         <div className="flex justify-between items-center mb-2">
                           <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">
                             {gen.title === 'Unknown Gen' ? 'Other' : (gen.title.toLowerCase().startsWith('gen') ? gen.title : `Gen ${gen.title}`)}
                           </p>
-                          <p className="text-xs font-black text-blue-600">{gen.total}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-blue-600">{gen.total}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleGeneration(gen.title, gen.activeCount || 0)}
+                              disabled={generationActionLoading[gen.title] || !/^\d{4}$/.test(String(gen.title || ''))}
+                              className={cn(
+                                "px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors",
+                                (gen.activeCount || 0) > 0
+                                  ? "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
+                                generationActionLoading[gen.title] || !/^\d{4}$/.test(String(gen.title || ''))
+                                  ? "opacity-60 cursor-not-allowed"
+                                  : ""
+                              )}
+                            >
+                              {generationActionLoading[gen.title]
+                                ? '...'
+                                : (gen.activeCount || 0) > 0 ? 'Disable' : 'Enable'}
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           {gen.classes.map((c: any) => (
@@ -385,36 +495,63 @@ export default function AdminDashboardPage() {
 
             {/* Sidebar Widgets */}
             <div className="space-y-8">
-              {/* Evaluation Period Control */}
+              {/* Disabled Generations */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                 <div className="flex items-center gap-2 mb-6">
                   <Calendar className="w-5 h-5 text-primary" />
-                  <h3 className="font-black text-slate-900">Evaluation Periods</h3>
+                  <h3 className="font-black text-slate-900">Disabled Generations</h3>
                 </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Next Assessment Start</label>
-                    <div className="relative">
-                      <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all" />
-                    </div>
+
+                {studentStats ? (
+                  (() => {
+                    const disabledGenerations = Object.keys(studentStats)
+                      .filter((key) => key !== 'total')
+                      .map((key) => studentStats[key])
+                      .filter((gen: any) => Number(gen.disabledCount || 0) > 0 && Number(gen.activeCount || 0) === 0);
+
+                    if (disabledGenerations.length === 0) {
+                      return (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">
+                          No disabled generations.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {disabledGenerations.map((gen: any) => (
+                          <div key={gen.title} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {gen.title === 'Unknown Gen' ? 'Other' : `Gen ${gen.title}`}
+                              </p>
+                              <p className="text-sm font-black text-slate-900">
+                                {gen.disabledCount} students disabled
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleGeneration(gen.title, gen.activeCount || 0)}
+                              disabled={generationActionLoading[gen.title] || !/^\d{4}$/.test(String(gen.title || ''))}
+                              className={cn(
+                                "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors",
+                                generationActionLoading[gen.title] || !/^\d{4}$/.test(String(gen.title || ''))
+                                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                  : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                              )}
+                            >
+                              {generationActionLoading[gen.title] ? '...' : 'Enable'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">
+                    Loading generations...
                   </div>
-                  
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Next Assessment End</label>
-                    <div className="relative">
-                      <input type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all" />
-                    </div>
-                  </div>
-                  
-                  <button className="w-full py-3 bg-primary text-white font-black rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all mt-2">
-                    Set Window
-                  </button>
-                  
-                  <p className="text-[10px] text-center text-slate-400 font-bold leading-relaxed px-4">
-                    Setting a new window will notify all teachers and students via the internal messaging system.
-                  </p>
-                </div>
+                )}
               </div>
 
               {/* System Activity */}

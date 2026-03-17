@@ -192,7 +192,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     ? Number(apiUser.is_registered || 0) === 0
     : (apiUser.registration_status || '').toString().toLowerCase() === 'pending'
       || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
-  const status: UserStatus = isDeleted ? 'Deleted' : isPending ? 'Pending' : isDisabled ? 'Inactive' : 'Active';
+  const status: UserStatus = isDeleted ? 'Deleted' : isDisabled ? 'Inactive' : isPending ? 'Pending' : 'Active';
   const classText = (apiUser.class || '').toString().trim();
   const group = role === 'Student'
     ? (classText || 'Pending Class Assignment')
@@ -258,23 +258,52 @@ export default function AdminUserManagementPage() {
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
-  // Extract unique class options from student data based on selected generation
-  const classOptions = useMemo(() => {
+  const [customClassDraft, setCustomClassDraft] = useState('');
+  const [customClassOptions, setCustomClassOptions] = useState<string[]>([]);
+
+  const normalizeClassLabel = (value: string) =>
+    value
+      .toString()
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+
+  const extractClassLabel = (user: UserRecord) => {
+    if (user.className) return user.className.trim();
+    if (!user.group) return '';
+    const match = user.group.match(/Class\s+(.+)$/i);
+    return match ? match[1].trim() : '';
+  };
+
+  // Extract unique class options for filters based on selected generation
+  const classFilterOptions = useMemo(() => {
     const students = users.filter(u => u.role === 'Student');
     const filteredByGen = generationFilter === 'All Generations' 
       ? students 
       : students.filter(u => u.generation === generationFilter);
-    // Extract class from group string like "Gen 2026 - WEB DEV - Class WEB B" -> "WEB B"
-    // Use case-insensitive regex to handle inconsistent capitalization
     const uniqueClasses = Array.from(new Set(
-      filteredByGen.map(u => {
-        if (!u.group) return null;
-        const match = u.group.match(/Class\s+(.+)$/i);
-        return match ? match[1].trim() : null;
-      }).filter(Boolean)
+      filteredByGen.map(extractClassLabel).filter(Boolean).map(normalizeClassLabel)
     ));
     return uniqueClasses.sort();
   }, [users, generationFilter]);
+
+  // Invite modal class options based on invite generation + custom classes
+  const inviteClassOptions = useMemo(() => {
+    const students = users.filter(u => u.role === 'Student');
+    const filteredByGen = newUser.generation
+      ? students.filter(u => u.generation === newUser.generation)
+      : students;
+    const existing = filteredByGen
+      .map(extractClassLabel)
+      .filter(Boolean)
+      .map(normalizeClassLabel);
+    const custom = customClassOptions
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(normalizeClassLabel);
+    const merged = Array.from(new Set([...existing, ...custom]));
+    return merged.sort();
+  }, [users, newUser.generation, customClassOptions]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -337,6 +366,7 @@ export default function AdminUserManagementPage() {
       user.name.toLowerCase().includes(normalizedQuery) ||
       user.email.toLowerCase().includes(normalizedQuery) ||
       (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
+    const shouldHideDisabledStudent = user.role === 'Student' && user.status === 'Inactive';
     const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
     const matchesGender = genderFilter === 'All Genders' || 
       (genderFilter === 'Male' && user.gender === 'male') ||
@@ -345,7 +375,7 @@ export default function AdminUserManagementPage() {
       (user.role === 'Student' && user.generation === generationFilter);
     const matchesClass = classFilter === 'All Classes' || 
       (user.role === 'Student' && user.group?.toLowerCase().includes(`class ${classFilter}`.toLowerCase()));
-    return matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
+    return !shouldHideDisabledStudent && matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
@@ -970,7 +1000,7 @@ export default function AdminUserManagementPage() {
                     className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   >
                     <option>All Classes</option>
-                    {classOptions.map((cls) => (
+                    {classFilterOptions.map((cls) => (
                       <option key={cls} value={cls}>{cls}</option>
                     ))}
                   </select>
@@ -1514,11 +1544,38 @@ export default function AdminUserManagementPage() {
                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                           >
                             <option value="">Select class</option>
-                            {classOptions.map((classOption) => (
-                              <option key={classOption} value={classOption}>{classOption}</option>
-                            ))}
-                          </select>
+                          {inviteClassOptions.map((classOption) => (
+                            <option key={classOption} value={classOption}>{classOption}</option>
+                          ))}
+                        </select>
                           <p className="text-[10px] text-slate-400 font-bold ml-1">Classes available for selected generation</p>
+                          <div className="mt-3 flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={customClassDraft}
+                              onChange={(e) => setCustomClassDraft(e.target.value)}
+                              placeholder="Add new class manually"
+                              className="flex-1 px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextClass = customClassDraft.trim();
+                                if (!nextClass) return;
+                                const normalized = nextClass.toUpperCase();
+                                setCustomClassOptions((prev) => (
+                                  prev.some((item) => item.toUpperCase() === normalized)
+                                    ? prev
+                                    : [...prev, normalized]
+                                ));
+                                setNewUser((prev) => ({ ...prev, className: normalized }));
+                                setCustomClassDraft('');
+                              }}
+                              className="px-3 py-2.5 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-2 md:col-span-1">
