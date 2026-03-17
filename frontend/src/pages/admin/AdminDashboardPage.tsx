@@ -87,10 +87,12 @@ export default function AdminDashboardPage() {
   const [studentStats, setStudentStats] = useState<any>(null);
   const [teacherCount, setTeacherCount] = useState(0);
   const [adminCount, setAdminCount] = useState(0);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [pendingPage, setPendingPage] = useState(1);
   const [sortBy, setSortBy] = useState<string>('generation');
   const [sortOrder, setSortOrder] = useState<string>('desc');
   const [generationActionLoading, setGenerationActionLoading] = useState<Record<string, boolean>>({});
+  const PENDING_PAGE_SIZE = 5;
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -153,7 +155,7 @@ export default function AdminDashboardPage() {
               : (u.registration_status || '').toString().toLowerCase() === 'pending'
                 || (u.account_status || '').toString().toLowerCase() === 'pending';
             return !isDeleted && isPending;
-          }).slice(0, 5).map((apiUser: any) => {
+          }).map((apiUser: any) => {
              const roleLower = (apiUser.role || '').toLowerCase();
              const role = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
              const resolvedName = (apiUser.name || '').trim() || [apiUser.first_name, apiUser.last_name].filter(Boolean).join(' ').trim() || toDisplayNameFromEmail(apiUser.email);
@@ -165,7 +167,7 @@ export default function AdminDashboardPage() {
                   || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
              const status = isDeleted ? 'Deleted' : isPending ? 'Pending' : isDisabled ? 'Inactive' : 'Active';
              const group = role === 'Student' ? (apiUser.class || 'Pending Class Assignment') : role === 'Teacher' ? 'Teaching Staff' : 'Administration';
-             
+            
              return {
                 id: apiUser.id,
                 name: resolvedName,
@@ -175,7 +177,8 @@ export default function AdminDashboardPage() {
                 initials: resolvedName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0,2)
              };
           });
-          setRecentUsers(mappedUsers);
+          setPendingUsers(mappedUsers);
+          setPendingPage(1);
         }
       } catch (err) {
         console.error(err);
@@ -250,6 +253,12 @@ export default function AdminDashboardPage() {
       setGenerationActionLoading((prev) => ({ ...prev, [generation]: false }));
     }
   };
+
+  const pendingTotalPages = Math.max(1, Math.ceil(pendingUsers.length / PENDING_PAGE_SIZE));
+  const paginatedPendingUsers = pendingUsers.slice(
+    (pendingPage - 1) * PENDING_PAGE_SIZE,
+    pendingPage * PENDING_PAGE_SIZE
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -344,7 +353,7 @@ export default function AdminDashboardPage() {
                           {gen.classes.map((c: any) => (
                             <button 
                               key={c.name} 
-                              onClick={() => navigate(`/admin/students/${gen.title}/${c.name}`)}
+                              onClick={() => navigate(`/admin/students/${gen.title}/${encodeURIComponent(c.name)}`)}
                               className="flex items-center justify-between p-1.5 hover:bg-white rounded-lg transition-colors group/btn border border-transparent hover:border-slate-200"
                             >
                               <span className="text-[9px] font-bold text-slate-400 group-hover/btn:text-primary">{c.name}</span>
@@ -444,7 +453,7 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {recentUsers.map((user) => (
+                    {paginatedPendingUsers.map((user) => (
                       <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -485,10 +494,30 @@ export default function AdminDashboardPage() {
               </div>
               
               <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Showing {recentUsers.length} pending users</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Showing {paginatedPendingUsers.length} pending users
+                </p>
                 <div className="flex gap-2">
-                  <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors">Previous</button>
-                  <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-900 hover:bg-slate-50 transition-colors">Next</button>
+                  <button
+                    onClick={() => setPendingPage((prev) => Math.max(1, prev - 1))}
+                    disabled={pendingPage <= 1}
+                    className={cn(
+                      "px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors",
+                      pendingPage <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-400 hover:text-slate-900"
+                    )}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPendingPage((prev) => Math.min(pendingTotalPages, prev + 1))}
+                    disabled={pendingPage >= pendingTotalPages}
+                    className={cn(
+                      "px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors",
+                      pendingPage >= pendingTotalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-900 hover:bg-slate-50"
+                    )}
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </div>

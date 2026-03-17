@@ -124,6 +124,19 @@ const parsePeriodParts = (value: string) => {
 
 const formatPeriodLabel = (year: number, quarter: number) => `Q${quarter} ${year}`;
 
+const CRITERIA_COLORS = [
+  '#6366F1',
+  '#06B6D4',
+  '#F59E0B',
+  '#10B981',
+  '#EC4899',
+  '#8B5CF6',
+  '#F97316',
+  '#22C55E',
+  '#0EA5E9',
+  '#EF4444'
+];
+
 export default function AdminReportsPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'teachers'>('overview');
@@ -144,6 +157,7 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -298,6 +312,16 @@ export default function AdminReportsPage() {
     }));
   }, [criteriaNav]);
 
+  const criteriaColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    criteriaList.forEach((criterion, index) => {
+      const color = CRITERIA_COLORS[index % CRITERIA_COLORS.length];
+      map.set(criterion.key, color);
+      map.set(toCriterionKey(criterion.label), color);
+    });
+    return map;
+  }, [criteriaList]);
+
   const currentReportData = useMemo(() => {
     const totals = new Map<string, { total: number; count: number; label: string }>();
     const lookup = new Map<string, string>();
@@ -324,13 +348,14 @@ export default function AdminReportsPage() {
       const entry = totals.get(criterion.key);
       return {
         subject: criterion.label,
+        color: criteriaColorMap.get(criterion.key) || '#5d5fef',
         score: entry && entry.count > 0
           ? Number((entry.total / entry.count).toFixed(2))
           : 0,
         fullMark: ratingScale
       };
     });
-  }, [filteredEvaluations, criteriaList, ratingScale]);
+  }, [filteredEvaluations, criteriaList, ratingScale, criteriaColorMap]);
 
   const radarData = useMemo(() => (
     currentReportData.map((item) => ({
@@ -553,13 +578,27 @@ export default function AdminReportsPage() {
     return filled.slice(-12);
   }, [evaluations, students, activeCriterionKey]);
 
+  const activeCriterionColor = useMemo(() => {
+    if (activeCriterionKey === 'overall') return '#5d5fef';
+    return criteriaColorMap.get(activeCriterionKey) || '#5d5fef';
+  }, [activeCriterionKey, criteriaColorMap]);
+
   const handleExport = async () => {
     try {
       setExporting(true);
+      setExportNotice(null);
       const params = new URLSearchParams();
-      if (selectedClass !== 'All') params.append('class', selectedClass);
-      if (selectedGen !== 'All') params.append('generation', selectedGen);
-      if (selectedGender !== 'All') params.append('gender', selectedGender);
+      params.append('scope', activeTab);
+
+      if (activeTab === 'students') {
+        if (selectedClass !== 'All') params.append('class', selectedClass);
+        if (selectedGen !== 'All') params.append('generation', selectedGen);
+        if (selectedGender !== 'All') params.append('gender', selectedGender);
+      }
+
+      if (activeTab === 'teachers' && selectedTeacherQuarter !== 'All') {
+        params.append('quarter', selectedTeacherQuarter);
+      }
 
       const response = await fetch(`${API_BASE_URL}/evaluations/report/export?${params.toString()}`);
       if (!response.ok) {
@@ -576,14 +615,22 @@ export default function AdminReportsPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Admin_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const exportLabel = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
+      a.download = `Admin_${exportLabel}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      setExportNotice({
+        type: 'success',
+        message: 'Export completed. Your Excel file is downloading.'
+      });
     } catch (err: any) {
       console.error(err);
-      alert(err?.message || 'Failed to export report.');
+      setExportNotice({
+        type: 'error',
+        message: err?.message || 'Failed to export report.'
+      });
     } finally {
       setExporting(false);
     }
@@ -698,6 +745,25 @@ export default function AdminReportsPage() {
             <div className="flex items-center justify-center h-40 text-slate-500 text-sm font-semibold">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
               Loading report data...
+            </div>
+          )}
+          {exportNotice && (
+            <div
+              className={cn(
+                "flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-semibold",
+                exportNotice.type === 'success'
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              )}
+            >
+              <span>{exportNotice.message}</span>
+              <button
+                type="button"
+                onClick={() => setExportNotice(null)}
+                className="text-xs font-bold uppercase tracking-widest opacity-70 hover:opacity-100"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {error && !loading && (
@@ -823,7 +889,8 @@ export default function AdminReportsPage() {
 
                 {/* Performance Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/40 via-white to-sky-50/30 pointer-events-none" />
                     <div className="flex items-center justify-between mb-8">
                       <div>
                         <h3 className="text-lg font-black text-slate-900">
@@ -833,7 +900,7 @@ export default function AdminReportsPage() {
                         </h3>
                         <p className="text-xs text-slate-500 font-bold">Detailed breakdown by criteria</p>
                       </div>
-                      <div className="size-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                      <div className="size-10 bg-gradient-to-br from-indigo-100 to-sky-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
                         <BarChart3 className="w-5 h-5" />
                       </div>
                     </div>
@@ -901,9 +968,11 @@ export default function AdminReportsPage() {
                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
 
                           />
-
-                          <Bar dataKey="score" fill="#5d5fef" radius={[6, 6, 0, 0]} barSize={40} />
-
+                          <Bar dataKey="score" radius={[10, 10, 0, 0]} barSize={44}>
+                            {currentReportData.map((entry) => (
+                              <Cell key={`bar-${entry.subject}`} fill={entry.color} />
+                            ))}
+                          </Bar>
                         </BarChart>
 
                       </ResponsiveContainer>
@@ -912,10 +981,8 @@ export default function AdminReportsPage() {
 
                   </div>
 
-
-
-                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-
+                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/40 via-white to-amber-50/20 pointer-events-none" />
                     <h3 className="text-lg font-black text-slate-900 mb-8">Radar Analysis</h3>
                     <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
                     
@@ -1218,8 +1285,7 @@ export default function AdminReportsPage() {
                     <div className="flex gap-4">
 
                       <div className="flex items-center gap-2">
-
-                        <div className="size-3 rounded-full bg-primary" />
+                        <div className="size-3 rounded-full" style={{ backgroundColor: activeCriterionColor }} />
                         <span className="text-[10px] font-bold text-slate-500 uppercase">
                           {activeCriterionKey === 'overall'
                             ? 'Student Avg'
@@ -1237,12 +1303,13 @@ export default function AdminReportsPage() {
                         type="button"
                         onClick={() => setActiveCriterionKey('overall')}
                         className={cn(
-                          "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                          "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2",
                           activeCriterionKey === 'overall'
                             ? "bg-white text-primary shadow-sm"
                             : "text-slate-400 hover:text-slate-600"
                         )}
                       >
+                        <span className="size-2 rounded-full bg-primary" />
                         Overall
                       </button>
                       {criteriaNav.map((criterion) => (
@@ -1251,12 +1318,16 @@ export default function AdminReportsPage() {
                           type="button"
                           onClick={() => setActiveCriterionKey(criterion.key)}
                           className={cn(
-                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2",
                             activeCriterionKey === criterion.key
                               ? "bg-white text-primary shadow-sm"
                               : "text-slate-400 hover:text-slate-600"
                           )}
                         >
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ backgroundColor: criteriaColorMap.get(criterion.key) || '#5d5fef' }}
+                          />
                           {criterion.label}
                         </button>
                       ))}
@@ -1271,9 +1342,13 @@ export default function AdminReportsPage() {
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, ratingScale]} />
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none' }} />
-
-                        <Line type="monotone" dataKey="studentAvg" stroke="#5d5fef" strokeWidth={4} dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }} />
-
+                        <Line
+                          type="monotone"
+                          dataKey="studentAvg"
+                          stroke={activeCriterionColor}
+                          strokeWidth={4}
+                          dot={{ r: 6, fill: '#fff', stroke: activeCriterionColor, strokeWidth: 3 }}
+                        />
                       </LineChart>
 
                     </ResponsiveContainer>
