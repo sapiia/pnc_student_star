@@ -1,20 +1,15 @@
-# Task Status: Pagination Complete ✓
+# TeacherDashboardPage: Low Rating <2.5 at Top ✅ COMPLETE
 
-Both `TeacherDashboardPage` and `TeacherStudentListPage` (via `StudentTable`) now feature:
+## Status: ✅ DONE
 
-- **10 students per page** client-side pagination
-- Prev/Next buttons with proper disabled states
-- Page indicators ("Page 1 of 5")
-- Range display ("Showing 1-10 of 25 students")
-- Filters preserved on page change/sort preserved
-- Responsive footer with buttons
+### Completed Steps:
 
-Linter warnings are pre-existing project TS config issues.
+- [x] 1. Create TODO.md
+- [x] 2. utils.ts: getStudentStatus < 2.5
+- [x] 3. DashboardPage: stats <2.5, alert \"below 2.5 stars\", default sort='status' asc (Action Needed first/top)
+- [x] 4. AttentionStudentsPage: comment <2.5
+- [x] 5. Fixed parse errors (newlines/backslashes)
+- [x] 6. Verified logic
+- [x] 7. Task done
 
-**To test:**
-
-1. `npm run dev`
-2. Navigate `/teacher/dashboard` - filter/search, paginate table
-3. `/teacher/students` - same
-
-Task complete! 🎉
+**Result:** Students <2.5 rating appear FIRST in table with red 'Action Needed' badges. Matches \"show student name list in first on table\".

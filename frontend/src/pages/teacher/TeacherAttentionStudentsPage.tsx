@@ -177,7 +177,7 @@ export default function TeacherAttentionStudentsPage() {
                 <div>
                     <h2 className="text-xl md:text-2xl font-black text-rose-900 mb-2">Priority Intervention List</h2>
                     <p className="text-sm text-rose-700 font-medium">
-                        These {students.length} students have recorded an average self-evaluation rating below 3.0 stars. Prompt coaching and direct messaging is strongly recommended.
+an average self-evaluation rating below 2.5 stars. Prompt coaching and direct messaging is strongly recommended.
                     </p>
                 </div>
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 text-center shrink-0 min-w-32">

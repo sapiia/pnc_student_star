@@ -52,7 +52,7 @@ export default function TeacherDashboardPage() {
   const [selectedClass, setSelectedClass] = useState('All Classes');
   const [selectedGender, setSelectedGender] = useState<GenderOption>('All Genders');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortKey, setSortKey] = useState<'name' | 'rating' | 'generation' | 'class' | 'gender' | 'status'>('name');
+  const [sortKey, setSortKey] = useState<'name' | 'rating' | 'generation' | 'class' | 'gender' | 'status'>('status');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [isLoading, setIsLoading] = useState(true);
@@ -189,7 +189,7 @@ export default function TeacherDashboardPage() {
     const ratedStudents = filteredStudents.filter(s => s.rating !== null);
     let avgScore = ratedStudents.length > 0 ? ratedStudents.reduce((acc, curr) => acc + (curr.rating as number), 0) / ratedStudents.length : 0;
     let evalRate = filteredStudents.length > 0 ? (ratedStudents.length / filteredStudents.length) * 100 : 0;
-    const needsAttentionCount = ratedStudents.filter(s => (s.rating as number) < 3).length;
+    const needsAttentionCount = ratedStudents.filter(s => (s.rating as number) < 2.5).length;
 
     return [
       { label: 'Avg Feedback Stars', value: avgScore.toFixed(1), total: '/5.0', trend: '', icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
@@ -259,7 +259,7 @@ export default function TeacherDashboardPage() {
                   <div>
                     <h4 className="font-bold text-rose-900 text-sm lg:text-base">Urgent Alerts</h4>
                     <p className="text-xs lg:text-sm text-rose-700 leading-tight">
-                      {STATS[2].value} students have an average score below 3 stars. Intervention is recommended.
+                      {STATS[2].value} students have an average score below 2.5 stars. Intervention is recommended.
                     </p>
                   </div>
                 </div>
