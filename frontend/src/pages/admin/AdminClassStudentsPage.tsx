@@ -43,6 +43,13 @@ const extractGeneration = (user: any) => {
   return 'Unknown Gen';
 };
 
+const normalizeClassName = (value: string) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-\s*/g, ' - ')
+    .trim();
+
 interface UserRecord {
   id: number;
   name: string;
@@ -58,6 +65,8 @@ interface UserRecord {
 
 export default function AdminClassStudentsPage() {
   const { generation, className } = useParams();
+  const decodedGeneration = decodeURIComponent(String(generation || '').trim());
+  const decodedClassName = decodeURIComponent(String(className || '').trim());
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<UserRecord | null>(null);
@@ -183,7 +192,7 @@ export default function AdminClassStudentsPage() {
             const gen = extractGeneration(u);
             const cls = u.class || u.major || 'Unknown Class';
             
-            return gen === generation && cls === className;
+            return gen === decodedGeneration && normalizeClassName(cls) === normalizeClassName(decodedClassName);
           }).map(u => {
             const genderLower = String(u.gender || '').toLowerCase();
             return {
@@ -208,7 +217,7 @@ export default function AdminClassStudentsPage() {
       }
     };
     fetchStudents();
-  }, [generation, className]);
+  }, [decodedGeneration, decodedClassName]);
 
   const executeConfirmedAction = async () => {
     if (!confirmAction) return;
@@ -285,7 +294,7 @@ export default function AdminClassStudentsPage() {
   };
 
   const handleUpdateClassName = async () => {
-    if (!newClassName.trim() || newClassName.trim() === className) {
+    if (!newClassName.trim() || newClassName.trim() === decodedClassName) {
       alert('Please enter a different class name.');
       return;
     }
@@ -296,7 +305,7 @@ export default function AdminClassStudentsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          oldClassName: className,
+          oldClassName: decodedClassName,
           newClassName: newClassName.trim()
         })
       });
@@ -310,7 +319,7 @@ export default function AdminClassStudentsPage() {
         setIsEditClassModalOpen(false);
         
         // Update URL without navigation using History API
-        const newUrl = `/admin/students/${generation}/${encodeURIComponent(newClassName.trim())}`;
+        const newUrl = `/admin/students/${decodedGeneration}/${encodeURIComponent(newClassName.trim())}`;
         window.history.replaceState(null, '', newUrl);
         
         // Manually trigger a refetch by resetting state
@@ -326,7 +335,7 @@ export default function AdminClassStudentsPage() {
               if (u.role.toLowerCase() !== 'student') return false;
               const gen = extractGeneration(u);
               const cls = u.class || u.major || 'Unknown Class';
-              return gen === generation && cls === newClassName.trim();
+              return gen === decodedGeneration && normalizeClassName(cls) === normalizeClassName(newClassName.trim());
             }).map(u => {
               const genderLower = String(u.gender || '').toLowerCase();
               return {
@@ -401,10 +410,10 @@ export default function AdminClassStudentsPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg md:text-xl font-black text-slate-900">{generation} - {className}</h1>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">{decodedGeneration} - {decodedClassName}</h1>
               <button
                 onClick={() => {
-                  setNewClassName(className || '');
+                  setNewClassName(decodedClassName || '');
                   setIsEditClassModalOpen(true);
                 }}
                 className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
@@ -441,7 +450,7 @@ export default function AdminClassStudentsPage() {
             </div>
 
             <button 
-              onClick={() => navigate('/admin/users', { state: { openInvite: true, prefillClass: className, prefillGen: generation } })}
+              onClick={() => navigate('/admin/users', { state: { openInvite: true, prefillClass: decodedClassName, prefillGen: decodedGeneration } })}
               className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
@@ -592,7 +601,7 @@ export default function AdminClassStudentsPage() {
                       <img src={selectedStudent.profileImage} alt={selectedStudent.name} className="w-full h-full object-cover" />
                     </div>
                     <h4 className="text-xl font-black text-slate-900">{selectedStudent.name}</h4>
-                    <p className="text-xs font-bold text-primary uppercase tracking-widest mt-1 leading-none">{generation} - {className}</p>
+                    <p className="text-xs font-bold text-primary uppercase tracking-widest mt-1 leading-none">{decodedGeneration} - {decodedClassName}</p>
                   </div>
 
                   {/* Info Grid */}
@@ -787,7 +796,7 @@ export default function AdminClassStudentsPage() {
                   </button>
                   <button
                     onClick={handleUpdateClassName}
-                    disabled={isUpdatingClass || !newClassName.trim() || newClassName.trim() === className}
+                    disabled={isUpdatingClass || !newClassName.trim() || newClassName.trim() === decodedClassName}
                     className="flex-1 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg bg-primary hover:bg-primary/90 shadow-primary/20 disabled:opacity-60"
                   >
                     {isUpdatingClass ? 'Updating...' : 'Save Changes'}
