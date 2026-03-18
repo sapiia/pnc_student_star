@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Star, 
   ArrowLeft, 
@@ -64,6 +64,7 @@ const fallbackCriteria: EvaluationCriterion[] = CRITERIA.map((criterion, index) 
 
 export default function EvaluationFormPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentStep, setCurrentStep] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [reflections, setReflections] = useState<Record<string, string>>({});
@@ -73,12 +74,25 @@ export default function EvaluationFormPage() {
   const [canEvaluate, setCanEvaluate] = useState(true);
   const [daysUntilAvailable, setDaysUntilAvailable] = useState(0);
   const [nextAvailableLabel, setNextAvailableLabel] = useState('');
+  const [maxReflectionChars, setMaxReflectionChars] = useState(500);
+  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState(1);
+  const [evaluationsUsed, setEvaluationsUsed] = useState(0);
 
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [isEditLoading, setIsEditLoading] = useState(false);
+
+  const searchParams = new URLSearchParams(location.search);
+  const editEvaluationId = Number(searchParams.get('edit') || (location.state as { editEvaluationId?: number } | null)?.editEvaluationId);
+  const isEditMode = Number.isInteger(editEvaluationId) && editEvaluationId > 0;
 
   useEffect(() => {
+    if (isEditMode) {
+      return;
+    }
+
     const loadEligibility = async () => {
       try {
         const raw = localStorage.getItem('auth_user');
@@ -90,36 +104,67 @@ export default function EvaluationFormPage() {
           return;
         }
 
-        const [intervalResponse, evaluationsResponse] = await Promise.all([
+        const [intervalResponse, maxEvalResponse, maxReflectionResponse, evaluationsResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_evaluations_per_cycle`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_reflection_characters`),
           fetch(`${API_BASE_URL}/evaluations/user/${userId}`)
         ]);
 
         const intervalData = await intervalResponse.json().catch(() => ({}));
+        const maxEvalData = await maxEvalResponse.json().catch(() => ({}));
+        const maxReflectionData = await maxReflectionResponse.json().catch(() => ({}));
         const evaluations = await evaluationsResponse.json().catch(() => ([]));
-        const latestEvaluation = Array.isArray(evaluations) && evaluations.length > 0 ? evaluations[0] : null;
-
-        if (!latestEvaluation) {
-          setCanEvaluate(true);
-          setDaysUntilAvailable(0);
-          setNextAvailableLabel('');
-          return;
-        }
-
         const intervalDays = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
-        const latestSubmittedAt = String(latestEvaluation?.submitted_at || latestEvaluation?.created_at || '').trim();
-        const latestDate = new Date(latestSubmittedAt);
+        const maxPerCycle = Math.min(12, Math.max(1, Number(maxEvalData?.value || 1)));
+        const reflectionMax = Math.min(5000, Math.max(100, Number(maxReflectionData?.value || 500)));
 
-        if (Number.isNaN(latestDate.getTime())) {
+        setMaxEvaluationsPerCycle(maxPerCycle);
+        setMaxReflectionChars(reflectionMax);
+
+        if (!Array.isArray(evaluations) || evaluations.length === 0) {
+          setCanEvaluate(true);
+          setDaysUntilAvailable(0);
+          setNextAvailableLabel('');
+          setEvaluationsUsed(0);
+          return;
+        }
+
+        const now = Date.now();
+        const windowStart = now - intervalDays * 24 * 60 * 60 * 1000;
+        const evaluationsInWindow = evaluations.filter((evaluation: any) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          return Number.isFinite(timestamp) && timestamp >= windowStart;
+        });
+
+        const usedCount = evaluationsInWindow.length;
+        setEvaluationsUsed(usedCount);
+
+        if (usedCount < maxPerCycle) {
           setCanEvaluate(true);
           setDaysUntilAvailable(0);
           setNextAvailableLabel('');
           return;
         }
 
-        const nextAvailableDate = new Date(latestDate);
+        const earliestTimestamp = evaluationsInWindow.reduce((min: number, evaluation: any) => {
+          const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
+          const timestamp = new Date(submittedAt).getTime();
+          if (!Number.isFinite(timestamp)) return min;
+          return Math.min(min, timestamp);
+        }, Number.POSITIVE_INFINITY);
+
+        if (!Number.isFinite(earliestTimestamp)) {
+          setCanEvaluate(true);
+          setDaysUntilAvailable(0);
+          setNextAvailableLabel('');
+          return;
+        }
+
+        const nextAvailableDate = new Date(earliestTimestamp);
         nextAvailableDate.setDate(nextAvailableDate.getDate() + intervalDays);
-        const remainingDays = Math.max(0, Math.ceil((nextAvailableDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+        const remainingDays = Math.max(0, Math.ceil((nextAvailableDate.getTime() - now) / (1000 * 60 * 60 * 24)));
 
         setCanEvaluate(remainingDays === 0);
         setDaysUntilAvailable(remainingDays);
@@ -138,7 +183,7 @@ export default function EvaluationFormPage() {
     };
 
     loadEligibility();
-  }, []);
+  }, [isEditMode]);
 
   useEffect(() => {
     const loadCriteriaConfig = async () => {
@@ -177,6 +222,118 @@ export default function EvaluationFormPage() {
     loadCriteriaConfig();
   }, []);
 
+  const normalizePeriodInput = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const normalized = trimmed.replace(/\s+/g, ' ').toUpperCase();
+    const qMatch = normalized.match(/^Q([1-4])\s*(\d{4})$/);
+    if (qMatch) return `${qMatch[2]}-Q${qMatch[1]}`;
+    const altMatch = normalized.match(/^(\d{4})\s*-\s*Q([1-4])$/);
+    if (altMatch) return `${altMatch[1]}-Q${altMatch[2]}`;
+    return trimmed;
+  };
+
+  const formatPeriodInput = (value: string) => {
+    const trimmed = String(value || '').trim();
+    const quarterMatch = trimmed.match(/^(\d{4})-Q([1-4])$/i);
+    if (quarterMatch) return `Q${quarterMatch[2]} ${quarterMatch[1]}`;
+    return trimmed;
+  };
+
+  const applyEvaluationToState = (evaluation: any, activeCriteria: EvaluationCriterion[]) => {
+    const scoresMap: Record<string, number> = {};
+    const reflectionsMap: Record<string, string> = {};
+    const responses = Array.isArray(evaluation?.responses) ? evaluation.responses : [];
+
+    activeCriteria.forEach((criterion) => {
+      const response = responses.find((r: any) =>
+        String(r.criterion_key || '').trim() === String(criterion.key || '').trim() ||
+        String(r.criterion_id || '').trim() === String(criterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.label || '').trim().toLowerCase()
+      );
+      scoresMap[criterion.key] = response ? Number(response.star_value || 0) : 0;
+      reflectionsMap[criterion.key] = response ? String(response.reflection || '').trim() : '';
+    });
+
+    setScores(scoresMap);
+    setReflections(reflectionsMap);
+    setEditTitle(formatPeriodInput(String(evaluation?.period || '')));
+  };
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const loadEvaluationForEdit = async () => {
+      setIsEditLoading(true);
+      try {
+        const raw = localStorage.getItem('auth_user');
+        const authUser = raw ? JSON.parse(raw) : null;
+        const userId = Number(authUser?.id);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          setSubmitError('Student account information is missing.');
+          return;
+        }
+
+        const [permissionRes, evaluationRes, criteriaRes, reflectionMaxRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`),
+          fetch(`${API_BASE_URL}/evaluations/${editEvaluationId}`),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+          fetch(`${API_BASE_URL}/settings/key/student_max_reflection_characters`)
+        ]);
+
+        const permissionData = await permissionRes.json().catch(() => ({}));
+        const canEdit = !['false', '0'].includes(String(permissionData?.value || 'false').trim().toLowerCase());
+        if (!canEdit) {
+          setSubmitError('Editing after submit is currently disabled by admin.');
+          return;
+        }
+
+        const evaluation = await evaluationRes.json().catch(() => ({}));
+        if (!evaluationRes.ok) {
+          setSubmitError(evaluation?.error || 'Failed to load evaluation.');
+          return;
+        }
+
+        const criteriaData = await criteriaRes.json().catch(() => ({}));
+        if (Array.isArray(criteriaData?.criteria) && criteriaData.criteria.length > 0) {
+          const activeCriteria = criteriaData.criteria.filter((c: any) => String(c.status).toLowerCase() === 'active');
+          if (activeCriteria.length > 0) {
+            const nextRatingScale = Math.max(1, Number(criteriaData?.ratingScale || 5));
+            setRatingScale(nextRatingScale);
+            const mappedCriteria = activeCriteria.map((c: any, index: number) => {
+              const style = CRITERION_STYLES[index % CRITERION_STYLES.length];
+              return {
+                id: String(c.id || '').trim() || undefined,
+                key: c.key || String(c.id || c.name || `criterion${index + 1}`),
+                label: String(c.name || `Criterion ${index + 1}`),
+                icon: String(c.icon || 'Star'),
+                description: String(c.description || '').trim(),
+                starDescriptions: Array.from({ length: nextRatingScale }, (_, starIndex) => String(c.starDescriptions?.[starIndex] || '').trim()),
+                ...style,
+              };
+            });
+            setCriteria(mappedCriteria);
+            applyEvaluationToState(evaluation, mappedCriteria);
+          }
+        } else {
+          applyEvaluationToState(evaluation, criteria);
+        }
+
+        const reflectionMaxData = await reflectionMaxRes.json().catch(() => ({}));
+        const reflectionMax = Math.min(5000, Math.max(100, Number(reflectionMaxData?.value || 500)));
+        setMaxReflectionChars(reflectionMax);
+        setCanEvaluate(true);
+      } catch {
+        setSubmitError('Failed to load evaluation.');
+      } finally {
+        setIsEditLoading(false);
+        setIsEligibilityLoading(false);
+      }
+    };
+
+    loadEvaluationForEdit();
+  }, [isEditMode, editEvaluationId]);
+
   const criterion = currentStep >= 0 && currentStep < criteria.length ? criteria[currentStep] : null;
   const selectedRating = criterion ? scores[criterion.key] || 0 : 0;
   const selectedTip = criterion && selectedRating > 0
@@ -205,9 +362,6 @@ export default function EvaluationFormPage() {
         throw new Error('Student account information is missing.');
       }
 
-      const now = new Date();
-      const quarter = Math.floor(now.getMonth() / 3) + 1;
-      const period = `${now.getFullYear()}-Q${quarter}`;
       const responses = criteria.map((item) => {
         const starValue = scores[item.key] || 0;
         return {
@@ -221,18 +375,23 @@ export default function EvaluationFormPage() {
         };
       });
 
-      const response = await fetch(`${API_BASE_URL}/evaluations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          period,
-          rating_scale: ratingScale,
-          responses,
-        }),
-      });
+      const payload = {
+        user_id: userId,
+        period: isEditMode ? normalizePeriodInput(editTitle) : undefined,
+        rating_scale: ratingScale,
+        responses,
+      };
+
+      const response = await fetch(
+        isEditMode ? `${API_BASE_URL}/evaluations/${editEvaluationId}` : `${API_BASE_URL}/evaluations`,
+        {
+          method: isEditMode ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -240,7 +399,11 @@ export default function EvaluationFormPage() {
       }
 
       localStorage.setItem(`last_evaluation_submitted_at_${userId}`, new Date().toISOString());
-      navigate('/results', { state: { scores, reflections, evaluationId: data?.evaluationId } });
+      if (isEditMode) {
+        navigate('/history');
+      } else {
+        navigate('/results', { state: { scores, reflections, evaluationId: data?.evaluationId } });
+      }
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit evaluation.');
       setIsSubmitting(false);
@@ -271,29 +434,32 @@ export default function EvaluationFormPage() {
     }
   };
 
-  return (
-    <div className="bg-slate-50 min-h-screen flex flex-col font-sans">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-white/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <BrandLogo titleClassName="text-xl font-bold tracking-tight text-primary" markClassName="size-8" />
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => navigate('/dashboard')}
-              className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest whitespace-nowrap"
-            >
-              Cancel
-            </button>
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold leading-none text-slate-900">Student Portal</p>
-              <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">Self Evaluation</p>
-            </div>
+  const renderTopBar = () => (
+    <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-white/80 backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        <BrandLogo titleClassName="text-xl font-bold tracking-tight text-primary" markClassName="size-8" />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors uppercase tracking-widest whitespace-nowrap"
+          >
+            Cancel
+          </button>
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-semibold leading-none text-slate-900">Student Portal</p>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">Self Evaluation</p>
           </div>
         </div>
-      </header>
+      </div>
+    </header>
+  );
+
+  return (
+    <div className="bg-slate-50 min-h-screen flex flex-col font-sans">
+      {renderTopBar()}
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {isEligibilityLoading ? (
+        {isEligibilityLoading || (isEditMode && isEditLoading) ? (
           <div className="bg-white border border-primary/10 rounded-3xl shadow-xl p-10 text-center">
             <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Checking Evaluation Access</p>
             <p className="mt-4 text-lg font-bold text-slate-900">Loading your evaluation schedule...</p>
@@ -309,6 +475,9 @@ export default function EvaluationFormPage() {
               <p className="mt-3 md:mt-4 text-sm md:text-base text-slate-600 font-bold leading-relaxed px-2">
                 Your next self-evaluation will open in {daysUntilAvailable} day{daysUntilAvailable === 1 ? '' : 's'}.
                 {nextAvailableLabel ? ` The next available date is ${nextAvailableLabel}.` : ''}
+              </p>
+              <p className="mt-3 text-[11px] md:text-xs font-black uppercase tracking-widest text-amber-500">
+                {evaluationsUsed} of {maxEvaluationsPerCycle} evaluations used in this cycle
               </p>
             </div>
             <div className="bg-amber-50 px-6 md:px-8 py-5 md:py-6 flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3">
@@ -330,6 +499,21 @@ export default function EvaluationFormPage() {
         <>
         {/* Progress Stepper */}
         <div className="mb-6 md:mb-10 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
+          {isEditMode && (
+            <div className="mb-4 bg-white border border-primary/10 rounded-2xl px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Edit Evaluation</p>
+                <p className="text-sm font-bold text-slate-900">Update the title and scores below.</p>
+              </div>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Q4 2026"
+                className="w-full md:w-56 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          )}
           <div className="flex items-center justify-between min-w-[500px] md:min-w-full">
             {criteria.map((c, idx) => {
               const isActive = idx === currentStep;
@@ -418,9 +602,9 @@ export default function EvaluationFormPage() {
                     </label>
                     <span className={cn(
                       "text-[10px] font-black uppercase tracking-widest",
-                      (reflections[criterion.key]?.length || 0) >= 50 ? "text-emerald-500" : "text-slate-400"
+                      (reflections[criterion.key]?.length || 0) >= maxReflectionChars ? "text-rose-500" : "text-slate-400"
                     )}>
-                      {reflections[criterion.key]?.length || 0} / 50 min
+                      {reflections[criterion.key]?.length || 0} / {maxReflectionChars} max
                     </span>
                   </div>
                   <textarea 
@@ -428,8 +612,12 @@ export default function EvaluationFormPage() {
                     id="reflection" 
                     placeholder={`Describe your ${criterion.label.toLowerCase()} situation...`}
                     rows={5}
+                    maxLength={maxReflectionChars}
                     value={reflections[criterion.key] || ''}
-                    onChange={(e) => setReflections({ ...reflections, [criterion.key]: e.target.value })}
+                    onChange={(e) => {
+                      const nextValue = e.target.value.slice(0, maxReflectionChars);
+                      setReflections({ ...reflections, [criterion.key]: nextValue });
+                    }}
                   />
                 </div>
 

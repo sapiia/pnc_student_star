@@ -6,11 +6,35 @@ const {
   getEvaluationsByUserId,
   createEvaluation,
   updateEvaluation,
-  deleteEvaluation
+  deleteEvaluation,
+  getReportStats,
+  getCriteriaAverages,
+  getTrendData,
+  getEngagementStats,
+  getSummaryStats,
+  exportReport
 } = require('../controllers/evaluationController');
 
 // GET /api/evaluations - Get all evaluations
 router.get('/', getAllEvaluations);
+
+// GET /api/evaluations/report/stats - Get report statistics
+router.get('/report/stats', getReportStats);
+
+// GET /api/evaluations/report/criteria - Get criteria-wise averages
+router.get('/report/criteria', getCriteriaAverages);
+
+// GET /api/evaluations/report/trends - Get trend data
+router.get('/report/trends', getTrendData);
+
+// GET /api/evaluations/report/engagement - Get engagement stats
+router.get('/report/engagement', getEngagementStats);
+
+// GET /api/evaluations/report/summary - Get summary stats
+router.get('/report/summary', getSummaryStats);
+
+// GET /api/evaluations/report/export - Export report to Excel
+router.get('/report/export', exportReport);
 
 // GET /api/evaluations/:id - Get evaluation by ID
 router.get('/:id', getEvaluationById);

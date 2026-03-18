@@ -18,6 +18,7 @@ const {
   hardDeleteAllUsers,
   disableAllUsers,
   setUserActive,
+  setGenerationActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,
@@ -25,6 +26,9 @@ const {
   commitUsersBulkInvite,
   validateInvite,
   completeInviteRegistration,
+  getTeacherClasses,
+  getStudentsByClass,
+  getTeacherStudents,
   updateClassNameForStudents
 } = require('../controllers/userController');
 const upload = multer({
@@ -56,6 +60,9 @@ const profileImageUpload = multer({
 
 // GET /api/users - Get all users
 router.get('/', getAllUsers);
+
+// PATCH /api/users/generation/:generation/active - Enable/disable all students in a generation
+router.patch('/generation/:generation/active', setGenerationActive);
 
 // GET /api/users/:id - Get user by ID
 router.get('/:id', getUserById);
@@ -143,5 +150,15 @@ router.delete('/:id/hard', hardDeleteUser);
 
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', deleteUser);
+
+// Teacher-specific routes for reports
+// GET /api/users/teachers/classes/:teacherId - Get teacher's assigned classes
+router.get('/teachers/classes/:teacherId', getTeacherClasses);
+
+// GET /api/users/teachers/classes/:teacherId/students - Get all students for teacher
+router.get('/teachers/students/:teacherId', getTeacherStudents);
+
+// GET /api/users/classes/:class/students - Get students by class
+router.get('/classes/:class/students', getStudentsByClass);
 
 module.exports = router;

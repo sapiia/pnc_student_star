@@ -572,7 +572,7 @@ export default function AdminSettingsPage() {
             ? parseBooleanSetting(teacherDeadlineData.value, DEFAULT_ROLE_PERMISSIONS.teacherCanManageEvaluationDeadlines)
             : DEFAULT_ROLE_PERMISSIONS.teacherCanManageEvaluationDeadlines,
           teacherMaxAssignedStudents: teacherMaxResponse.ok
-            ? parseNumberSetting(teacherMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents, 1, 200)
+            ? parseNumberSetting(teacherMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents, 0, 200)
             : DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents,
           teacherMaxFeedbackCharacters: teacherFeedbackMaxResponse.ok
             ? parseNumberSetting(teacherFeedbackMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxFeedbackCharacters, 100, 10000)
@@ -1923,17 +1923,19 @@ export default function AdminSettingsPage() {
                         </button>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="mb-3 flex items-center justify-between gap-4">
                           <div>
-                            <p className="text-sm font-black text-slate-900">Max Assigned Students</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Boundary for teacher workload and assignment volume</p>
+                            <p className="text-sm font-black text-slate-900">Max feedback to Students</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Limit unique students a teacher can feedback (0 = unlimited)</p>
                           </div>
-                          <span className="text-lg font-black text-primary">{rolePermissions.teacherMaxAssignedStudents}</span>
+                          <span className="text-lg font-black text-primary">
+                            {rolePermissions.teacherMaxAssignedStudents === 0 ? 'Unlimited' : rolePermissions.teacherMaxAssignedStudents}
+                          </span>
                         </div>
                         <input
                           type="range"
-                          min={1}
+                          min={0}
                           max={200}
                           step={1}
                           value={rolePermissions.teacherMaxAssignedStudents}

@@ -117,50 +117,57 @@ export default function TeacherNotificationsPage() {
     setNotifications(notifications.map(n => ({ ...n, isRead: true })));
   };
 
+  const renderTopBar = () => (
+    <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary">Home</button>
+        <ChevronRight className="w-4 h-4" />
+        <span className="font-semibold text-slate-900">Notifications</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="relative hidden md:block">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+          />
+        </div>
+        <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
+          <Bell className="w-5 h-5" />
+          {notifications.some(n => !n.isRead) && (
+            <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+          )}
+        </button>
+      </div>
+    </header>
+  );
+
+  const renderListHeader = () => (
+    <header className="mb-8 flex items-center justify-between">
+      <div>
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Notifications</h1>
+        <p className="text-slate-500 mt-2">Stay updated with messages and alerts from students and staff.</p>
+      </div>
+      <button
+        onClick={markAllAsRead}
+        className="text-sm font-bold text-primary hover:underline"
+      >
+        Mark all as read
+      </button>
+    </header>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
       
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary">Home</button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="font-semibold text-slate-900">Notifications</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search notifications..." 
-                className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
-              />
-            </div>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
-              <Bell className="w-5 h-5" />
-              {notifications.some(n => !n.isRead) && (
-                <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
-              )}
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         <div className="flex-1 overflow-y-auto p-8">
           <div className="max-w-[800px] mx-auto">
-            <header className="mb-8 flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight">Notifications</h1>
-                <p className="text-slate-500 mt-2">Stay updated with messages and alerts from students and staff.</p>
-              </div>
-              <button 
-                onClick={markAllAsRead}
-                className="text-sm font-bold text-primary hover:underline"
-              >
-                Mark all as read
-              </button>
-            </header>
+            {renderListHeader()}
 
             {/* Filter Tabs */}
             <div className="flex gap-4 mb-6">
