@@ -30,6 +30,8 @@ import {
   getEvaluationSortValue,
   formatShortDateWithTime,
   getStudentStatus,
+  normalizeGender,
+  resolveAvatarUrl,
 } from '../../lib/teacher/utils';
 import type { GenderOption } from '../../lib/teacher/types';
 
@@ -57,19 +59,44 @@ export default function TeacherDashboardPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
+  const [evaluations, setEvaluations] = useState<any[]>([]);
   const { teacherId } = useTeacherIdentity();
   const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
+    if (!teacherId) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`),
+        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
         fetch(`${API_BASE_URL}/evaluations`)
       ]);
 
-      const usersData = await usersResponse.json().catch(() => []);
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      let usersData = [];
+      if (usersResponse.ok) {
+        usersData = await usersResponse.json().catch(() => []);
+      } else {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
+        usersData = await fallbackResponse.json().catch(() => []);
+      }
+
+      const evaluationsData = evaluationsResponse.ok
+        ? await evaluationsResponse.json().catch(() => [])
+        : [];
+      setEvaluations(Array.isArray(evaluationsData) ? evaluationsData : []);
+
+      const studentIdSet = new Set(
+        Array.isArray(usersData)
+          ? usersData
+              .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+              .map((user) => Number(user.id))
+              .filter((id) => Number.isInteger(id) && id > 0)
+          : []
+      );
 
       const latestEvaluationByUser = new Map<number, any>();
       if (Array.isArray(evaluationsData)) {
@@ -77,7 +104,12 @@ export default function TeacherDashboardPage() {
           .sort((left, right) => getEvaluationSortValue(right) - getEvaluationSortValue(left))
           .forEach((evaluation: any) => {
             const userId = Number(evaluation.user_id);
-            if (Number.isInteger(userId) && userId > 0 && !latestEvaluationByUser.has(userId)) {
+            if (
+              Number.isInteger(userId) &&
+              userId > 0 &&
+              studentIdSet.has(userId) &&
+              !latestEvaluationByUser.has(userId)
+            ) {
               latestEvaluationByUser.set(userId, evaluation);
             }
           });
@@ -98,10 +130,13 @@ export default function TeacherDashboardPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
+                avatar: resolveAvatarUrl(String(user.profile_image || '').trim(), DEFAULT_AVATAR),
                 generation: extractGeneration(user),
                 class: extractClassNameLegacy(user),
-                gender: String(user.gender || '').trim().toLowerCase() || null,
+                gender: (() => {
+                  const normalized = normalizeGender(user.gender);
+                  return normalized === 'unknown' ? null : normalized;
+                })(),
                 rating: averageScore,
                 status: status,
                 lastEval: latestEvaluation ? formatShortDateWithTime(latestEvaluation.submitted_at || latestEvaluation.created_at) : 'No Data',
@@ -116,16 +151,19 @@ export default function TeacherDashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
 
-  const gens = useMemo(() => ['All Generations', ...Array.from(new Set(students.map(s => s.generation))).sort()], [students]);
+  const gens = useMemo(
+    () => Array.from(new Set(students.map(s => s.generation))).filter(Boolean).sort(),
+    [students]
+  );
   const classes = useMemo(() => {
     const scopedStudents = selectedGen === 'All Generations' ? students : students.filter(s => s.generation === selectedGen);
-    return ['All Classes', ...Array.from(new Set(scopedStudents.map(s => s.class))).sort()];
+    return Array.from(new Set(scopedStudents.map(s => s.class))).filter(Boolean).sort();
   }, [selectedGen, students]);
 
   useEffect(() => {
@@ -186,9 +224,19 @@ export default function TeacherDashboardPage() {
   };
 
   const STATS = useMemo(() => {
+    const filteredStudentIds = new Set(filteredStudents.map((s) => s.id));
+    const scopedEvaluations = evaluations.filter((evaluation) =>
+      filteredStudentIds.has(Number(evaluation.user_id))
+    );
+
+    const avgScore = scopedEvaluations.length > 0
+      ? scopedEvaluations.reduce((sum, evaluation) => sum + Number(evaluation.average_score || 0), 0) / scopedEvaluations.length
+      : 0;
+
+    const evaluatedStudents = new Set(scopedEvaluations.map((evaluation) => Number(evaluation.user_id))).size;
+    const evalRate = filteredStudents.length > 0 ? (evaluatedStudents / filteredStudents.length) * 100 : 0;
+
     const ratedStudents = filteredStudents.filter(s => s.rating !== null);
-    let avgScore = ratedStudents.length > 0 ? ratedStudents.reduce((acc, curr) => acc + (curr.rating as number), 0) / ratedStudents.length : 0;
-    let evalRate = filteredStudents.length > 0 ? (ratedStudents.length / filteredStudents.length) * 100 : 0;
     const needsAttentionCount = ratedStudents.filter(s => (s.rating as number) < 2.5).length;
 
     return [
@@ -196,7 +244,7 @@ export default function TeacherDashboardPage() {
       { label: 'Evaluation Rate', value: `${Math.round(evalRate)}%`, total: '', trend: '', icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/5' },
       { label: 'Needs Attention', value: String(needsAttentionCount), total: 'Students', trend: '', icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-50', actionLabel: 'View Detail', onAction: () => navigate('/teacher/attention') },
     ];
-  }, [filteredStudents, navigate]);
+  }, [evaluations, filteredStudents, navigate]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -221,13 +269,6 @@ export default function TeacherDashboardPage() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           notificationCount={unreadNotificationCount}
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          onSortChange={(key, direction) => {
-            setSortKey(key);
-            setSortDirection(direction);
-          }}
-          showSort={true}
         />
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">

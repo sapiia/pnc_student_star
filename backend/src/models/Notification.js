@@ -12,6 +12,28 @@ const getUsersTableColumns = async () => {
   return usersTableColumnsPromise;
 };
 
+const getNotificationRetentionDays = async () => {
+  try {
+    const [rows] = await db.query(
+      "SELECT `value` FROM settings WHERE `key` = 'notification_auto_delete_days' LIMIT 1"
+    );
+    const parsed = Number(rows?.[0]?.value);
+    if (!Number.isFinite(parsed)) return 7;
+    return Math.min(365, Math.max(7, parsed));
+  } catch {
+    return 7;
+  }
+};
+
+const purgeExpiredNotifications = async () => {
+  const retentionDays = await getNotificationRetentionDays();
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return;
+  await db.query(
+    'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+    [retentionDays]
+  );
+};
+
 const buildDisplayNameSql = (alias, columns) => {
   if (columns.has('name')) {
     return `${alias}.name`;
@@ -129,6 +151,7 @@ class Notification {
 
   static async findAll() {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         ORDER BY n.created_at DESC
@@ -142,6 +165,7 @@ class Notification {
 
   static async findById(id) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.id = ?
@@ -156,6 +180,7 @@ class Notification {
 
   static async findByUserId(userId) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.user_id = ?
@@ -170,6 +195,7 @@ class Notification {
 
   static async findStudentReplyThread(studentId, teacherId) {
     try {
+      await purgeExpiredNotifications();
       const [rows] = await db.query(`
         SELECT id, user_id, message, is_read, created_at, updated_at
         FROM notifications
@@ -209,6 +235,7 @@ class Notification {
 
   static async findUnreadByUserId(userId) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.user_id = ? AND n.is_read = 0

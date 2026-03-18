@@ -426,24 +426,45 @@ export default function AdminReportsPage() {
   }, [evaluations, students]);
 
   const teacherQuarterOptions = useMemo(() => {
-    const quarters = new Set<string>();
-    feedbacks.forEach((feedback) => {
-      const evalId = Number(feedback.evaluation_id || 0);
-      if (!evalId) return;
-      const evalRecord = evaluations.find((evaluation) => Number(evaluation.id) === evalId);
-      if (!evalRecord) return;
-      const period = parsePeriodParts(evalRecord.period);
+    const periods = new Map<string, { year: number; quarter: number }>();
+    evaluations.forEach((evaluation) => {
+      let period = parsePeriodParts(evaluation.period);
+      if (!period) {
+        const dateValue = evaluation.submitted_at || evaluation.created_at;
+        if (dateValue) {
+          const date = new Date(dateValue);
+          if (!Number.isNaN(date.getTime())) {
+            const year = date.getUTCFullYear();
+            const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+            period = { year, quarter };
+          }
+        }
+      }
       if (!period) return;
-      quarters.add(formatPeriodLabel(period.year, period.quarter));
+      const key = `${period.year}-Q${period.quarter}`;
+      periods.set(key, period);
     });
-    return Array.from(quarters).sort((a, b) => {
-      const [qa, ya] = a.split(' ');
-      const [qb, yb] = b.split(' ');
-      const yearDiff = Number(ya) - Number(yb);
-      if (yearDiff !== 0) return yearDiff;
-      return Number(qa.replace('Q', '')) - Number(qb.replace('Q', ''));
+
+    const entries = Array.from(periods.values()).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.quarter - b.quarter;
     });
-  }, [evaluations, feedbacks]);
+
+    if (entries.length === 0) {
+      const year = new Date().getFullYear();
+      return [1, 2, 3, 4].map((q) => formatPeriodLabel(year, q));
+    }
+
+    const minYear = entries[0].year;
+    const maxYear = entries[entries.length - 1].year;
+    const allOptions: string[] = [];
+    for (let year = minYear; year <= maxYear; year += 1) {
+      for (let quarter = 1; quarter <= 4; quarter += 1) {
+        allOptions.push(formatPeriodLabel(year, quarter));
+      }
+    }
+    return allOptions;
+  }, [evaluations]);
 
   const teacherPerformance = useMemo(() => {
     const filteredFeedbacks = selectedTeacherQuarter === 'All'
@@ -541,23 +562,8 @@ export default function AdminReportsPage() {
     const studentIds = new Set(students.map((student) => student.id));
     const studentEvaluations = evaluations.filter((evaluation) => studentIds.has(Number(evaluation.user_id)));
 
-    const buckets = new Map<string, { total: number; count: number; year: number; quarter: number }>();
+    const buckets = new Map<string, { total: number; count: number; year: number; quarter: number; studentIds: Set<number> }>();
     studentEvaluations.forEach((evaluation) => {
-      let value = Number(evaluation.average_score || 0);
-      if (activeCriterionKey !== 'overall') {
-        const responses = Array.isArray(evaluation.responses) ? evaluation.responses : [];
-        const normalizedActiveKey = toCriterionKey(activeCriterionKey);
-        const matched = responses.find((response) => {
-          const keyCandidate = toCriterionKey(String(response.criterion_key || ''));
-          const nameCandidate = toCriterionKey(String(response.criterion_name || ''));
-          return keyCandidate === normalizedActiveKey || nameCandidate === normalizedActiveKey;
-        });
-        if (!matched) {
-          return;
-        }
-        value = Number(matched.star_value || 0);
-      }
-
       let period = parsePeriodParts(evaluation.period);
       if (!period) {
         const dateValue = evaluation.submitted_at || evaluation.created_at;
@@ -572,9 +578,27 @@ export default function AdminReportsPage() {
       }
       if (!period) return;
       const key = `${period.year}-Q${period.quarter}`;
-      const entry = buckets.get(key) || { total: 0, count: 0, year: period.year, quarter: period.quarter };
-      entry.total += value;
-      entry.count += 1;
+      const entry = buckets.get(key) || { total: 0, count: 0, year: period.year, quarter: period.quarter, studentIds: new Set<number>() };
+      entry.studentIds.add(Number(evaluation.user_id));
+      
+      let value = Number(evaluation.average_score || 0);
+      if (activeCriterionKey !== 'overall') {
+        const responses = Array.isArray(evaluation.responses) ? evaluation.responses : [];
+        const normalizedActiveKey = toCriterionKey(activeCriterionKey);
+        const matched = responses.find((response) => {
+          const keyCandidate = toCriterionKey(String(response.criterion_key || ''));
+          const nameCandidate = toCriterionKey(String(response.criterion_name || ''));
+          return keyCandidate === normalizedActiveKey || nameCandidate === normalizedActiveKey;
+        });
+        if (matched) {
+          value = Number(matched.star_value || 0);
+          entry.total += value;
+          entry.count += 1;
+        }
+      } else {
+        entry.total += value;
+        entry.count += 1;
+      }
       buckets.set(key, entry);
     });
 
@@ -584,34 +608,14 @@ export default function AdminReportsPage() {
     });
 
     if (periods.length === 0) {
-      return [
-        { label: 'Q1 2025', studentAvg: 3.8 },
-        { label: 'Q2 2025', studentAvg: 4.0 },
-        { label: 'Q3 2025', studentAvg: 4.2 },
-        { label: 'Q4 2025', studentAvg: 4.1 },
-        { label: 'Q1 2026', studentAvg: 4.3 }
-      ];
+      return [];
     }
 
-    const years = periods.map((p) => p.year);
-    const minYear = Math.min(...years);
-    const maxYear = Math.max(...years);
-
-    const filled: Array<{ label: string; studentAvg: number }> = [];
-    for (let year = minYear; year <= maxYear; year += 1) {
-      for (let quarter = 1; quarter <= 4; quarter += 1) {
-        const key = `${year}-Q${quarter}`;
-        const entry = buckets.get(key);
-        filled.push({
-          label: formatPeriodLabel(year, quarter),
-          studentAvg: entry && entry.count > 0
-            ? Number((entry.total / entry.count).toFixed(2))
-            : 0
-        });
-      }
-    }
-
-    return filled.slice(-12);
+    return periods.map((entry) => ({
+      label: formatPeriodLabel(entry.year, entry.quarter),
+      studentAvg: entry.count > 0 ? Number((entry.total / entry.count).toFixed(1)) : 0,
+      completion: entry.studentIds.size
+    }));
   }, [evaluations, students, activeCriterionKey]);
 
   const activeCriterionColor = useMemo(() => {
@@ -1334,7 +1338,10 @@ export default function AdminReportsPage() {
                             : (criteriaNav.find((criterion) => criterion.key === activeCriterionKey)?.label || 'Criteria Avg')}
                         </span>
                       </div>
-
+                      <div className="flex items-center gap-2">
+                        <div className="size-3 rounded-full bg-emerald-400" />
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Completion</span>
+                      </div>
                     </div>
 
                   </div>
@@ -1383,6 +1390,14 @@ export default function AdminReportsPage() {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, ratingScale]} />
+                        <YAxis
+                          yAxisId="completion"
+                          orientation="right"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#94a3b8', fontSize: 12 }}
+                          domain={[0, Math.max(1, students.length)]}
+                        />
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none' }} />
                         <Line
                           type="monotone"
@@ -1390,6 +1405,15 @@ export default function AdminReportsPage() {
                           stroke={activeCriterionColor}
                           strokeWidth={4}
                           dot={{ r: 6, fill: '#fff', stroke: activeCriterionColor, strokeWidth: 3 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="completion"
+                          yAxisId="completion"
+                          stroke="#10b981"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={false}
                         />
                       </LineChart>
 

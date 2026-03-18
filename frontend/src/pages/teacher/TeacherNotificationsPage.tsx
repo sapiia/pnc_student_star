@@ -22,13 +22,17 @@ import { mapApiNotifications, type MappedNotification } from '../../lib/notifica
 type NotificationType = 'message' | 'system' | 'alert';
 type Notification = MappedNotification;
 
+let cachedNotifications: Notification[] | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000;
+
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | 'any'>('any');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);
   const { teacherId } = useTeacherIdentity();
@@ -51,6 +55,8 @@ export default function TeacherNotificationsPage() {
       });
 
       setNotifications(teacherStudentOnly);
+      cachedNotifications = teacherStudentOnly;
+      cachedAt = Date.now();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load notifications.');
       setNotifications([]);
@@ -60,6 +66,13 @@ export default function TeacherNotificationsPage() {
   };
 
   useEffect(() => {
+    const now = Date.now();
+    if (cachedNotifications && now - cachedAt < CACHE_TTL_MS) {
+      setNotifications(cachedNotifications);
+      setIsLoading(false);
+      void loadNotifications();
+      return;
+    }
     void loadNotifications();
   }, [teacherId]);
 

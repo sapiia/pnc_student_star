@@ -17,7 +17,9 @@ import {
   extractClassNameLegacy,
   getEvaluationSortValue,
   formatShortDateWithTime,
-  getStudentStatus
+  getStudentStatus,
+  normalizeGender,
+  resolveAvatarUrl
 } from '../../lib/teacher/utils';
 import type { Gender } from '../../lib/teacher/types';
 
@@ -43,15 +45,38 @@ export default function TeacherAttentionStudentsPage() {
   const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
+    if (!teacherId) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`),
+        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
         fetch(`${API_BASE_URL}/evaluations`)
       ]);
 
-      const usersData = await usersResponse.json().catch(() => []);
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      let usersData = [];
+      if (usersResponse.ok) {
+        usersData = await usersResponse.json().catch(() => []);
+      } else {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
+        usersData = await fallbackResponse.json().catch(() => []);
+      }
+
+      const evaluationsData = evaluationsResponse.ok
+        ? await evaluationsResponse.json().catch(() => [])
+        : [];
+
+      const studentIdSet = new Set(
+        Array.isArray(usersData)
+          ? usersData
+              .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+              .map((user) => Number(user.id))
+              .filter((id) => Number.isInteger(id) && id > 0)
+          : []
+      );
 
       const latestEvaluationByUser = new Map<number, any>();
       if (Array.isArray(evaluationsData)) {
@@ -59,7 +84,12 @@ export default function TeacherAttentionStudentsPage() {
           .sort((left, right) => getEvaluationSortValue(right) - getEvaluationSortValue(left))
           .forEach((evaluation: any) => {
             const userId = Number(evaluation.user_id);
-            if (Number.isInteger(userId) && userId > 0 && !latestEvaluationByUser.has(userId)) {
+            if (
+              Number.isInteger(userId) &&
+              userId > 0 &&
+              studentIdSet.has(userId) &&
+              !latestEvaluationByUser.has(userId)
+            ) {
               latestEvaluationByUser.set(userId, evaluation);
             }
           });
@@ -80,10 +110,10 @@ export default function TeacherAttentionStudentsPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
+                avatar: resolveAvatarUrl(String(user.profile_image || '').trim(), DEFAULT_AVATAR),
                 generation: extractGeneration(user),
                 className: extractClassNameLegacy(user),
-                gender: (String(user.gender || '').trim().toLowerCase() as Gender) || 'unknown',
+                gender: (normalizeGender(user.gender) as Gender) || 'unknown',
                 rating: averageScore,
                 status: status,
                 lastEval: latestEvaluation ? formatShortDateWithTime(latestEvaluation.submitted_at || latestEvaluation.created_at) : 'No Data',
@@ -104,7 +134,7 @@ export default function TeacherAttentionStudentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     void loadDashboardData();
