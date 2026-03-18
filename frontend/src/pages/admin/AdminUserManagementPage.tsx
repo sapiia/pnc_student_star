@@ -9,6 +9,7 @@ import {
   Power,
   Minus,
   Plus,
+  Pencil,
   X,
   CheckCircle2
 } from 'lucide-react';
@@ -165,6 +166,22 @@ const toDisplayNameFromEmail = (email: string) => {
     .join(' ');
 };
 
+const splitNameParts = (fullName: string) => {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  };
+};
+
+const buildStudentClassLabel = (generation: string, major: string, className: string) => {
+  const gen = String(generation || '').trim();
+  if (!gen) return className || '';
+  const majorValue = String(major || '').trim();
+  const classValue = String(className || '').trim();
+  return `Gen ${gen}${majorValue ? ` - ${majorValue}` : ''}${classValue ? ` - Class ${classValue}` : ''}`;
+};
+
 const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
   const roleLower = (apiUser.role || '').toString().toLowerCase();
   const role: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
@@ -222,10 +239,13 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
 export default function AdminUserManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserRecord | null>(null);
+  const [pendingProfileId, setPendingProfileId] = useState<number | null>(null);
+  const [pendingEditId, setPendingEditId] = useState<number | null>(null);
   const [profileEvaluations, setProfileEvaluations] = useState<any[]>([]);
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<number | null>(null);
   const [isEvaluationListOpen, setIsEvaluationListOpen] = useState(false);
@@ -256,6 +276,7 @@ export default function AdminUserManagementPage() {
   const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
   const [bulkExistingUsers, setBulkExistingUsers] = useState<BulkExistingUser[]>([]);
   const [isInviteFinished, setIsInviteFinished] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
@@ -314,6 +335,22 @@ export default function AdminUserManagementPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const userId = Number(parsed?.id);
+      if (Number.isInteger(userId) && userId > 0) {
+        setAuthUserId(userId);
+      }
+    } catch {
+      setAuthUserId(null);
+    }
+  }, []);
+
+  const isSelfUser = (userId?: number) =>
+    Number.isInteger(userId) && userId > 0 && authUserId != null && userId === authUserId;
+
+  useEffect(() => {
     const loadUsers = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/users`);
@@ -347,19 +384,66 @@ export default function AdminUserManagementPage() {
   }, []);
 
   useEffect(() => {
-    const state = location.state as { openInvite?: boolean; prefillClass?: string; prefillGen?: string };
+    const state = location.state as {
+      openInvite?: boolean;
+      prefillClass?: string;
+      prefillGen?: string;
+      openProfileId?: number;
+      openEditId?: number;
+    };
+    let shouldClearState = false;
+
     if (state?.openInvite) {
       setIsModalOpen(true);
+      setEditingUserId(null);
       const prefillClass = state.prefillClass || '';
       setNewUser(prev => ({
         ...prev,
         className: prefillClass || prev.className,
         generation: state.prefillGen || prev.generation
       }));
+      shouldClearState = true;
+    }
+
+    if (typeof state?.openProfileId !== 'undefined') {
+      const parsedId = Number(state.openProfileId);
+      if (Number.isInteger(parsedId)) {
+        setPendingProfileId(parsedId);
+      }
+      shouldClearState = true;
+    }
+
+    if (typeof state?.openEditId !== 'undefined') {
+      const parsedId = Number(state.openEditId);
+      if (Number.isInteger(parsedId)) {
+        setPendingEditId(parsedId);
+      }
+      shouldClearState = true;
+    }
+
+    if (shouldClearState) {
       // Clear state so it doesn't reopen on refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
+
+  useEffect(() => {
+    if (!pendingProfileId) return;
+    const match = users.find((user) => user.id === pendingProfileId);
+    if (match) {
+      handleViewUser(match);
+      setPendingProfileId(null);
+    }
+  }, [pendingProfileId, users]);
+
+  useEffect(() => {
+    if (!pendingEditId) return;
+    const match = users.find((user) => user.id === pendingEditId);
+    if (match) {
+      openEditUser(match);
+      setPendingEditId(null);
+    }
+  }, [pendingEditId, users]);
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -400,8 +484,8 @@ export default function AdminUserManagementPage() {
     e.preventDefault();
     setFormError('');
 
-  const trimmedEmail = newUser.email.trim().toLowerCase();
-  const trimmedFirstName = newUser.firstName.trim();
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedFirstName = newUser.firstName.trim();
     const trimmedLastName = newUser.lastName.trim();
     const trimmedClass = newUser.className.trim().toUpperCase();
     const trimmedGeneration = newUser.generation.trim();
@@ -437,7 +521,7 @@ export default function AdminUserManagementPage() {
       }
     }
 
-    if (users.some((u) => u.email.toLowerCase() === trimmedEmail)) {
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail && u.id !== editingUserId)) {
       setFormError('Email already exists.');
       return;
     }
@@ -460,13 +544,64 @@ export default function AdminUserManagementPage() {
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const group =
       newUser.role === 'Student'
-        ? `Gen ${trimmedGeneration}${trimmedMajor ? ` - ${trimmedMajor}` : ''}${trimmedClass ? ` - Class ${trimmedClass}` : ''}`
+        ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
         : newUser.role === 'Teacher'
           ? 'Teaching Staff'
           : 'Administration';
 
     try {
       const roleValue = newUser.role.toLowerCase();
+      if (editingUserId) {
+        const response = await fetch(`${API_BASE_URL}/users/${editingUserId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: resolvedName,
+            email: trimmedEmail,
+            gender: newUser.gender,
+            role: roleValue,
+            class_name: roleValue === 'student'
+              ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
+              : (newUser.className || null),
+            student_id: roleValue === 'student' ? trimmedStudentId : null,
+            generation: roleValue === 'student' ? trimmedGeneration : null,
+            major: roleValue === 'student' ? trimmedMajor : null,
+            className: roleValue === 'student' ? trimmedClass : (newUser.className || null)
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to update user.');
+          return;
+        }
+
+        setUsers((prev) => prev.map((u) => (
+          u.id === editingUserId
+            ? {
+                ...u,
+                name: resolvedName,
+                email: trimmedEmail,
+                role: newUser.role,
+                gender: newUser.gender,
+                generation: roleValue === 'student' ? trimmedGeneration : undefined,
+                major: roleValue === 'student' ? trimmedMajor : undefined,
+                className: roleValue === 'student' ? trimmedClass : undefined,
+                studentId: roleValue === 'student' ? trimmedStudentId : undefined,
+                group
+              }
+            : u
+        )));
+
+        setSuccessMessage(data.message || 'User updated successfully.');
+        setToastType('success');
+        setShowSuccess(true);
+        setIsModalOpen(false);
+        setEditingUserId(null);
+        setNewUser(defaultNewUser);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/users/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -513,10 +648,48 @@ export default function AdminUserManagementPage() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      setFormError('Failed to send invitation email.');
+      setFormError(editingUserId ? 'Failed to update user.' : 'Failed to send invitation email.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const openEditUser = (user: UserRecord) => {
+    const { firstName, lastName } = splitNameParts(user.name);
+    const classLabel = normalizeClassLabel(
+      extractClassLabel(user)
+        || user.className
+        || (user.role !== 'Student' ? user.group : '')
+        || ''
+    );
+    const nextMajor = user.major ? user.major.toUpperCase() : defaultNewUser.major;
+
+    if (nextMajor && !majorOptions.includes(nextMajor)) {
+      setMajorOptions((prev) => [...prev, nextMajor]);
+    }
+    if (classLabel && !customClassOptions.includes(classLabel)) {
+      setCustomClassOptions((prev) => [...prev, classLabel]);
+    }
+
+    setNewUser({
+      firstName,
+      lastName,
+      email: user.email || '',
+      role: user.role,
+      generation: user.generation || defaultNewUser.generation,
+      major: nextMajor,
+      className: classLabel,
+      studentId: user.studentId || '',
+      gender: user.gender || defaultNewUser.gender,
+      status: user.status
+    });
+    setEditingUserId(user.id);
+    setIsInviteFinished(false);
+    setFormError('');
+    setIsModalOpen(true);
+    setBulkExistingUsers([]);
+    setBulkValidatedRows([]);
+    setBulkValidationErrorCount(0);
   };
 
   const handleViewUser = async (user: UserRecord) => {
@@ -622,6 +795,10 @@ export default function AdminUserManagementPage() {
 
   const toggleUserActive = (user: UserRecord) => {
     if (user.status === 'Deleted') return;
+    if (isSelfUser(user.id)) {
+      setFormError('You cannot disable your own admin account.');
+      return;
+    }
     const shouldEnable = user.status !== 'Active';
     setConfirmAction({ kind: 'toggle-active', user, shouldEnable });
   };
@@ -653,6 +830,11 @@ export default function AdminUserManagementPage() {
     try {
       if (confirmAction.kind === 'toggle-active') {
         const { user, shouldEnable } = confirmAction;
+        if (isSelfUser(user.id)) {
+          setFormError('You cannot disable your own admin account.');
+          setConfirmAction(null);
+          return;
+        }
         const response = await fetch(`${API_BASE_URL}/users/${user.id}/active`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -668,6 +850,11 @@ export default function AdminUserManagementPage() {
         setToastType('success');
       } else if (confirmAction.kind === 'hard-delete') {
         const { user } = confirmAction;
+        if (isSelfUser(user.id)) {
+          setFormError('You cannot delete your own admin account.');
+          setConfirmAction(null);
+          return;
+        }
         const response = await fetch(`${API_BASE_URL}/users/${user.id}/hard`, { method: 'DELETE' });
         const data = await getResponseData(response);
         if (!response.ok) {
@@ -931,7 +1118,16 @@ export default function AdminUserManagementPage() {
                 </button>
               </div>
               <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setEditingUserId(null);
+                  setNewUser(defaultNewUser);
+                  setIsInviteFinished(false);
+                  setFormError('');
+                  setBulkExistingUsers([]);
+                  setBulkValidatedRows([]);
+                  setBulkValidationErrorCount(0);
+                  setIsModalOpen(true);
+                }}
                 className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
               >
                 <UserPlus className="w-4 h-4" />
@@ -1101,10 +1297,18 @@ export default function AdminUserManagementPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            onClick={(e) => { e.stopPropagation(); openEditUser(user); }}
+                            disabled={isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                            title="Edit user"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleUserActive(user); }}
-                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            disabled={user.status === 'Deleted' || isActionSubmitting || isSelfUser(user.id)}
                             className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
-                            title={user.status === 'Active' ? 'Disable user' : 'Enable user'}
+                            title={isSelfUser(user.id) ? 'You cannot disable your own account' : (user.status === 'Active' ? 'Disable user' : 'Enable user')}
                           >
                             <Power className="w-4 h-4" />
                           </button>
@@ -1114,9 +1318,9 @@ export default function AdminUserManagementPage() {
                               const u = users.find(u => u.id === user.id);
                               if (u) setConfirmAction({ kind: 'hard-delete', user: u });
                             }}
-                            disabled={isActionSubmitting}
+                            disabled={isActionSubmitting || isSelfUser(user.id)}
                             className="p-2 text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-40"
-                            title="Hard Delete (Permanent Removal)"
+                            title={isSelfUser(user.id) ? 'You cannot delete your own account' : 'Hard Delete (Permanent Removal)'}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1268,14 +1472,18 @@ export default function AdminUserManagementPage() {
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                      {isInviteFinished ? 'Invitation Sent' : 'Invite New User'}
+                      {isInviteFinished ? 'Invitation Sent' : editingUserId ? 'Edit User' : 'Invite New User'}
                     </h3>
                     <p className="text-slate-500 text-sm">
-                      {isInviteFinished ? 'The invitation process has completed successfully.' : 'Send an email invite with registration link.'}
+                      {isInviteFinished
+                        ? 'The invitation process has completed successfully.'
+                        : editingUserId
+                          ? 'Update the selected user information.'
+                          : 'Send an email invite with registration link.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {!isInviteFinished && (
+                    {!isInviteFinished && !editingUserId && (
                       <>
                         <input
                           ref={fileInputRef}
@@ -1308,6 +1516,8 @@ export default function AdminUserManagementPage() {
                          setIsModalOpen(false);
                          setTimeout(() => {
                            setIsInviteFinished(false);
+                           setEditingUserId(null);
+                           setNewUser(defaultNewUser);
                            setBulkExistingUsers([]);
                            setBulkValidatedRows([]);
                            setBulkValidationErrorCount(0);
@@ -1346,6 +1556,8 @@ export default function AdminUserManagementPage() {
                         setIsModalOpen(false);
                         setTimeout(() => {
                           setIsInviteFinished(false);
+                          setEditingUserId(null);
+                          setNewUser(defaultNewUser);
                           setBulkExistingUsers([]);
                           setBulkValidatedRows([]);
                         }, 300);
@@ -1357,11 +1569,13 @@ export default function AdminUserManagementPage() {
                   </motion.div>
                 ) : (
                   <form onSubmit={handleAddUser} className="space-y-4">
-                    <p className="text-[10px] text-slate-400 font-bold">
-                      Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation (e.g., 2026), Class (e.g., A), Student ID (Format: YYYY-XXX), Major.
-                    </p>
+                    {!editingUserId && (
+                      <p className="text-[10px] text-slate-400 font-bold">
+                        Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation (e.g., 2026), Class (e.g., A), Student ID (Format: YYYY-XXX), Major.
+                      </p>
+                    )}
                     
-                    {bulkExistingUsers.length > 0 && (
+                    {!editingUserId && bulkExistingUsers.length > 0 && (
                       <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 shadow-sm">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
@@ -1379,7 +1593,7 @@ export default function AdminUserManagementPage() {
                       </div>
                     )}
 
-                    {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
+                    {!editingUserId && bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
                       <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
                         <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                         <p>Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to process.</p>
@@ -1420,7 +1634,9 @@ export default function AdminUserManagementPage() {
                         onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
-                      <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
+                      {!editingUserId && (
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1607,7 +1823,9 @@ export default function AdminUserManagementPage() {
                         disabled={isSubmitting}
                         className="w-full py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
                       >
-                        {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
+                        {isSubmitting
+                          ? (editingUserId ? 'Saving...' : 'Sending Invite...')
+                          : (editingUserId ? 'Save Changes' : 'Send Invite Email')}
                       </button>
                     </div>
                   </form>

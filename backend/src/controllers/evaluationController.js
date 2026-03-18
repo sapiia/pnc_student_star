@@ -171,7 +171,8 @@ const exportReport = async (req, res) => {
       gender,
       generation,
       scope = 'overview',
-      quarter
+      quarter,
+      level
     } = req.query;
 
     const db = require('../config/database');
@@ -182,6 +183,20 @@ const exportReport = async (req, res) => {
       const normalized = String(value || '').trim().toLowerCase();
       if (!normalized || normalized === 'all') return null;
       return normalized;
+    };
+
+    const normalizeLevel = (value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      if (!normalized || normalized === 'all') return null;
+      if (['low', 'medium', 'high'].includes(normalized)) return normalized;
+      return null;
+    };
+
+    const getScoreLevel = (score) => {
+      if (score === null || score === undefined || Number.isNaN(score)) return null;
+      if (Number(score) < 3) return 'low';
+      if (Number(score) < 4) return 'medium';
+      return 'high';
     };
 
     const buildStudentWhere = () => {
@@ -227,6 +242,7 @@ const exportReport = async (req, res) => {
     };
 
     const buildStudentExport = async () => {
+      const normalizedLevel = normalizeLevel(level);
       const { where, params } = buildStudentWhere();
       const selectColumns = ['id'];
       if (userColumns.has('name')) selectColumns.push('name');
@@ -238,10 +254,45 @@ const exportReport = async (req, res) => {
       if (userColumns.has('gender')) selectColumns.push('gender');
       if (userColumns.has('generation')) selectColumns.push('generation');
 
-      const [studentRows] = await db.query(
+      let [studentRows] = await db.query(
         `SELECT ${selectColumns.join(', ')} FROM users ${where}`,
         params
       );
+
+      const studentIds = studentRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
+      const placeholders = studentIds.map(() => '?').join(', ');
+      let evalRows = studentIds.length === 0
+        ? []
+        : (await db.query(
+            `SELECT * FROM evaluations WHERE user_id IN (${placeholders}) ORDER BY submitted_at DESC, created_at DESC`,
+            studentIds
+          ))[0];
+
+      if (normalizedLevel) {
+        const levelTotals = new Map();
+        evalRows.forEach((row) => {
+          const userId = Number(row.user_id);
+          const score = Number(row.average_score || 0);
+          if (!Number.isInteger(userId) || !Number.isFinite(score)) return;
+          const entry = levelTotals.get(userId) || { total: 0, count: 0 };
+          entry.total += score;
+          entry.count += 1;
+          levelTotals.set(userId, entry);
+        });
+
+        const allowedIds = new Set();
+        levelTotals.forEach((entry, userId) => {
+          if (entry.count <= 0) return;
+          const avg = entry.total / entry.count;
+          if (getScoreLevel(avg) === normalizedLevel) {
+            allowedIds.add(userId);
+          }
+        });
+
+        studentRows = studentRows.filter((row) => allowedIds.has(Number(row.id)));
+        const allowedIdList = new Set(studentRows.map((row) => Number(row.id)));
+        evalRows = evalRows.filter((row) => allowedIdList.has(Number(row.user_id)));
+      }
 
       const studentMap = new Map();
       studentRows.forEach((row) => {
@@ -250,15 +301,6 @@ const exportReport = async (req, res) => {
           displayName: getDisplayNameFromUser(row) || `Student #${row.id}`
         });
       });
-
-      const studentIds = studentRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
-      const placeholders = studentIds.map(() => '?').join(', ');
-      const evalRows = studentIds.length === 0
-        ? []
-        : (await db.query(
-            `SELECT * FROM evaluations WHERE user_id IN (${placeholders}) ORDER BY submitted_at DESC, created_at DESC`,
-            studentIds
-          ))[0];
 
       const evalIdList = evalRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
       const evalPlaceholders = evalIdList.map(() => '?').join(', ');
@@ -557,7 +599,8 @@ const exportReport = async (req, res) => {
         ['Filters Applied'],
         ['Class', classFilter || 'All'],
         ['Gender', gender || 'All'],
-        ['Generation', generation || 'All']
+        ['Generation', generation || 'All'],
+        ['Level', level || 'All']
       ];
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryData), 'Summary');
 

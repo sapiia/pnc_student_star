@@ -145,6 +145,7 @@ export default function AdminReportsPage() {
   const [selectedGen, setSelectedGen] = useState<string | 'All'>('All');
   const [selectedClass, setSelectedClass] = useState<string | 'All'>('All');
   const [selectedGender, setSelectedGender] = useState<'All' | 'Male' | 'Female' | 'Other'>('All');
+  const [selectedLevel, setSelectedLevel] = useState<'All' | 'Low' | 'Medium' | 'High'>('All');
 
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
@@ -263,6 +264,36 @@ export default function AdminReportsPage() {
     return Array.from(unique).sort();
   }, [students]);
 
+  const getScoreLevel = (score?: number | null) => {
+    if (score === null || score === undefined || Number.isNaN(score)) return null;
+    if (score < 3) return 'Low';
+    if (score < 4) return 'Medium';
+    return 'High';
+  };
+
+  const studentAverageMap = useMemo(() => {
+    const totals = new Map<number, { total: number; count: number }>();
+    evaluations.forEach((evaluation) => {
+      const userId = Number(evaluation.user_id);
+      const score = Number(evaluation.average_score || 0);
+      if (!Number.isInteger(userId)) return;
+      if (!Number.isFinite(score)) return;
+      const entry = totals.get(userId) || { total: 0, count: 0 };
+      entry.total += score;
+      entry.count += 1;
+      totals.set(userId, entry);
+    });
+
+    const averages = new Map<number, number>();
+    totals.forEach((entry, userId) => {
+      if (entry.count > 0) {
+        averages.set(userId, Number((entry.total / entry.count).toFixed(2)));
+      }
+    });
+
+    return averages;
+  }, [evaluations]);
+
   const filteredStudents = useMemo(() => {
     return students.filter((student) => {
       if (selectedGen !== 'All') {
@@ -272,9 +303,14 @@ export default function AdminReportsPage() {
       if (selectedClass !== 'All' && student.class !== selectedClass) {
         return false;
       }
+      if (selectedLevel !== 'All') {
+        const avgScore = studentAverageMap.get(student.id);
+        const level = getScoreLevel(avgScore);
+        if (!level || level !== selectedLevel) return false;
+      }
       return true;
     });
-  }, [students, selectedGen, selectedClass]);
+  }, [students, selectedGen, selectedClass, selectedLevel, studentAverageMap]);
 
   const availableClasses = useMemo(() => {
     const classSet = new Set<string>();
@@ -368,8 +404,8 @@ export default function AdminReportsPage() {
     {
       key: 'curr',
       name: selectedGender === 'All' ? 'Student Avg' : `${selectedGender} Avg`,
-      color: '#5d5fef',
-      fill: '#5d5fef'
+      color: '#4f46e5',
+      fill: '#818cf8'
     }
   ]), [selectedGender]);
 
@@ -594,6 +630,7 @@ export default function AdminReportsPage() {
         if (selectedClass !== 'All') params.append('class', selectedClass);
         if (selectedGen !== 'All') params.append('generation', selectedGen);
         if (selectedGender !== 'All') params.append('gender', selectedGender);
+        if (selectedLevel !== 'All') params.append('level', selectedLevel);
       }
 
       if (activeTab === 'teachers' && selectedTeacherQuarter !== 'All') {
@@ -863,7 +900,19 @@ export default function AdminReportsPage() {
 
                   </div>
 
-
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Level</label>
+                    <select
+                      value={selectedLevel}
+                      onChange={(e) => setSelectedLevel(e.target.value as 'All' | 'Low' | 'Medium' | 'High')}
+                      className="block w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="All">All Levels</option>
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
 
                   <button 
 
@@ -873,6 +922,7 @@ export default function AdminReportsPage() {
 
                       setSelectedClass('All');
                       setSelectedGender('All');
+                      setSelectedLevel('All');
                     }}
 
                     className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-rose-500 transition-colors"
@@ -982,37 +1032,29 @@ export default function AdminReportsPage() {
                   </div>
 
                   <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/40 via-white to-amber-50/20 pointer-events-none" />
-                    <h3 className="text-lg font-black text-slate-900 mb-8">Radar Analysis</h3>
-                    <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
-                    
-
-                    <div className="mt-8 space-y-4">
-
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Key Insights</h4>
-
-                      <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-
-                        <p className="text-xs font-bold text-emerald-700">Strongest Area</p>
-
-                        <p className="text-sm font-black text-emerald-900 mt-1">
-                          {currentReportData.every((item) => item.score === 0)
-                            ? 'No data yet'
-                            : currentReportData.reduce((prev, curr) => prev.score > curr.score ? prev : curr).subject}
-                        </p>
-
-                      </div>
-
-                      <div className="p-4 bg-rose-50 rounded-2xl border border-rose-100">
-
-                        <p className="text-xs font-bold text-rose-700">Growth Opportunity</p>
-
-                        <p className="text-sm font-black text-rose-900 mt-1">
-                          {currentReportData.every((item) => item.score === 0)
-                            ? 'No data yet'
-                            : currentReportData.reduce((prev, curr) => prev.score < curr.score ? prev : curr).subject}
-                        </p>
-
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/40 via-white to-sky-50/25 pointer-events-none" />
+                    <div className="relative z-10">
+                      <h3 className="text-lg font-black text-slate-900 mb-8">Radar Analysis</h3>
+                      <RadarChart data={radarData} dataKeys={radarKeys} maxValue={ratingScale} />
+                      
+                      <div className="mt-8 space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Key Insights</h4>
+                        <div className="p-4 bg-emerald-100/70 rounded-2xl border border-emerald-200">
+                          <p className="text-xs font-bold text-emerald-800">Strongest Area</p>
+                          <p className="text-sm font-black text-emerald-950 mt-1">
+                            {currentReportData.every((item) => item.score === 0)
+                              ? 'No data yet'
+                              : currentReportData.reduce((prev, curr) => prev.score > curr.score ? prev : curr).subject}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-rose-100/70 rounded-2xl border border-rose-200">
+                          <p className="text-xs font-bold text-rose-800">Growth Opportunity</p>
+                          <p className="text-sm font-black text-rose-950 mt-1">
+                            {currentReportData.every((item) => item.score === 0)
+                              ? 'No data yet'
+                              : currentReportData.reduce((prev, curr) => prev.score < curr.score ? prev : curr).subject}
+                          </p>
+                        </div>
                       </div>
 
                     </div>

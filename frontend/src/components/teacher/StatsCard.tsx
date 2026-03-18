@@ -29,9 +29,10 @@ export default function StatsCard({
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      whileInView={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
-      className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200"
+      viewport={{ once: true, amount: 0.25 }}
+      className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover-lift"
     >
       <div className="flex justify-between items-start mb-4">
         <div className={cn("p-2 rounded-xl", bg, color)}>
@@ -40,7 +41,7 @@ export default function StatsCard({
         {actionLabel && onAction ? (
           <button
             onClick={onAction}
-            className="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:text-white hover:border-rose-500 hover:bg-rose-500 transition-all shadow-sm"
+            className="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:text-white hover:border-rose-500 hover:bg-rose-500 transition-all shadow-sm pressable"
           >
             {actionLabel}
           </button>

@@ -40,6 +40,7 @@ interface AdminRecord {
 
 export default function AdminRecordsPage() {
   const navigate = useNavigate();
+  const [authAdminId, setAuthAdminId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAdmin, setSelectedAdmin] = useState<AdminRecord | null>(null);
   const [admins, setAdmins] = useState<AdminRecord[]>([]);
@@ -95,6 +96,22 @@ export default function AdminRecordsPage() {
     fetchAdmins();
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const userId = Number(parsed?.id);
+      if (Number.isInteger(userId) && userId > 0) {
+        setAuthAdminId(userId);
+      }
+    } catch {
+      setAuthAdminId(null);
+    }
+  }, []);
+
+  const isSelfAdmin = (adminId?: number) =>
+    Number.isInteger(adminId) && adminId > 0 && authAdminId != null && adminId === authAdminId;
+
   const executeConfirmedAction = async () => {
     if (!confirmAction) return;
     setIsActionSubmitting(true);
@@ -102,6 +119,12 @@ export default function AdminRecordsPage() {
     try {
       if (confirmAction.kind === 'toggle-active' && confirmAction.admin) {
         const { admin, shouldEnable } = confirmAction;
+        if (isSelfAdmin(admin.id)) {
+          alert('You cannot disable your own admin account.');
+          setIsActionSubmitting(false);
+          setConfirmAction(null);
+          return;
+        }
         // Prevent disabling the last active admin
         if (!shouldEnable && admins.filter(a => a.status === 'Active').length <= 1) {
           alert('Cannot disable the last active admin.');
@@ -124,6 +147,12 @@ export default function AdminRecordsPage() {
         }
       } else if (confirmAction.kind === 'hard-delete' && confirmAction.admin) {
         const { admin } = confirmAction;
+        if (isSelfAdmin(admin.id)) {
+          alert('You cannot delete your own admin account.');
+          setIsActionSubmitting(false);
+          setConfirmAction(null);
+          return;
+        }
         // Prevent deleting the last admin
         if (admins.length <= 1) {
           alert('Cannot delete the only admin account.');
@@ -143,6 +172,12 @@ export default function AdminRecordsPage() {
         }
       } else if (confirmAction.kind === 'delete' && confirmAction.admin) {
         const { admin } = confirmAction;
+        if (isSelfAdmin(admin.id)) {
+          alert('You cannot delete your own admin account.');
+          setIsActionSubmitting(false);
+          setConfirmAction(null);
+          return;
+        }
         if (admins.length <= 1) {
           alert('Cannot delete the only admin account.');
           setIsActionSubmitting(false);
@@ -391,6 +426,10 @@ export default function AdminRecordsPage() {
                               <button 
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
+                                  if (isSelfAdmin(admin.id)) {
+                                    alert('You cannot disable your own admin account.');
+                                    return;
+                                  }
                                   // Prevent disabling the last active admin
                                   if (admin.status === 'Active' && admins.filter(a => a.status === 'Active').length <= 1) {
                                     alert('Cannot disable the last active admin.');
@@ -400,8 +439,10 @@ export default function AdminRecordsPage() {
                                 }}
                                 className={cn(
                                   "p-2 transition-colors rounded-lg",
-                                  admin.status === 'Active' ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"
+                                  admin.status === 'Active' ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50",
+                                  isSelfAdmin(admin.id) && "opacity-50 cursor-not-allowed"
                                 )}
+                                disabled={isSelfAdmin(admin.id)}
                                 title={admin.status === 'Active' ? 'Disable Admin' : 'Enable Admin'}
                               >
                                 {admin.status === 'Active' ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -409,6 +450,10 @@ export default function AdminRecordsPage() {
                               <button 
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
+                                  if (isSelfAdmin(admin.id)) {
+                                    alert('You cannot delete your own admin account.');
+                                    return;
+                                  }
                                   // Prevent deleting the last admin
                                   if (admins.length <= 1) {
                                     alert('Cannot delete the only admin account.');
@@ -416,8 +461,9 @@ export default function AdminRecordsPage() {
                                   }
                                   setConfirmAction({ kind: 'hard-delete', admin }); 
                                 }}
-                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors hover:bg-rose-50 rounded-lg"
-                                title="Delete Admin"
+                                className={cn("p-2 text-slate-400 hover:text-rose-500 transition-colors hover:bg-rose-50 rounded-lg", isSelfAdmin(admin.id) && "opacity-50 cursor-not-allowed")}
+                                disabled={isSelfAdmin(admin.id)}
+                                title={isSelfAdmin(admin.id) ? 'You cannot delete your own account' : 'Delete Admin'}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -509,6 +555,10 @@ export default function AdminRecordsPage() {
                     </button>
                     <button 
                       onClick={() => {
+                        if (isSelfAdmin(selectedAdmin.id)) {
+                          alert('You cannot delete your own admin account.');
+                          return;
+                        }
                         // Prevent deleting the last admin
                         if (admins.length <= 1) {
                           alert('Cannot delete the only admin account.');
@@ -516,7 +566,11 @@ export default function AdminRecordsPage() {
                         }
                         setConfirmAction({ kind: 'hard-delete', admin: selectedAdmin });
                       }}
-                      className="flex-1 py-4 bg-rose-50 text-rose-600 font-black rounded-xl text-xs uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-2 shadow-sm"
+                      disabled={isSelfAdmin(selectedAdmin.id)}
+                      className={cn(
+                        "flex-1 py-4 bg-rose-50 text-rose-600 font-black rounded-xl text-xs uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-2 shadow-sm",
+                        isSelfAdmin(selectedAdmin.id) && "opacity-50 cursor-not-allowed hover:bg-rose-50"
+                      )}
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete
