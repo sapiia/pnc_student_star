@@ -7,7 +7,7 @@
   "database": {
     "host": "localhost",
     "user": "root",
-    "password": "yourpassword",
+    "password": "",
     "name": "student_star_db_new"
   },
   "redis": {

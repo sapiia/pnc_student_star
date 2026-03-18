@@ -10,11 +10,15 @@ const {
   deleteSetting,
   deleteSettingByKey,
   getEvaluationCriteriaConfig,
-  saveEvaluationCriteriaConfig
+  saveEvaluationCriteriaConfig,
+  testRDIConnection
 } = require('../controllers/settingController');
 
 // GET /api/settings - Get all settings
 router.get('/', getAllSettings);
+
+// POST /api/settings/test-rdi-connection - Test RDI connection
+router.post('/test-rdi-connection', testRDIConnection);
 
 // GET /api/settings/evaluation-criteria - Get evaluation criteria config
 router.get('/evaluation-criteria', getEvaluationCriteriaConfig);

@@ -223,6 +223,48 @@ const saveEvaluationCriteriaConfig = async (req, res) => {
   }
 };
 
+const { createClient } = require('redis');
+
+const testRDIConnection = async (req, res) => {
+  const { url, username, password } = req.body;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  // Basic validation/parsing of URL
+  // Expected format: redis://[user:password@]host:port or just host:port
+  let redisUrl = url;
+  if (!url.startsWith('redis://') && !url.startsWith('rediss://')) {
+    // If it's just host:port, we try to prefix it
+    redisUrl = `redis://${url}`;
+  }
+
+  const client = createClient({
+    url: redisUrl,
+    username: username || undefined,
+    password: password || undefined,
+    socket: {
+      connectTimeout: 5000,
+      reconnectStrategy: false // Don't retry for testing
+    }
+  });
+
+  client.on('error', (err) => {
+    // We catch this in the connect call usually, but listener is good practice
+  });
+
+  try {
+    await client.connect();
+    await client.ping();
+    await client.quit();
+    res.json({ message: 'Connection successful!' });
+  } catch (err) {
+    console.error('RDI Connection Test Failed:', err.message);
+    res.status(500).json({ error: `Connection failed: ${err.message}` });
+  }
+};
+
 module.exports = {
   getAllSettings,
   getSettingById,
@@ -233,5 +275,6 @@ module.exports = {
   deleteSetting,
   deleteSettingByKey,
   getEvaluationCriteriaConfig,
-  saveEvaluationCriteriaConfig
+  saveEvaluationCriteriaConfig,
+  testRDIConnection
 };

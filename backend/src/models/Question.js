@@ -7,7 +7,7 @@ class Question {
         SELECT q.*, u.name as created_by_name
         FROM question q
         LEFT JOIN users u ON q.created_by = u.id
-        ORDER BY q.created_at DESC
+        ORDER BY q.id DESC
       `);
       return rows;
     } catch (error) {

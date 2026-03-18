@@ -226,7 +226,8 @@ CREATE TABLE `settings` (
 
 INSERT INTO `settings` (`id`, `key`, `value`, `created_at`, `updated_at`) VALUES
 (1, 'evaluation_interval_days', '90', '2026-02-23 04:09:01', '2026-02-23 04:09:01'),
-(2, 'max_stars_per_category', '5', '2026-02-23 04:09:01', '2026-02-23 04:09:01');
+(2, 'max_stars_per_category', '5', '2026-02-23 04:09:01', '2026-02-23 04:09:01'),
+(3, 'rdi_endpoints', '[]', '2026-03-17 12:00:00', '2026-03-17 12:00:00');
 
 -- --------------------------------------------------------
 
