@@ -114,6 +114,14 @@ type RolePermissionSettings = {
   teacherMaxFeedbackCharacters: number;
 };
 
+type RDIEndpoint = {
+  id: string;
+  alias: string;
+  url: string;
+  username: string;
+  password?: string;
+};
+
 const DEFAULT_ROLE_PERMISSIONS: RolePermissionSettings = {
   studentCanStartEvaluation: true,
   studentCanEditAfterSubmit: false,
@@ -227,13 +235,18 @@ const normalizeCriterionSettings = (criteria: unknown, ratingScale: number): Cri
 };
 
 export default function AdminSettingsPage() {
-  const [activeTab, setActiveTab] = useState<'system' | 'profile'>('system');
+  const [activeTab, setActiveTab] = useState<'system' | 'profile' | 'infrastructure'>('system');
   const [criteriaList, setCriteriaList] = useState<CriterionSetting[]>(() => DEFAULT_CRITERIA_SETTINGS);
   const [ratingScale, setRatingScale] = useState(5);
   const [evaluationIntervalDays, setEvaluationIntervalDays] = useState(90);
   const [notificationRetentionDays, setNotificationRetentionDays] = useState(7);
   const [rolePermissions, setRolePermissions] = useState<RolePermissionSettings>(DEFAULT_ROLE_PERMISSIONS);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [rdiEndpoints, setRdiEndpoints] = useState<RDIEndpoint[]>([]);
+  const [showAddRDIModal, setShowAddRDIModal] = useState(false);
+  const [newRDI, setNewRDI] = useState<Omit<RDIEndpoint, 'id'>>({ alias: '', url: '', username: 'default', password: '' });
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [iconSearchQuery, setIconSearchQuery] = useState('');
   const [editingCriterionId, setEditingCriterionId] = useState<string | null>(null);
   const [newCritStarDescriptions, setNewCritStarDescriptions] = useState<string[]>(buildDefaultStarDescriptions('criterion'));
@@ -367,7 +380,11 @@ export default function AdminSettingsPage() {
       setIsLoadingCriteria(true);
 
       try {
+<<<<<<< HEAD
+        const [criteriaResponse, intervalResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse, rdiResponse] = await Promise.all([
+=======
         const [criteriaResponse, intervalResponse, notificationRetentionResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse] = await Promise.all([
+>>>>>>> origin/master
           fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
           fetch(`${API_BASE_URL}/settings/key/notification_auto_delete_days`),
@@ -388,7 +405,8 @@ export default function AdminSettingsPage() {
           fetch(`${API_BASE_URL}/settings/key/teacher_can_export_reports`),
           fetch(`${API_BASE_URL}/settings/key/teacher_can_manage_evaluation_deadlines`),
           fetch(`${API_BASE_URL}/settings/key/teacher_max_assigned_students`),
-          fetch(`${API_BASE_URL}/settings/key/teacher_max_feedback_characters`)
+          fetch(`${API_BASE_URL}/settings/key/teacher_max_feedback_characters`),
+          fetch(`${API_BASE_URL}/settings/key/rdi_endpoints`)
         ]);
 
         let data: Record<string, unknown> = {};
@@ -412,6 +430,7 @@ export default function AdminSettingsPage() {
         let teacherDeadlineData: Record<string, unknown> = {};
         let teacherMaxData: Record<string, unknown> = {};
         let teacherFeedbackMaxData: Record<string, unknown> = {};
+        let rdiData: Record<string, unknown> = {};
         try {
           data = await criteriaResponse.json();
         } catch {
@@ -517,6 +536,11 @@ export default function AdminSettingsPage() {
         } catch {
           teacherFeedbackMaxData = {};
         }
+        try {
+          rdiData = await rdiResponse.json();
+        } catch {
+          rdiData = {};
+        }
 
         if (!criteriaResponse.ok) {
           throw new Error((data.error as string) || 'Failed to load criteria configuration.');
@@ -591,6 +615,17 @@ export default function AdminSettingsPage() {
             ? parseNumberSetting(teacherFeedbackMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxFeedbackCharacters, 100, 10000)
             : DEFAULT_ROLE_PERMISSIONS.teacherMaxFeedbackCharacters
         });
+
+        if (rdiResponse.ok && rdiData.value) {
+          try {
+            const parsed = JSON.parse(String(rdiData.value));
+            if (Array.isArray(parsed)) setRdiEndpoints(parsed);
+          } catch {
+            setRdiEndpoints([]);
+          }
+        } else {
+          setRdiEndpoints([]);
+        }
       } catch (error) {
         setCriteriaList(normalizeCriterionSettings(DEFAULT_CRITERIA_SETTINGS, ratingScale));
         setEvaluationIntervalDays(90);
@@ -672,6 +707,51 @@ export default function AdminSettingsPage() {
 
     loadProfile();
   }, [authUser, photoJustUploaded]);
+
+  const openAddRDIModal = () => {
+    setNewRDI({ alias: '', url: '', username: 'default', password: '' });
+    setTestResult(null);
+    setShowAddRDIModal(true);
+  };
+
+  const closeAddRDIModal = () => setShowAddRDIModal(false);
+
+  const handleAddRDIEndpoint = () => {
+    if (!newRDI.alias || !newRDI.url) return;
+    const id = `RDI-${Date.now()}`;
+    setRdiEndpoints((prev) => [...prev, { ...newRDI, id }]);
+    closeAddRDIModal();
+  };
+
+  const deleteRDIEndpoint = (id: string) => {
+    setRdiEndpoints((prev) => prev.filter((ep) => ep.id !== id));
+  };
+
+  const handleTestRDIConnection = async () => {
+    setIsTestingConnection(true);
+    setTestResult(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/settings/test-rdi-connection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: newRDI.url,
+          username: newRDI.username,
+          password: newRDI.password
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setTestResult({ success: true, message: data.message });
+      } else {
+        setTestResult({ success: false, message: data.error || 'Connection failed' });
+      }
+    } catch (error) {
+      setTestResult({ success: false, message: 'Network error or server unavailable' });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   const handleSave = async () => {
     setErrorMessage('');
@@ -1009,6 +1089,26 @@ export default function AdminSettingsPage() {
         window.dispatchEvent(new Event('student-settings-updated'));
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to save criteria configuration.');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (activeTab === 'infrastructure') {
+      setIsSaving(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/settings/key/rdi_endpoints`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: JSON.stringify(rdiEndpoints) })
+        });
+        if (!response.ok) throw new Error('Failed to save RDI endpoints.');
+        setSuccessMessage('Infrastructure settings saved successfully!');
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to save RDI endpoints.');
       } finally {
         setIsSaving(false);
       }
@@ -1357,6 +1457,15 @@ export default function AdminSettingsPage() {
                 )}
               >
                 Profile
+              </button>
+              <button 
+                onClick={() => setActiveTab('infrastructure')}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeTab === 'infrastructure' ? "bg-primary text-white shadow-md shadow-primary/20" : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Infrastructure
               </button>
             </div>
           </div>
@@ -2095,6 +2204,68 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
             </>
+          ) : activeTab === 'infrastructure' ? (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
+            >
+              <div className="flex flex-col gap-2">
+                <h2 className="text-3xl font-black text-slate-900">Infrastructure Management</h2>
+                <p className="text-slate-500 font-bold">Manage Redis Data Integration (RDI) endpoints and external connections.</p>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 uppercase tracking-widest text-xs">RDI Endpoints ({rdiEndpoints.length})</h3>
+                  <button 
+                    onClick={openAddRDIModal}
+                    className="px-4 py-2 bg-primary text-white text-xs font-black uppercase tracking-widest rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-105 transition-transform"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add RDI Endpoint
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                        <th className="px-6 py-4">Alias</th>
+                        <th className="px-6 py-4">URL</th>
+                        <th className="px-6 py-4">Username</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rdiEndpoints.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-12 text-center text-slate-400 font-medium">
+                            No RDI endpoints configured yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        rdiEndpoints.map((ep) => (
+                          <tr key={ep.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-slate-900">{ep.alias}</td>
+                            <td className="px-6 py-4 text-slate-600 font-medium">{ep.url}</td>
+                            <td className="px-6 py-4 text-slate-600 font-medium">{ep.username}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => deleteRDIEndpoint(ep.id)}
+                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
           ) : (
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
@@ -2358,6 +2529,142 @@ export default function AdminSettingsPage() {
                   >
                     {editingCriterionId ? 'Save Criterion' : 'Add Criterion'}
                   </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {showAddRDIModal && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={closeAddRDIModal}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-2xl overflow-hidden rounded-[32px] bg-white shadow-2xl"
+              >
+                <div className="p-8">
+                  <div className="mb-8 flex items-center justify-between">
+                    <h3 className="text-2xl font-black text-slate-900">Add RDI endpoint</h3>
+                    <button onClick={closeAddRDIModal} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                      <LucideIcons.X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">
+                        <span className="text-rose-500 mr-1">*</span> RDI Alias
+                      </label>
+                      <input 
+                        type="text" 
+                        value={newRDI.alias}
+                        onChange={(e) => setNewRDI({ ...newRDI, alias: e.target.value })}
+                        placeholder="Enter RDI Alias"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                        <span className="text-rose-500 mr-1">*</span> URL
+                        <AlertCircle className="w-4 h-4 text-slate-400" />
+                      </label>
+                      <input 
+                        type="text" 
+                        value={newRDI.url}
+                        onChange={(e) => setNewRDI({ ...newRDI, url: e.target.value })}
+                        placeholder="Enter the RDI host IP as: https://[IP-Address]"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                          Username
+                          <AlertCircle className="w-4 h-4 text-slate-400" />
+                        </label>
+                        <input 
+                          type="text" 
+                          value={newRDI.username}
+                          onChange={(e) => setNewRDI({ ...newRDI, username: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                          Password
+                          <AlertCircle className="w-4 h-4 text-slate-400" />
+                        </label>
+                        <input 
+                          type="password" 
+                          value={newRDI.password}
+                          onChange={(e) => setNewRDI({ ...newRDI, password: e.target.value })}
+                          placeholder="Enter the RDI Redis password"
+                          className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-col gap-4">
+                    <button 
+                      onClick={handleTestRDIConnection}
+                      disabled={isTestingConnection || !newRDI.url}
+                      className="flex items-center justify-center gap-2 text-sm font-bold text-primary hover:underline disabled:text-slate-400 disabled:no-underline"
+                    >
+                      {isTestingConnection ? (
+                        <>
+                          <LucideIcons.Loader2 className="w-4 h-4 animate-spin" />
+                          Testing Connection...
+                        </>
+                      ) : (
+                        <>
+                          <Activity className="w-4 h-4" />
+                          Test Connection
+                        </>
+                      )}
+                    </button>
+
+                    {testResult && (
+                      <div className={cn(
+                        "p-4 rounded-2xl flex items-center gap-3 text-sm font-bold",
+                        testResult.success ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                      )}>
+                        {testResult.success ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                        {testResult.message}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-12 flex justify-end gap-4">
+                    <button 
+                      onClick={closeAddRDIModal}
+                      className="px-8 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleAddRDIEndpoint}
+                      disabled={!newRDI.alias || !newRDI.url}
+                      className={cn(
+                        "px-8 py-3 font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20",
+                        (!newRDI.alias || !newRDI.url) 
+                          ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                          : "bg-primary text-white hover:bg-primary/90"
+                      )}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Add Endpoint
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </div>

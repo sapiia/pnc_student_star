@@ -1,8 +1,13 @@
 const Question = require('../models/Question');
+const { getCache, setCache, delCache, getOrSetCache } = require('../utils/cache');
+
+const QUESTIONS_CACHE_KEY = 'questions:all';
 
 const getAllQuestions = async (req, res) => {
   try {
-    const questions = await Question.findAll();
+    const questions = await getOrSetCache(QUESTIONS_CACHE_KEY, async () => {
+      return await Question.findAll();
+    });
     res.json(questions);
   } catch (err) {
     console.error(err);
@@ -26,6 +31,7 @@ const getQuestionById = async (req, res) => {
 const createQuestion = async (req, res) => {
   try {
     const questionId = await Question.create(req.body);
+    await delCache(QUESTIONS_CACHE_KEY);
     res.status(201).json({ 
       message: "Question created successfully", 
       questionId 
@@ -42,6 +48,7 @@ const updateQuestion = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ message: "Question not found" });
     }
+    await delCache(QUESTIONS_CACHE_KEY);
     res.json({ message: "Question updated successfully" });
   } catch (err) {
     console.error(err);
@@ -55,6 +62,7 @@ const deleteQuestion = async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ message: "Question not found" });
     }
+    await delCache(QUESTIONS_CACHE_KEY);
     res.json({ message: "Question deleted successfully" });
   } catch (err) {
     console.error(err);

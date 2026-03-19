@@ -1,5 +1,11 @@
 import { useNavigate } from 'react-router-dom';
+<<<<<<< HEAD
+import { useRef } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+=======
 
+>>>>>>> origin/master
 import { 
 
   BarChart3, 
@@ -139,6 +145,7 @@ const CRITERIA_COLORS = [
 
 export default function AdminReportsPage() {
   const navigate = useNavigate();
+  const reportRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'teachers'>('overview');
   
   // Student Report State
