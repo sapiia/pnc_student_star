@@ -1,4 +1,5 @@
 const Evaluation = require('../models/Evaluation');
+const redisClient = require("../config/redis");
 
 const getAllEvaluations = async (req, res) => {
   try {

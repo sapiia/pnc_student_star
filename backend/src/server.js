@@ -10,3 +10,16 @@ initRealtime(server);
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+
+const redisClient = require("./config/redis");
+
+app.get("/redis-test", async (req, res) => {
+
+  await redisClient.set("test", "Redis is working");
+
+  const data = await redisClient.get("test");
+
+  res.json({ message: data });
+
+});
