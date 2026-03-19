@@ -612,11 +612,6 @@ export default function TeacherMessagesPage() {
     setOpenedActionMessageId((current) => (current === messageId ? null : messageId));
   };
 
-  const handleSelectContact = (contactId: number) => {
-    setSelectedContactId(contactId);
-    setIsMobileChatOpen(true);
-  };
-
   const handleCancelEdit = () => {
     setEditingMessageId(null);
     setMessageDraft('');

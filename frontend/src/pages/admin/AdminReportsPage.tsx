@@ -943,27 +943,6 @@ export default function AdminReportsPage() {
 
                 {/* Performance Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/40 via-white to-sky-50/30 pointer-events-none" />
-                    <div className="flex items-center justify-between mb-8">
-                      <div>
-                        <h3 className="text-lg font-black text-slate-900">
-                          {selectedGender !== 'All' ? `${selectedGender} Performance` : 
-                           selectedClass !== 'All' ? `Class ${selectedClass} Performance` :
-                           selectedGen !== 'All' ? `${selectedGen} Performance` : 'Overall Student Performance'}
-                        </h3>
-                        <p className="text-xs text-slate-500 font-bold">Detailed breakdown by criteria</p>
-                      </div>
-                      <div className="size-10 bg-gradient-to-br from-indigo-100 to-sky-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
-                        <BarChart3 className="w-5 h-5" />
-                      </div>
-                    </div>
-
-                  </div>
-
-                ) : (
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
                   <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
 
@@ -1066,8 +1045,6 @@ export default function AdminReportsPage() {
                   </div>
 
                 </div>
-
-                )}
 
               </motion.div>
 
@@ -1428,8 +1405,6 @@ export default function AdminReportsPage() {
             )}
 
           </AnimatePresence>
-
-          )}
 
         </div>
 

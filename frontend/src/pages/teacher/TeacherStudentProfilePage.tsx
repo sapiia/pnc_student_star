@@ -480,7 +480,6 @@ export default function TeacherStudentProfilePage() {
                 </div>
               </div>
             </div>
-            </div>
 
             {/* Inline Evaluation List Section */}
             {showEvaluationList && (
