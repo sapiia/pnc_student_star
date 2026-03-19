@@ -1,42 +1,51 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Users, 
-  Calendar, 
-  Download, 
-  Filter, 
+import {
+  BarChart3,
+  TrendingUp,
+  Users,
+  Download,
+  Filter,
   ChevronDown,
   Bell,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 
 import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSidebar';
 import TeacherMobileNav from '../../components/common/TeacherMobileNav';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
 
 import { motion } from 'motion/react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
   Cell,
   PieChart,
   Pie,
-  Legend
 } from 'recharts';
-import { cn } from '../../lib/utils';
 import { CRITERIA } from '../../constants';
+import {
+  API_BASE_URL,
+  toDisplayName,
+  normalizeGender,
+} from '../../lib/teacher/utils';
+import { cn } from '../../lib/utils';
 
 type GenderOption = 'All' | 'Male' | 'Female';
+type CriterionNavItem = {
+  id: string;
+  label: string;
+  key: string;
+};
 
 interface EvaluationData {
   id: number;
@@ -45,6 +54,7 @@ interface EvaluationData {
   average_score: number;
   criteria_count: number;
   submitted_at: string;
+  created_at?: string;
   responses: Array<{
     criterion_key: string;
     criterion_name: string;
@@ -56,172 +66,225 @@ interface StudentData {
   id: number;
   name: string;
   email: string;
-  class: string;
+  className: string;
+  generation?: string;
   student_id: string;
   gender: string;
 }
 
-// API Base URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 const GENERATION_HINTS = ['2026', '2027'];
+const DEFAULT_CLASS_FALLBACK = ['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D'];
+const CRITERIA_COLORS = [
+  '#6366F1',
+  '#06B6D4',
+  '#F59E0B',
+  '#10B981',
+  '#EC4899',
+  '#8B5CF6',
+  '#F97316',
+  '#22C55E',
+  '#0EA5E9',
+  '#EF4444'
+];
 
-// Default mock data for fallback
-const DEFAULT_TREND_DATA = {
-  'All': [
-    { name: 'Week 1', avg: 3.2, completion: 65 },
-    { name: 'Week 2', avg: 3.5, completion: 72 },
-    { name: 'Week 3', avg: 3.4, completion: 80 },
-    { name: 'Week 4', avg: 3.8, completion: 78 },
-    { name: 'Week 5', avg: 4.0, completion: 85 },
-    { name: 'Week 6', avg: 4.2, completion: 92 },
-  ],
-  'Male': [
-    { name: 'Week 1', avg: 3.0, completion: 60 },
-    { name: 'Week 2', avg: 3.3, completion: 68 },
-    { name: 'Week 3', avg: 3.2, completion: 75 },
-    { name: 'Week 4', avg: 3.6, completion: 72 },
-    { name: 'Week 5', avg: 3.8, completion: 80 },
-    { name: 'Week 6', avg: 4.0, completion: 88 },
-  ],
-  'Female': [
-    { name: 'Week 1', avg: 3.4, completion: 70 },
-    { name: 'Week 2', avg: 3.7, completion: 76 },
-    { name: 'Week 3', avg: 3.6, completion: 85 },
-    { name: 'Week 4', avg: 4.0, completion: 84 },
-    { name: 'Week 5', avg: 4.2, completion: 90 },
-    { name: 'Week 6', avg: 4.4, completion: 96 },
-  ]
+const buildAuthHeaders = () => {
+  const authToken = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
 };
 
-const DEFAULT_CRITERIA_DATA = {
-  'All': [
-    { name: 'Living', value: 4.2, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.5, color: '#10b981' },
-    { name: 'Human & Support', value: 3.8, color: '#f59e0b' },
-    { name: 'Health', value: 4.0, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.5, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 3.9, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.1, color: '#06b6d4' },
-  ],
-  'Male': [
-    { name: 'Living', value: 4.0, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.3, color: '#10b981' },
-    { name: 'Human & Support', value: 3.6, color: '#f59e0b' },
-    { name: 'Health', value: 4.2, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.3, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 3.7, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.0, color: '#06b6d4' },
-  ],
-  'Female': [
-    { name: 'Living', value: 4.4, color: '#5d5fef' },
-    { name: 'Job & Study', value: 4.7, color: '#10b981' },
-    { name: 'Human & Support', value: 4.0, color: '#f59e0b' },
-    { name: 'Health', value: 3.8, color: '#ef4444' },
-    { name: 'Money & Payment', value: 3.7, color: '#8b5cf6' },
-    { name: 'Your Feeling', value: 4.1, color: '#ec4899' },
-    { name: 'Life Skill', value: 4.2, color: '#06b6d4' },
-  ]
+const parseGeneration = (student: StudentData) => {
+  const direct = String(student.generation || '').trim();
+  if (direct) return direct;
+  const match = String(student.className || '').match(/gen\s*(\d{4})/i);
+  return match?.[1] || '';
 };
 
-const DEFAULT_ENGAGEMENT_DATA = {
-  'All': [
-    { name: 'Completed', value: 85, fill: '#5d5fef' },
-    { name: 'Pending', value: 10, fill: '#94a3b8' },
-    { name: 'Overdue', value: 5, fill: '#ef4444' },
-  ],
-  'Male': [
-    { name: 'Completed', value: 80, fill: '#5d5fef' },
-    { name: 'Pending', value: 12, fill: '#94a3b8' },
-    { name: 'Overdue', value: 8, fill: '#ef4444' },
-  ],
-  'Female': [
-    { name: 'Completed', value: 90, fill: '#5d5fef' },
-    { name: 'Pending', value: 7, fill: '#94a3b8' },
-    { name: 'Overdue', value: 3, fill: '#ef4444' },
-  ]
+const normalizeGenerationValue = (value: string) => String(value || '').replace(/gen\s*/i, '').trim();
+const toCriterionKey = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+(.)/g, (_match, char: string) => char.toUpperCase())
+    .replace(/[^a-zA-Z0-9]/g, '');
+
+const parsePeriodParts = (value: string) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  const yqMatch = trimmed.match(/^(\d{4})\s*[-/ ]\s*Q([1-4])$/i);
+  if (yqMatch) return { year: Number(yqMatch[1]), quarter: Number(yqMatch[2]) };
+
+  const qyMatch = trimmed.match(/^Q([1-4])\s*[-/ ]?\s*(\d{4})$/i);
+  if (qyMatch) return { year: Number(qyMatch[2]), quarter: Number(qyMatch[1]) };
+
+  return null;
 };
+
+const formatPeriodLabel = (year: number, quarter: number) => `Q${quarter} ${year}`;
 
 export default function TeacherReportsPage() {
   const navigate = useNavigate();
   const [selectedGen, setSelectedGen] = useState('All');
   const [selectedClass, setSelectedClass] = useState('All');
   const [selectedGender, setSelectedGender] = useState<GenderOption>('All');
-  const [generations, setGenerations] = useState<string[]>(GENERATION_HINTS);
+  const { teacherId } = useTeacherIdentity();
   
   // Data state
-  const [classes, setClasses] = useState<string[]>([]);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationData[]>([]);
+  const [criteriaNav, setCriteriaNav] = useState<CriterionNavItem[]>([]);
+  const [activeCriterionKey, setActiveCriterionKey] = useState('overall');
+  const [ratingScale, setRatingScale] = useState(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Fetch data on mount
   useEffect(() => {
+    if (!teacherId) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch classes
-        const classesRes = await fetch(`${API_BASE_URL}/users/teachers/classes/1`);
-        const classesData = await classesRes.json();
-        if (Array.isArray(classesData)) {
-          setClasses(classesData);
-        }
+        const authHeaders = buildAuthHeaders();
 
-        // Fetch all students
-        const studentsRes = await fetch(`${API_BASE_URL}/users/teachers/students/1`);
-        const studentsData = await studentsRes.json();
-        if (Array.isArray(studentsData)) {
-          setStudents(studentsData);
-          
-          // Extract unique generations from students
-          const uniqueGenerations = [...new Set(studentsData
-            .map((s: any) => String(s.class || '').match(/gen\s*(\d{4})/i)?.[1])
-            .filter(Boolean))] as string[];
-          const mergedGenerations = Array.from(new Set([...uniqueGenerations, ...GENERATION_HINTS])).sort();
-          setGenerations(mergedGenerations);
-        }
+        // Fetch users (students) and evaluations
+        const [usersRes, evalRes, criteriaRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`, { headers: { ...authHeaders } }),
+          fetch(`${API_BASE_URL}/evaluations`, { headers: { ...authHeaders } }),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`, { headers: { ...authHeaders } }),
+        ]);
 
-        // Fetch all evaluations
-        const evalRes = await fetch(`${API_BASE_URL}/evaluations`);
+        let usersData: any[] = [];
+        if (usersRes.ok) {
+          usersData = await usersRes.json();
+        } else {
+          const fallbackRes = await fetch(`${API_BASE_URL}/users`, { headers: { ...authHeaders } });
+          usersData = await fallbackRes.json();
+        }
         const evalData = await evalRes.json();
+        const criteriaData = await criteriaRes.json().catch(() => ({}));
+
+        if (Array.isArray(usersData)) {
+          const mappedStudents: StudentData[] = usersData
+            .filter((u: any) => String(u.role || '').toLowerCase() === 'student')
+            .map((u: any) => ({
+              id: Number(u.id),
+              name: toDisplayName(u),
+              email: String(u.email || '').trim(),
+              student_id: String(u.student_id || u.resolved_student_id || '').trim() || `STU-${u.id}`,
+              className: String(u.class || '').trim(),
+              generation: u.generation ? String(u.generation) : undefined,
+              gender: normalizeGender(u.gender),
+            }));
+
+          setStudents(mappedStudents);
+        }
+
         if (Array.isArray(evalData)) {
           setEvaluations(evalData);
         }
+
+        const activeCriteria = Array.isArray(criteriaData?.criteria)
+          ? criteriaData.criteria.filter((c: any) => String(c.status || '').toLowerCase() === 'active')
+          : [];
+        const scale = Math.max(1, Number(criteriaData?.ratingScale || 5));
+        setRatingScale(scale);
+
+        const mappedCriteria: CriterionNavItem[] = activeCriteria.length > 0
+          ? activeCriteria.map((criterion: any, index: number) => {
+              const label = String(criterion.name || `Criterion ${index + 1}`).trim();
+              const rawKey = String(criterion.key || label || criterion.id || `criterion${index + 1}`);
+              return {
+                id: String(criterion.id || `CRIT-${String(index + 1).padStart(3, '0')}`),
+                label,
+                key: toCriterionKey(rawKey)
+              };
+            })
+          : CRITERIA.map((criterion) => ({
+              id: criterion.key,
+              label: criterion.label,
+              key: toCriterionKey(criterion.key)
+            }));
+
+        setCriteriaNav(mappedCriteria);
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError('Failed to load data. Using demo data.');
-        // Load demo data on error
-        setClasses(['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D']);
-        setGenerations(GENERATION_HINTS);
+        setError('Failed to load data. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [teacherId]);
+
+  useEffect(() => {
+    if (activeCriterionKey !== 'overall' && criteriaNav.every((criterion) => criterion.key !== activeCriterionKey)) {
+      setActiveCriterionKey('overall');
+    }
+  }, [activeCriterionKey, criteriaNav]);
+
+  const generations = useMemo(() => {
+    const uniqueGenerations = new Set(
+      students
+        .map((s) => normalizeGenerationValue(parseGeneration(s)))
+        .filter(Boolean)
+    );
+    return Array.from(new Set([...uniqueGenerations, ...GENERATION_HINTS])).sort();
+  }, [students]);
 
   // Process data based on filters
+  const criteriaList = useMemo(() => {
+    if (criteriaNav.length > 0) {
+      return criteriaNav.map((criterion) => ({
+        label: criterion.label,
+        key: criterion.key
+      }));
+    }
+    return CRITERIA.map((criterion) => ({
+      label: criterion.label,
+      key: toCriterionKey(criterion.key)
+    }));
+  }, [criteriaNav]);
+
+  const criteriaColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    criteriaList.forEach((criterion, index) => {
+      const color = CRITERIA_COLORS[index % CRITERIA_COLORS.length];
+      map.set(criterion.key, color);
+      map.set(toCriterionKey(criterion.label), color);
+    });
+    return map;
+  }, [criteriaList]);
+
+  const activeCriterionColor = useMemo(() => {
+    if (activeCriterionKey === 'overall') return '#5d5fef';
+    return criteriaColorMap.get(activeCriterionKey) || '#5d5fef';
+  }, [activeCriterionKey, criteriaColorMap]);
+
+  const activeCriterionLabel = useMemo(() => {
+    if (activeCriterionKey === 'overall') return 'Avg Stars';
+    const label = criteriaNav.find((criterion) => criterion.key === activeCriterionKey)?.label || 'Criteria Avg';
+    return `${label} Avg`;
+  }, [activeCriterionKey, criteriaNav]);
+
   const processedData = useMemo(() => {
     let filteredStudents = students;
-    let filteredEvals = evaluations;
 
-    // Filter by generation
     if (selectedGen !== 'All') {
-      filteredStudents = filteredStudents.filter((s: StudentData) => 
-        s.class?.includes(`Gen ${selectedGen}`)
-      );
+      filteredStudents = filteredStudents.filter((s: StudentData) => {
+        const gen = normalizeGenerationValue(parseGeneration(s));
+        return gen === selectedGen;
+      });
     }
 
-    // Filter by class
     if (selectedClass !== 'All') {
-      filteredStudents = filteredStudents.filter((s: StudentData) => s.class === selectedClass);
+      filteredStudents = filteredStudents.filter((s: StudentData) => s.className === selectedClass);
     }
 
-    // Filter by gender
     if (selectedGender !== 'All') {
       filteredStudents = filteredStudents.filter((s: StudentData) => 
         s.gender?.toLowerCase() === selectedGender.toLowerCase()
@@ -229,126 +292,175 @@ export default function TeacherReportsPage() {
     }
 
     const studentIds = new Set(filteredStudents.map((s: StudentData) => s.id));
-    filteredEvals = evaluations.filter((e: EvaluationData) => studentIds.has(e.user_id));
+    const filteredEvals = evaluations.filter((e: EvaluationData) => studentIds.has(e.user_id));
 
-    // Calculate criteria averages
-    const criteriaMap: Record<string, { total: number; count: number }> = {};
-    
-    filteredEvals.forEach(eval_ => {
-      eval_.responses?.forEach((response: { criterion_key: string; star_value: number }) => {
-        if (!criteriaMap[response.criterion_key]) {
-          criteriaMap[response.criterion_key] = { total: 0, count: 0 };
-        }
-        criteriaMap[response.criterion_key].total += response.star_value;
-        criteriaMap[response.criterion_key].count += 1;
+    const totals = new Map<string, { total: number; count: number; label: string }>();
+    const lookup = new Map<string, string>();
+    criteriaList.forEach((criterion) => {
+      totals.set(criterion.key, { total: 0, count: 0, label: criterion.label });
+      lookup.set(toCriterionKey(criterion.key), criterion.key);
+      lookup.set(toCriterionKey(criterion.label), criterion.key);
+    });
+
+    filteredEvals.forEach((evaluation) => {
+      (evaluation.responses || []).forEach((response) => {
+        const normalizedKey = toCriterionKey(String(response.criterion_key || ''));
+        const normalizedName = toCriterionKey(String(response.criterion_name || ''));
+        const canonicalKey = lookup.get(normalizedKey) || lookup.get(normalizedName);
+        if (!canonicalKey) return;
+        const entry = totals.get(canonicalKey);
+        if (!entry) return;
+        entry.total += Number(response.star_value || 0);
+        entry.count += 1;
       });
     });
 
-    const criteriaData = CRITERIA.map(c => ({
-      name: c.label,
-      value: criteriaMap[c.key] 
-        ? Number((criteriaMap[c.key].total / criteriaMap[c.key].count).toFixed(1))
-        : 0,
-      color: c.bgColor.replace('bg-', '#').replace('-500', '').replace('-100', '')
-    }));
+    const criteriaData = criteriaList.map((criterion) => {
+      const entry = totals.get(criterion.key);
+      const color = criteriaColorMap.get(criterion.key) || '#94a3b8';
+      return ({
+        name: criterion.label,
+        value: entry && entry.count > 0
+          ? Number((entry.total / entry.count).toFixed(1))
+          : 0,
+        fill: color,
+        color
+      });
+    });
 
-    // If no real data, use defaults based on gender
-    const genderKey = selectedGender;
     if (filteredEvals.length === 0) {
       return {
-        trend: DEFAULT_TREND_DATA[genderKey] || DEFAULT_TREND_DATA['All'],
-        criteria: DEFAULT_CRITERIA_DATA[genderKey] || DEFAULT_CRITERIA_DATA['All'],
-        engagement: DEFAULT_ENGAGEMENT_DATA[genderKey] || DEFAULT_ENGAGEMENT_DATA['All'],
+        trend: [],
+        criteria: criteriaData,
+        engagement: [],
         stats: {
-          totalStudents: filteredStudents.length || 45,
-          avgScore: selectedGender === 'Male' ? 4.0 : selectedGender === 'Female' ? 4.4 : 4.2,
-          completionRate: selectedGender === 'Male' ? 88 : selectedGender === 'Female' ? 96 : 92
+          totalStudents: filteredStudents.length,
+          avgScore: 0,
+          completionRate: 0
         }
       };
     }
 
-    // Calculate engagement
-    const totalStudents = filteredStudents.length || 1;
-    const completedEvals = filteredEvals.length;
-    const completionRate = Math.round((completedEvals / totalStudents) * 100);
+    const totalStudents = filteredStudents.length;
+    const evaluatedStudents = new Set(filteredEvals.map((e) => Number(e.user_id))).size;
+    const completionRate = totalStudents > 0 ? Math.round((evaluatedStudents / totalStudents) * 100) : 0;
     
     const engagementData = [
       { name: 'Completed', value: completionRate, fill: '#5d5fef' },
-      { name: 'Pending', value: Math.max(0, 100 - completionRate - 5), fill: '#94a3b8' },
-      { name: 'Overdue', value: 5, fill: '#ef4444' },
+      { name: 'Pending', value: Math.max(0, 100 - completionRate), fill: '#94a3b8' },
+      { name: 'Overdue', value: 0, fill: '#ef4444' },
     ];
 
-    // Calculate average score
     const avgScore = filteredEvals.length > 0
-      ? Number((filteredEvals.reduce((sum, e) => sum + e.average_score, 0) / filteredEvals.length).toFixed(1))
+      ? Number((filteredEvals.reduce((sum, e) => sum + Number(e.average_score || 0), 0) / filteredEvals.length).toFixed(2))
       : 0;
 
-    // Generate trend data from evaluation periods
-    const periodMap: Record<string, { totalScore: number; count: number }> = {};
-    filteredEvals.forEach(eval_ => {
-      const period = eval_.period || 'Unknown';
-      if (!periodMap[period]) {
-        periodMap[period] = { totalScore: 0, count: 0 };
+    const buckets = new Map<string, { totalScore: number; count: number; year: number; quarter: number; studentIds: Set<number> }>();
+    filteredEvals.forEach((evaluation) => {
+      let period = parsePeriodParts(evaluation.period);
+      if (!period) {
+        const dateValue = evaluation.submitted_at || evaluation.created_at;
+        if (dateValue) {
+          const date = new Date(dateValue);
+          if (!Number.isNaN(date.getTime())) {
+            const year = date.getUTCFullYear();
+            const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+            period = { year, quarter };
+          }
+        }
       }
-      periodMap[period].totalScore += eval_.average_score;
-      periodMap[period].count += 1;
+      if (!period) return;
+      const key = `${period.year}-Q${period.quarter}`;
+      const entry = buckets.get(key) || { totalScore: 0, count: 0, year: period.year, quarter: period.quarter, studentIds: new Set<number>() };
+      entry.studentIds.add(Number(evaluation.user_id));
+
+      let scoreValue = Number(evaluation.average_score || 0);
+      if (activeCriterionKey !== 'overall') {
+        const normalizedActiveKey = toCriterionKey(activeCriterionKey);
+        const responses = Array.isArray(evaluation.responses) ? evaluation.responses : [];
+        const matched = responses.find((response) => {
+          const keyCandidate = toCriterionKey(String(response.criterion_key || ''));
+          const nameCandidate = toCriterionKey(String(response.criterion_name || ''));
+          return normalizedActiveKey === keyCandidate || normalizedActiveKey === nameCandidate;
+        });
+        if (matched) {
+          scoreValue = Number(matched.star_value || 0);
+          entry.totalScore += scoreValue;
+          entry.count += 1;
+        }
+      } else {
+        entry.totalScore += scoreValue;
+        entry.count += 1;
+      }
+      buckets.set(key, entry);
     });
 
-    const trendData = Object.entries(periodMap).map(([period, data]) => ({
-      name: period,
-      avg: Number((data.totalScore / data.count).toFixed(1)),
-      completion: Math.round((data.count / totalStudents) * 100)
-    })).slice(0, 6);
+    const periods = Array.from(buckets.values()).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.quarter - b.quarter;
+    });
 
-    // Fill with default trend if not enough data
-    while (trendData.length < 6) {
-      trendData.push({ name: `Week ${trendData.length + 1}`, avg: 3.5 + Math.random() * 0.5, completion: 70 + trendData.length * 5 });
-    }
+    const trendData = periods.map((entry) => ({
+      name: formatPeriodLabel(entry.year, entry.quarter),
+      avg: entry.count > 0 ? Number((entry.totalScore / entry.count).toFixed(1)) : 0,
+      completion: entry.studentIds.size
+    }));
 
     return {
       trend: trendData,
-      criteria: criteriaData.length > 0 ? criteriaData : DEFAULT_CRITERIA_DATA['All'],
+      criteria: criteriaData,
       engagement: engagementData,
       stats: {
         totalStudents,
-        avgScore: avgScore || 4.2,
-        completionRate: completionRate || 92
+        avgScore,
+        completionRate
       }
     };
-  }, [selectedClass, selectedGender, students, evaluations]);
-
-  const currentData = processedData;
+  }, [selectedClass, selectedGender, selectedGen, students, evaluations, criteriaList, criteriaColorMap, activeCriterionKey]);
 
   // Get available classes
-  const availableClasses = classes.length > 0 ? classes : ['WEB Class A', 'WEB Class B', 'WEB Class C', 'WEB Class D'];
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    students.forEach((student) => {
+      if (selectedGen === 'All' || normalizeGenerationValue(parseGeneration(student)) === selectedGen) {
+        if (student.className) classSet.add(student.className);
+      }
+    });
+    const list = Array.from(classSet).sort();
+    return list.length > 0 ? list : DEFAULT_CLASS_FALLBACK;
+  }, [students, selectedGen]);
+  const { trend, criteria, engagement, stats } = processedData;
 
   // Export handler
   const handleExport = async () => {
     try {
       setExporting(true);
-      
+      setExportNotice(null);
+
+      const authHeaders = buildAuthHeaders();
+
       // Build query params from current filters
       const params = new URLSearchParams();
+      params.append('scope', 'students');
       if (selectedClass !== 'All') params.append('class', selectedClass);
       if (selectedGender !== 'All') params.append('gender', selectedGender);
       if (selectedGen !== 'All') params.append('generation', selectedGen);
       
       const response = await fetch(`${API_BASE_URL}/evaluations/report/export?${params.toString()}`, {
-        method: 'GET'
+        method: 'GET',
+        headers: { ...authHeaders },
       });
       
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Export failed: ${response.status} - ${errorText}`);
       }
-      
-      // Get content type to verify it's an Excel file
+
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('spreadsheet')) {
         throw new Error('Invalid response format. Expected Excel file.');
       }
-      
-      // Create blob and download
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -358,9 +470,16 @@ export default function TeacherReportsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      setExportNotice({
+        type: 'success',
+        message: 'Export completed. Your Excel file is downloading.'
+      });
     } catch (err: any) {
       console.error('Export error:', err);
-      alert(err.message || 'Failed to export report. Please try again.');
+      setExportNotice({
+        type: 'error',
+        message: err?.message || 'Failed to export report.'
+      });
     } finally {
       setExporting(false);
     }
@@ -383,7 +502,7 @@ export default function TeacherReportsPage() {
           ) : (
             <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
           )}
-          {exporting ? 'Exporting...' : 'Export'}
+          {exporting ? 'Exporting...' : 'Export Excel'}
         </button>
         <button
           onClick={() => navigate('/teacher/notifications')}
@@ -404,6 +523,7 @@ export default function TeacherReportsPage() {
           onChange={(e) => {
             setSelectedGen(e.target.value);
             setSelectedClass('All');
+            setSelectedGender('All');
           }}
           className="appearance-none flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary/20 pr-10"
         >
@@ -418,16 +538,17 @@ export default function TeacherReportsPage() {
       <div className="relative">
         <select
           value={selectedClass}
-          onChange={(e) => setSelectedClass(e.target.value)}
+          onChange={(e) => {
+            setSelectedClass(e.target.value);
+            setSelectedGender('All');
+          }}
           className="appearance-none flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary/20 pr-10"
           disabled={selectedGen === 'All' && availableClasses.length === 0}
         >
           <option value="All">All Classes</option>
-          {availableClasses
-            .filter(c => selectedGen === 'All' || c.includes(`Gen ${selectedGen}`))
-            .map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+          {availableClasses.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
         </select>
         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
       </div>
@@ -450,17 +571,17 @@ export default function TeacherReportsPage() {
       <div className="flex items-center gap-6 text-sm">
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4 text-primary" />
-          <span className="font-bold text-slate-700">{currentData.stats.totalStudents}</span>
+          <span className="font-bold text-slate-700">{stats.totalStudents}</span>
           <span className="text-slate-400">Students</span>
         </div>
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-500" />
-          <span className="font-bold text-slate-700">{currentData.stats.avgScore}</span>
+          <span className="font-bold text-slate-700">{stats.avgScore}</span>
           <span className="text-slate-400">Avg Score</span>
         </div>
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-amber-500" />
-          <span className="font-bold text-slate-700">{currentData.stats.completionRate}%</span>
+          <span className="font-bold text-slate-700">{stats.completionRate}%</span>
           <span className="text-slate-400">Completion</span>
         </div>
       </div>
@@ -498,6 +619,26 @@ export default function TeacherReportsPage() {
               </div>
             )}
 
+            {exportNotice && (
+              <div
+                className={cn(
+                  "flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-semibold",
+                  exportNotice.type === 'success'
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                )}
+              >
+                <span>{exportNotice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setExportNotice(null)}
+                  className="text-xs font-bold uppercase tracking-widest opacity-70 hover:opacity-100"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
             {!loading && (
               <>
                 {renderFiltersBar()}
@@ -511,23 +652,60 @@ export default function TeacherReportsPage() {
                   <div className="flex items-center justify-between mb-8">
                     <div>
                       <h3 className="text-xl font-black text-slate-900 tracking-tight">Class Performance Trend</h3>
-                      <p className="text-sm text-slate-500">Average star rating vs. evaluation completion rate</p>
+                      <p className="text-sm text-slate-500">Average star rating vs. evaluation completion count</p>
                     </div>
                     <div className="flex gap-6">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-primary" />
-                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Avg Stars</span>
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: activeCriterionColor }} />
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{activeCriterionLabel}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-emerald-400" />
-                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Completion %</span>
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Completion</span>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="mb-6 overflow-x-auto">
+                    <div className="inline-flex items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCriterionKey('overall')}
+                        className={cn(
+                          "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2",
+                          activeCriterionKey === 'overall'
+                            ? "bg-white text-primary shadow-sm"
+                            : "text-slate-400 hover:text-slate-600"
+                        )}
+                      >
+                        <span className="size-2 rounded-full bg-primary" />
+                        Overall
+                      </button>
+                      {criteriaNav.map((criterion) => (
+                        <button
+                          key={criterion.id}
+                          type="button"
+                          onClick={() => setActiveCriterionKey(criterion.key)}
+                          className={cn(
+                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2",
+                            activeCriterionKey === criterion.key
+                              ? "bg-white text-primary shadow-sm"
+                              : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ backgroundColor: criteriaColorMap.get(criterion.key) || '#5d5fef' }}
+                          />
+                          {criterion.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   
                   <div className="h-[250px] md:h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={currentData.trend}>
+                      <LineChart data={trend}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis 
                           dataKey="name" 
@@ -537,9 +715,19 @@ export default function TeacherReportsPage() {
                           dy={10}
                         />
                         <YAxis 
+                          yAxisId="score"
                           axisLine={false} 
                           tickLine={false} 
                           tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
+                          domain={[0, Math.max(ratingScale, 5)]}
+                        />
+                        <YAxis
+                          yAxisId="completion"
+                          orientation="right"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 600 }}
+                          domain={[0, Math.max(1, stats.totalStudents)]}
                         />
                         <Tooltip 
                           contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }}
@@ -547,14 +735,16 @@ export default function TeacherReportsPage() {
                         <Line 
                           type="monotone" 
                           dataKey="avg" 
-                          stroke="#5d5fef" 
+                          yAxisId="score"
+                          stroke={activeCriterionColor} 
                           strokeWidth={4} 
-                          dot={{ r: 6, fill: '#5d5fef', strokeWidth: 3, stroke: '#fff' }}
+                          dot={{ r: 6, fill: activeCriterionColor, strokeWidth: 3, stroke: '#fff' }}
                           activeDot={{ r: 8, strokeWidth: 0 }}
                         />
                         <Line 
                           type="monotone" 
                           dataKey="completion" 
+                          yAxisId="completion"
                           stroke="#10b981" 
                           strokeWidth={2} 
                           strokeDasharray="5 5"
@@ -580,7 +770,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <div className="h-[250px] md:h-[300px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={currentData.criteria} layout="vertical">
+                        <BarChart data={criteria} layout="vertical">
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                           <XAxis type="number" hide />
                           <YAxis 
@@ -596,7 +786,7 @@ export default function TeacherReportsPage() {
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                           />
                           <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={20}>
-                            {currentData.criteria.map((entry, index) => (
+                            {criteria.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                           </Bar>
@@ -615,7 +805,7 @@ export default function TeacherReportsPage() {
                     <div className="flex items-center justify-between mb-8">
                       <h3 className="text-xl font-black text-slate-900 tracking-tight">Engagement Status</h3>
                       <div className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-lg">
-                        {currentData.stats.completionRate >= 80 ? 'Healthy' : currentData.stats.completionRate >= 50 ? 'Moderate' : 'Low'}
+                        {stats.completionRate >= 80 ? 'Healthy' : stats.completionRate >= 50 ? 'Moderate' : 'Low'}
                       </div>
                     </div>
                     <div className="flex flex-col md:flex-row items-center gap-8">
@@ -623,7 +813,7 @@ export default function TeacherReportsPage() {
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
-                              data={currentData.engagement}
+                              data={engagement}
                               cx="50%"
                               cy="50%"
                               innerRadius={60}
@@ -631,7 +821,7 @@ export default function TeacherReportsPage() {
                               paddingAngle={8}
                               dataKey="value"
                             >
-                              {currentData.engagement.map((entry, index) => (
+                              {engagement.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                               ))}
                             </Pie>
@@ -640,7 +830,7 @@ export default function TeacherReportsPage() {
                         </ResponsiveContainer>
                       </div>
                       <div className="w-full md:w-1/2 space-y-4">
-                        {currentData.engagement.map((item) => (
+                        {engagement.map((item) => (
                           <div key={item.name} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                             <div className="flex items-center gap-3">
                               <div className="size-3 rounded-full" style={{ backgroundColor: item.fill }} />
@@ -663,7 +853,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-emerald-900 mb-2">Academic Performance</h4>
                     <p className="text-sm text-emerald-700 leading-relaxed">
-                      Class average is at {currentData.stats.avgScore}/5.0 with {currentData.stats.completionRate}% completion rate across all criteria.
+                      Class average is at {stats.avgScore}/5.0 with {stats.completionRate}% completion rate across all criteria.
                     </p>
                   </div>
                   <div className="p-6 bg-amber-50 border border-amber-100 rounded-2xl">
@@ -673,7 +863,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-amber-900 mb-2">Evaluation Progress</h4>
                     <p className="text-sm text-amber-700 leading-relaxed">
-                      {100 - currentData.stats.completionRate}% of students still need to submit their evaluations. Follow up with pending students.
+                      {100 - stats.completionRate}% of students still need to submit their evaluations. Follow up with pending students.
                     </p>
                   </div>
                   <div className="p-6 bg-primary/5 border border-primary/10 rounded-2xl">
@@ -683,7 +873,7 @@ export default function TeacherReportsPage() {
                     </div>
                     <h4 className="font-bold text-slate-900 mb-2">Q4 Evaluations</h4>
                     <p className="text-sm text-slate-600 leading-relaxed">
-                      Final quarter evaluations in progress. Current prep-rate is at {currentData.stats.completionRate}% across all departments.
+                      Final quarter evaluations in progress. Current prep-rate is at {stats.completionRate}% across all departments.
                     </p>
                   </div>
                 </div>

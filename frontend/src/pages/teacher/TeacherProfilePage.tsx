@@ -11,6 +11,7 @@ import TeacherMobileNav from '../../components/common/TeacherMobileNav';
 
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useEffect, useRef, useState } from 'react';
+import { API_BASE_URL, DEFAULT_AVATAR } from '../../lib/teacher/utils';
 
 type AuthUser = {
   id: number;
@@ -31,8 +32,6 @@ type ProfilePayload = {
   error?: string;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-
 export default function TeacherProfilePage() {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
@@ -51,7 +50,7 @@ export default function TeacherProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
+    photoUrl: DEFAULT_AVATAR,
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -337,7 +336,7 @@ export default function TeacherProfilePage() {
                 <div className="p-4 md:p-8 flex flex-col lg:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
-                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
+                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : DEFAULT_AVATAR} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}

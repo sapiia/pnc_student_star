@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, ChevronRight, Home, Trash2, MessageSquare, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
+import { Bell, CheckCheck, ChevronRight, Home, Trash2, MessageSquare, ShieldCheck, CheckCircle2, Clock, RefreshCcw, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
 import StudentMobileNav from '../../components/common/StudentMobileNav';
@@ -31,6 +31,7 @@ type NotificationDetail = {
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const FALLBACK_AVATAR = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
 
 const formatDateTime = (value?: string) => {
   const date = new Date(String(value || ''));
@@ -101,6 +102,8 @@ export default function NotificationsPage() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'any' | 'message' | 'alert' | 'system'>('any');
 
   const loadNotifications = useCallback(async () => {
     if (!studentId) return;
@@ -108,10 +111,13 @@ export default function NotificationsPage() {
     setError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/notifications/user/${studentId}`);
-      const data = await response.json().catch(() => []);
+      let response = await fetch(`${API_BASE_URL}/notifications/user/${studentId}`);
+      let data = await response.json().catch(() => []);
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to load notifications.');
+        // fallback to generic endpoint if user route missing
+        response = await fetch(`${API_BASE_URL}/notifications`);
+        data = await response.json().catch(() => []);
+        if (!response.ok) throw new Error(data?.error || 'Failed to load notifications.');
       }
 
       setNotifications(Array.isArray(data) ? data : []);
@@ -259,9 +265,16 @@ export default function NotificationsPage() {
     }
   };
 
-  const filteredAndVisibleNotifications = visibleNotifications.filter(n =>
-    filter === 'all' ? true : Number(n.is_read) !== 1
-  );
+  const filteredAndVisibleNotifications = visibleNotifications.filter((n) => {
+    const messageText = String(n.message || '').toLowerCase();
+    const computedType = parseTeacherFeedbackNotification(n.message) ? 'message' : messageText.includes('alert') ? 'alert' : 'system';
+    const matchesRead = filter === 'all' ? true : Number(n.is_read) !== 1;
+    const matchesSearch = searchQuery.trim()
+      ? messageText.includes(searchQuery.trim().toLowerCase())
+      : true;
+    const matchesType = typeFilter === 'any' ? true : computedType === typeFilter;
+    return matchesRead && matchesSearch && matchesType;
+  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -278,14 +291,34 @@ export default function NotificationsPage() {
             <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 opacity-30" />
             <span className="font-semibold text-slate-900">Notifications</span>
           </div>
-          <button
-            type="button"
-            onClick={handleMarkAllRead}
-            disabled={isMarkingAllRead || unreadCount === 0}
-            className="text-sm font-bold text-primary hover:underline disabled:opacity-60 transition-all"
-          >
-            {isMarkingAllRead ? 'Marking...' : 'Mark All Read'}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search notifications..."
+                className="pl-10 pr-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-xs md:text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadNotifications()}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-xs md:text-sm font-bold text-slate-600 hover:text-primary hover:border-primary/40 transition-colors"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleMarkAllRead}
+              disabled={isMarkingAllRead || unreadCount === 0}
+              className="text-sm font-bold text-primary hover:underline disabled:opacity-60 transition-all"
+            >
+              {isMarkingAllRead ? 'Marking...' : 'Mark All Read'}
+            </button>
+          </div>
         </header>
 
         <div className="max-w-[800px] mx-auto p-4 md:p-8 space-y-6">
@@ -329,10 +362,34 @@ export default function NotificationsPage() {
               )}
             </button>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(['any', 'message', 'alert', 'system'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setTypeFilter(type)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
+                  typeFilter === type ? "bg-primary text-white border-primary shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:border-primary/30"
+                )}
+              >
+                {type === 'any' ? 'All types' : type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+          </div>
 
           {isLoading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">
-              Loading notifications...
+            <div className="space-y-3">
+              {[1,2,3].map((i) => (
+                <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="size-12 rounded-full bg-slate-200" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-slate-200 rounded w-1/3" />
+                      <div className="h-3 bg-slate-100 rounded w-2/3" />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : filteredAndVisibleNotifications.length > 0 ? (
             <div className="space-y-3">
@@ -344,7 +401,7 @@ export default function NotificationsPage() {
                   const type = teacherFeedbackNotice ? 'message' : 'alert';
                   const senderName = teacherFeedbackNotice?.teacherName || (teacherFeedbackNotice ? 'Teacher' : 'System');
                   const senderRole = teacherFeedbackNotice ? 'Teacher' : 'Admin';
-                  const senderAvatar = teacherFeedbackNotice?.teacherProfile || null;
+                  const senderAvatar = teacherFeedbackNotice?.teacherProfile || FALLBACK_AVATAR;
                   const content = teacherFeedbackNotice?.text || notification.message;
 
                   return (

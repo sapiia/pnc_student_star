@@ -900,6 +900,7 @@ const updateUser = async (req, res) => {
       ? `Gen ${generationValue}${majorValue ? ` - ${majorValue}` : ''}${normalizedClassName ? ` - Class ${normalizedClassName}` : ''}`
       : classNameValue || null;
 
+    const normalizedGeneration = generationValue;
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
     }
@@ -911,7 +912,7 @@ const updateUser = async (req, res) => {
     }
 
     // Get old user data to describe changes
-    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender FROM users WHERE id = ?", [userId]);
+    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender, generation FROM users WHERE id = ?", [userId]);
     const oldUser = oldUserRows[0];
 
     const nameParts = (name || '').trim().split(' ');
@@ -941,10 +942,12 @@ const updateUser = async (req, res) => {
       const newClass = classForUser || null;
       const newStudentId = normalizedStudentId || null;
       const newGender = gender || null;
+      const newGeneration = normalizedGeneration || null;
       
       if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
       if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
       if (oldUser.gender !== newGender) changes.push(`Gender: ${newGender || 'None'}`);
+      if (oldUser.generation !== newGeneration) changes.push(`Generation: ${newGeneration || 'None'}`);
       
       if (changes.length > 0) {
         // Notify the updated user (e.g. the student)

@@ -27,6 +27,17 @@ const getUserRoomName = (userId) => {
   return normalizedUserId ? `user:${normalizedUserId}` : null;
 };
 
+const getRoleRoomName = (role) => {
+  const normalized = String(role || '').trim().toLowerCase();
+  return normalized ? `role:${normalized}` : null;
+};
+
+const getRoleUserRoomName = (role, userId) => {
+  const roleRoom = getRoleRoomName(role);
+  const normalizedUserId = toPositiveInt(userId);
+  return roleRoom && normalizedUserId ? `${roleRoom}:user:${normalizedUserId}` : null;
+};
+
 const initRealtime = (server) => {
   io = new Server(server, {
     cors: {
@@ -57,11 +68,24 @@ const initRealtime = (server) => {
     socket.on('notification:subscribe', (payload = {}) => {
       const room = getUserRoomName(payload.userId);
       if (room) socket.join(room);
+
+       // Optional role-scoped rooms
+      const roleRoom = getRoleRoomName(payload.role);
+      if (roleRoom) socket.join(roleRoom);
+
+      const roleUserRoom = getRoleUserRoomName(payload.role, payload.userId);
+      if (roleUserRoom) socket.join(roleUserRoom);
     });
 
     socket.on('notification:unsubscribe', (payload = {}) => {
       const room = getUserRoomName(payload.userId);
       if (room) socket.leave(room);
+
+      const roleRoom = getRoleRoomName(payload.role);
+      if (roleRoom) socket.leave(roleRoom);
+
+      const roleUserRoom = getRoleUserRoomName(payload.role, payload.userId);
+      if (roleUserRoom) socket.leave(roleUserRoom);
     });
 
     socket.on('message:typing', (payload = {}) => {
@@ -121,17 +145,32 @@ const emitNotificationEvent = ({ action, notification }) => {
     notification,
     notificationId: Number(notification.id) || null,
     userId: toPositiveInt(notification.user_id),
+    role: notification.user_role || null,
   };
   const room = getUserRoomName(payload.userId);
+  const roleRoom = getRoleRoomName(payload.role);
+  const roleUserRoom = getRoleUserRoomName(payload.role, payload.userId);
 
-  if (!room) {
+  if (!room && !roleRoom && !roleUserRoom) {
     io.emit('notification:changed', payload);
     io.emit(`notification:${normalizedAction}`, payload);
     return;
   }
 
-  io.to(room).emit('notification:changed', payload);
-  io.to(room).emit(`notification:${normalizedAction}`, payload);
+  if (room) {
+    io.to(room).emit('notification:changed', payload);
+    io.to(room).emit(`notification:${normalizedAction}`, payload);
+  }
+
+  if (roleRoom) {
+    io.to(roleRoom).emit('notification:changed', payload);
+    io.to(roleRoom).emit(`notification:${normalizedAction}`, payload);
+  }
+
+  if (roleUserRoom) {
+    io.to(roleUserRoom).emit('notification:changed', payload);
+    io.to(roleUserRoom).emit(`notification:${normalizedAction}`, payload);
+  }
 };
 
 module.exports = {

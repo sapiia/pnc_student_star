@@ -1,34 +1,54 @@
 import { useNavigate } from 'react-router-dom';
+
 import { 
+
   BarChart3, 
+
   TrendingUp, 
   UserCheck, 
+
   Download, 
   ArrowUpRight,
+
   ArrowDownRight,
+
   Target,
   Loader2
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+
 import { 
+
   ResponsiveContainer, 
+
   BarChart, 
+
   Bar, 
+
   XAxis, 
+
   YAxis, 
+
   CartesianGrid, 
+
   Tooltip, 
   LineChart, 
+
   Line, 
+
   PieChart, 
+
   Pie, 
   Cell
 } from 'recharts';
+
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
+
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import RadarChart from '../../components/ui/RadarChart';
 import { cn } from '../../lib/utils';
+
 import { CRITERIA } from '../../constants';
 
 type StudentRecord = {
@@ -406,24 +426,45 @@ export default function AdminReportsPage() {
   }, [evaluations, students]);
 
   const teacherQuarterOptions = useMemo(() => {
-    const quarters = new Set<string>();
-    feedbacks.forEach((feedback) => {
-      const evalId = Number(feedback.evaluation_id || 0);
-      if (!evalId) return;
-      const evalRecord = evaluations.find((evaluation) => Number(evaluation.id) === evalId);
-      if (!evalRecord) return;
-      const period = parsePeriodParts(evalRecord.period);
+    const periods = new Map<string, { year: number; quarter: number }>();
+    evaluations.forEach((evaluation) => {
+      let period = parsePeriodParts(evaluation.period);
+      if (!period) {
+        const dateValue = evaluation.submitted_at || evaluation.created_at;
+        if (dateValue) {
+          const date = new Date(dateValue);
+          if (!Number.isNaN(date.getTime())) {
+            const year = date.getUTCFullYear();
+            const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+            period = { year, quarter };
+          }
+        }
+      }
       if (!period) return;
-      quarters.add(formatPeriodLabel(period.year, period.quarter));
+      const key = `${period.year}-Q${period.quarter}`;
+      periods.set(key, period);
     });
-    return Array.from(quarters).sort((a, b) => {
-      const [qa, ya] = a.split(' ');
-      const [qb, yb] = b.split(' ');
-      const yearDiff = Number(ya) - Number(yb);
-      if (yearDiff !== 0) return yearDiff;
-      return Number(qa.replace('Q', '')) - Number(qb.replace('Q', ''));
+
+    const entries = Array.from(periods.values()).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.quarter - b.quarter;
     });
-  }, [evaluations, feedbacks]);
+
+    if (entries.length === 0) {
+      const year = new Date().getFullYear();
+      return [1, 2, 3, 4].map((q) => formatPeriodLabel(year, q));
+    }
+
+    const minYear = entries[0].year;
+    const maxYear = entries[entries.length - 1].year;
+    const allOptions: string[] = [];
+    for (let year = minYear; year <= maxYear; year += 1) {
+      for (let quarter = 1; quarter <= 4; quarter += 1) {
+        allOptions.push(formatPeriodLabel(year, quarter));
+      }
+    }
+    return allOptions;
+  }, [evaluations]);
 
   const teacherPerformance = useMemo(() => {
     const filteredFeedbacks = selectedTeacherQuarter === 'All'
@@ -521,23 +562,8 @@ export default function AdminReportsPage() {
     const studentIds = new Set(students.map((student) => student.id));
     const studentEvaluations = evaluations.filter((evaluation) => studentIds.has(Number(evaluation.user_id)));
 
-    const buckets = new Map<string, { total: number; count: number; year: number; quarter: number }>();
+    const buckets = new Map<string, { total: number; count: number; year: number; quarter: number; studentIds: Set<number> }>();
     studentEvaluations.forEach((evaluation) => {
-      let value = Number(evaluation.average_score || 0);
-      if (activeCriterionKey !== 'overall') {
-        const responses = Array.isArray(evaluation.responses) ? evaluation.responses : [];
-        const normalizedActiveKey = toCriterionKey(activeCriterionKey);
-        const matched = responses.find((response) => {
-          const keyCandidate = toCriterionKey(String(response.criterion_key || ''));
-          const nameCandidate = toCriterionKey(String(response.criterion_name || ''));
-          return keyCandidate === normalizedActiveKey || nameCandidate === normalizedActiveKey;
-        });
-        if (!matched) {
-          return;
-        }
-        value = Number(matched.star_value || 0);
-      }
-
       let period = parsePeriodParts(evaluation.period);
       if (!period) {
         const dateValue = evaluation.submitted_at || evaluation.created_at;
@@ -552,9 +578,27 @@ export default function AdminReportsPage() {
       }
       if (!period) return;
       const key = `${period.year}-Q${period.quarter}`;
-      const entry = buckets.get(key) || { total: 0, count: 0, year: period.year, quarter: period.quarter };
-      entry.total += value;
-      entry.count += 1;
+      const entry = buckets.get(key) || { total: 0, count: 0, year: period.year, quarter: period.quarter, studentIds: new Set<number>() };
+      entry.studentIds.add(Number(evaluation.user_id));
+      
+      let value = Number(evaluation.average_score || 0);
+      if (activeCriterionKey !== 'overall') {
+        const responses = Array.isArray(evaluation.responses) ? evaluation.responses : [];
+        const normalizedActiveKey = toCriterionKey(activeCriterionKey);
+        const matched = responses.find((response) => {
+          const keyCandidate = toCriterionKey(String(response.criterion_key || ''));
+          const nameCandidate = toCriterionKey(String(response.criterion_name || ''));
+          return keyCandidate === normalizedActiveKey || nameCandidate === normalizedActiveKey;
+        });
+        if (matched) {
+          value = Number(matched.star_value || 0);
+          entry.total += value;
+          entry.count += 1;
+        }
+      } else {
+        entry.total += value;
+        entry.count += 1;
+      }
       buckets.set(key, entry);
     });
 
@@ -564,34 +608,14 @@ export default function AdminReportsPage() {
     });
 
     if (periods.length === 0) {
-      return [
-        { label: 'Q1 2025', studentAvg: 3.8 },
-        { label: 'Q2 2025', studentAvg: 4.0 },
-        { label: 'Q3 2025', studentAvg: 4.2 },
-        { label: 'Q4 2025', studentAvg: 4.1 },
-        { label: 'Q1 2026', studentAvg: 4.3 }
-      ];
+      return [];
     }
 
-    const years = periods.map((p) => p.year);
-    const minYear = Math.min(...years);
-    const maxYear = Math.max(...years);
-
-    const filled: Array<{ label: string; studentAvg: number }> = [];
-    for (let year = minYear; year <= maxYear; year += 1) {
-      for (let quarter = 1; quarter <= 4; quarter += 1) {
-        const key = `${year}-Q${quarter}`;
-        const entry = buckets.get(key);
-        filled.push({
-          label: formatPeriodLabel(year, quarter),
-          studentAvg: entry && entry.count > 0
-            ? Number((entry.total / entry.count).toFixed(2))
-            : 0
-        });
-      }
-    }
-
-    return filled.slice(-12);
+    return periods.map((entry) => ({
+      label: formatPeriodLabel(entry.year, entry.quarter),
+      studentAvg: entry.count > 0 ? Number((entry.total / entry.count).toFixed(1)) : 0,
+      completion: entry.studentIds.size
+    }));
   }, [evaluations, students, activeCriterionKey]);
 
   const activeCriterionColor = useMemo(() => {
@@ -653,36 +677,94 @@ export default function AdminReportsPage() {
     }
   };
 
+
+
+  // Handle PDF export
+
+  const handleExportPDF = () => {
+
+    const elementId = activeTab === 'overview' ? 'overview-content' : 
+
+                     activeTab === 'students' ? 'student-content' : 
+
+                     'teacher-content';
+
+    const filename = `${activeTab}-report-${new Date().toISOString().split('T')[0]}`;
+
+    
+
+    const success = exportToPDF(elementId, filename);
+
+    if (!success) {
+
+      alert('Failed to export PDF. Please try again.');
+
+    }
+
+  };
+
+
+
   return (
+
     <div className="flex h-screen overflow-hidden bg-slate-50">
+
       <AdminSidebar />
 
+
+
       <main className="flex-1 overflow-y-auto">
+
         <AdminMobileNav />
+
         {/* Header */}
+
         <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+
           <div className="flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-8 w-full md:w-auto">
+
             <div>
+
               <h1 className="text-lg md:text-xl font-black text-slate-900">Visual Reports</h1>
+
               <p className="text-xs text-slate-500 font-bold hidden md:block">Comprehensive performance analytics.</p>
+
             </div>
+
             
+
             <nav className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto w-full md:w-auto">
+
               {(['overview', 'students', 'teachers'] as const).map((tab) => (
+
                 <button
+
                   key={tab}
+
                   onClick={() => setActiveTab(tab)}
+
                   className={cn(
+
                     "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+
                     activeTab === tab ? "bg-white text-primary shadow-sm" : "text-slate-400 hover:text-slate-600"
+
                   )}
+
                 >
+
                   {tab}
+
                 </button>
+
               ))}
+
             </nav>
+
           </div>
+
           
+
           <div className="flex items-center gap-4">
             <button
               onClick={handleExport}
@@ -692,8 +774,12 @@ export default function AdminReportsPage() {
               {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               {exporting ? 'Exporting...' : 'Export Excel'}
             </button>
+
           </div>
+
         </header>
+
+
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8 pb-24 md:pb-8">
           {loading && (
@@ -727,46 +813,81 @@ export default function AdminReportsPage() {
             </div>
           )}
           <AnimatePresence mode="wait">
+
             {activeTab === 'students' ? (
+
               <motion.div 
+
                 key="student-reports"
+
+                id="student-content"
+
                 initial={{ opacity: 0, y: 20 }}
+
                 animate={{ opacity: 1, y: 0 }}
+
                 exit={{ opacity: 0, y: -20 }}
+
                 className="space-y-8"
+
               >
+
                 {/* Filters */}
+
                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap gap-6 items-end">
+
                   <div className="space-y-2">
+
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Generation</label>
+
                     <select 
+
                       value={selectedGen}
+
                       onChange={(e) => {
+
                         setSelectedGen(e.target.value);
+
                         setSelectedClass('All');
                         setSelectedGender('All');
                       }}
+
                       className="block w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
+
                     >
+
                       <option value="All">All Generations</option>
                       {generations.map(gen => <option key={gen} value={gen}>{gen}</option>)}
                     </select>
+
                   </div>
 
+
+
                   <div className="space-y-2">
+
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Class</label>
+
                     <select 
                       value={selectedClass}
+
                       onChange={(e) => {
+
                         setSelectedClass(e.target.value);
                         setSelectedGender('All');
                       }}
+
                       className="block w-full md:w-48 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+
                     >
+
                       <option value="All">All Classes</option>
                       {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
+
                   </div>
+
+
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gender</label>
@@ -780,6 +901,7 @@ export default function AdminReportsPage() {
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </select>
+
                   </div>
 
                   <div className="space-y-2">
@@ -797,50 +919,87 @@ export default function AdminReportsPage() {
                   </div>
 
                   <button 
+
                     onClick={() => {
+
                       setSelectedGen('All');
+
                       setSelectedClass('All');
                       setSelectedGender('All');
                       setSelectedLevel('All');
                     }}
+
                     className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-rose-500 transition-colors"
+
                   >
+
                     Reset Filters
+
                   </button>
+
                 </div>
+
+
 
                 {/* Performance Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/40 via-white to-sky-50/30 pointer-events-none" />
+
+                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+
                     <div className="flex items-center justify-between mb-8">
+
                       <div>
+
                         <h3 className="text-lg font-black text-slate-900">
-                          {selectedGender !== 'All' ? `${selectedGender} Performance` : 
+
+                          {selectedStudentId !== 'All' ? 'Individual Performance' : 
+
                            selectedClass !== 'All' ? `Class ${selectedClass} Performance` :
+
                            selectedGen !== 'All' ? `${selectedGen} Performance` : 'Overall Student Performance'}
+
                         </h3>
+
                         <p className="text-xs text-slate-500 font-bold">Detailed breakdown by criteria</p>
+
                       </div>
-                      <div className="size-10 bg-gradient-to-br from-indigo-100 to-sky-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
+
+                      <div className="size-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+
                         <BarChart3 className="w-5 h-5" />
+
                       </div>
+
                     </div>
 
+
+
                     <div className="h-[400px] w-full">
+
                       <ResponsiveContainer width="100%" height="100%">
+
                         <BarChart data={currentReportData}>
+
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+
                           <XAxis 
+
                             dataKey="subject" 
+
                             axisLine={false} 
+
                             tickLine={false} 
+
                             tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 600 }}
+
                           />
                           <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, ratingScale]} />
                           <Tooltip 
+
                             cursor={{ fill: '#f8fafc' }}
+
                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+
                           />
                           <Bar dataKey="score" radius={[10, 10, 0, 0]} barSize={44}>
                             {currentReportData.map((entry) => (
@@ -848,8 +1007,11 @@ export default function AdminReportsPage() {
                             ))}
                           </Bar>
                         </BarChart>
+
                       </ResponsiveContainer>
+
                     </div>
+
                   </div>
 
                   <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
@@ -877,20 +1039,35 @@ export default function AdminReportsPage() {
                           </p>
                         </div>
                       </div>
+
                     </div>
+
                   </div>
+
                 </div>
+
               </motion.div>
+
             ) : activeTab === 'teachers' ? (
+
               <motion.div 
+
                 key="teacher-reports"
+
+                id="teacher-content"
+
                 initial={{ opacity: 0, y: 20 }}
+
                 animate={{ opacity: 1, y: 0 }}
+
                 exit={{ opacity: 0, y: -20 }}
+
                 className="space-y-8"
+
               >
                 {/* Teacher reporting content */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
                   <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
                       <h3 className="text-lg font-black text-slate-900">Evaluation Status</h3>
@@ -909,31 +1086,48 @@ export default function AdminReportsPage() {
                       </div>
                     </div>
                     <div className="h-[250px] w-full">
+
                       <ResponsiveContainer width="100%" height="100%">
+
                         <PieChart>
+
                           <Pie
                             data={feedbackStatusData.data}
                             cx="50%"
+
                             cy="50%"
+
                             innerRadius={60}
+
                             outerRadius={80}
+
                             paddingAngle={8}
+
                             dataKey="value"
+
                           >
                             {feedbackStatusData.data.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
+
                             ))}
+
                           </Pie>
+
                           <Tooltip />
+
                         </PieChart>
+
                       </ResponsiveContainer>
+
                     </div>
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Students With Feedback</p>
                       <p className="text-2xl font-black text-slate-900">{feedbackStatusData.completed}</p>
                     </div>
                   </div>
+
                   
+
                   <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-8">
                       <h3 className="text-lg font-black text-slate-900">Top Performing Teachers</h3>
@@ -945,9 +1139,13 @@ export default function AdminReportsPage() {
                       {teacherPerformance.map((teacher, idx) => (
                         <div key={teacher.id} className="flex items-center justify-between group">
                           <div className="flex items-center gap-4">
+
                             <div className="size-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-lg group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+
                               {idx + 1}
+
                             </div>
+
                             <div>
                               <div className="flex items-center gap-3">
                                 <div className="size-10 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
@@ -963,18 +1161,25 @@ export default function AdminReportsPage() {
                                 </div>
                               </div>
                             </div>
+
                           </div>
+
                           <div className="flex items-center gap-8">
+
                             <div className="text-right">
                               <p className="text-sm font-black text-slate-900">{teacher.avgScore.toFixed(1)}</p>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg Score</p>
                             </div>
+
                             <div className="text-right">
                               <p className="text-sm font-black text-slate-900">{teacher.studentCount}</p>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students</p>
                             </div>
+
                           </div>
+
                         </div>
+
                       ))}
                       {teacherPerformance.length === 0 && (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-[11px] font-black uppercase tracking-widest text-slate-400">
@@ -982,29 +1187,55 @@ export default function AdminReportsPage() {
                         </div>
                       )}
                     </div>
+
                   </div>
+
                 </div>
+
               </motion.div>
+
             ) : (
+
               <motion.div 
+
                 key="overview-reports"
+
+                id="overview-content"
+
                 initial={{ opacity: 0, y: 20 }}
+
                 animate={{ opacity: 1, y: 0 }}
+
                 exit={{ opacity: 0, y: -20 }}
+
                 className="space-y-8"
+
               >
-                {/* Overview Stats (from previous version) */}
+
+                {/* Overview Stats */}
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+
                     <div className="flex items-center justify-between mb-4">
+
                       <div className="size-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+
                         <TrendingUp className="w-5 h-5" />
+
                       </div>
+
                       <span className="text-emerald-600 text-[10px] font-black flex items-center gap-1">
+
                         <ArrowUpRight className="w-3 h-3" />
+
                         +4.2%
+
                       </span>
+
                     </div>
+
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Avg Student Score</p>
                     <p className="text-3xl font-black text-slate-900">
                       {overallStats.avgScore || 0}
@@ -1012,39 +1243,70 @@ export default function AdminReportsPage() {
                     </p>
                   </div>
 
+
+
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+
                     <div className="flex items-center justify-between mb-4">
+
                       <div className="size-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+
                         <UserCheck className="w-5 h-5" />
+
                       </div>
+
                       <span className="text-emerald-600 text-[10px] font-black flex items-center gap-1">
+
                         <ArrowUpRight className="w-3 h-3" />
+
                         +12%
+
                       </span>
+
                     </div>
+
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Teacher Completion</p>
                     <p className="text-3xl font-black text-slate-900">{overallStats.completionRate}%</p>
                   </div>
 
+
+
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+
                     <div className="flex items-center justify-between mb-4">
+
                       <div className="size-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+
                         <Target className="w-5 h-5" />
+
                       </div>
+
                       <span className="text-rose-600 text-[10px] font-black flex items-center gap-1">
+
                         <ArrowDownRight className="w-3 h-3" />
+
                         -2.1%
+
                       </span>
+
                     </div>
+
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Pending Evaluations</p>
                     <p className="text-3xl font-black text-slate-900">{overallStats.pendingEvaluations}</p>
                   </div>
+
                 </div>
 
+
+
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+
                   <div className="flex items-center justify-between mb-8">
+
                     <h3 className="text-lg font-black text-slate-900">Performance Trend</h3>
+
                     <div className="flex gap-4">
+
                       <div className="flex items-center gap-2">
                         <div className="size-3 rounded-full" style={{ backgroundColor: activeCriterionColor }} />
                         <span className="text-[10px] font-bold text-slate-500 uppercase">
@@ -1053,7 +1315,12 @@ export default function AdminReportsPage() {
                             : (criteriaNav.find((criterion) => criterion.key === activeCriterionKey)?.label || 'Criteria Avg')}
                         </span>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <div className="size-3 rounded-full bg-emerald-400" />
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Completion</span>
+                      </div>
                     </div>
+
                   </div>
 
                   <div className="mb-6 overflow-x-auto">
@@ -1094,11 +1361,20 @@ export default function AdminReportsPage() {
                   </div>
 
                   <div className="h-[400px] w-full">
+
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={performanceTrendData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, ratingScale]} />
+                        <YAxis
+                          yAxisId="completion"
+                          orientation="right"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#94a3b8', fontSize: 12 }}
+                          domain={[0, Math.max(1, students.length)]}
+                        />
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none' }} />
                         <Line
                           type="monotone"
@@ -1107,16 +1383,38 @@ export default function AdminReportsPage() {
                           strokeWidth={4}
                           dot={{ r: 6, fill: '#fff', stroke: activeCriterionColor, strokeWidth: 3 }}
                         />
+                        <Line
+                          type="monotone"
+                          dataKey="completion"
+                          yAxisId="completion"
+                          stroke="#10b981"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={false}
+                        />
                       </LineChart>
+
                     </ResponsiveContainer>
+
                   </div>
+
                 </div>
+
               </motion.div>
+
             )}
+
           </AnimatePresence>
+
         </div>
+
       </main>
+
     </div>
+
   );
+
 }
+
+
 
