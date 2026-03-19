@@ -11,6 +11,7 @@ import TeacherMobileNav from '../../components/common/TeacherMobileNav';
 
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useEffect, useRef, useState } from 'react';
+import { API_BASE_URL, DEFAULT_AVATAR } from '../../lib/teacher/utils';
 
 type AuthUser = {
   id: number;
@@ -31,8 +32,6 @@ type ProfilePayload = {
   error?: string;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-
 export default function TeacherProfilePage() {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
@@ -51,7 +50,7 @@ export default function TeacherProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
+    photoUrl: DEFAULT_AVATAR,
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -259,6 +258,36 @@ export default function TeacherProfilePage() {
     }
   };
 
+  const renderTopBar = () => (
+    <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
+      <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500 overflow-hidden">
+        <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary transition-colors shrink-0">Dashboard</button>
+        <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
+        <span className="font-semibold text-slate-900 truncate">Settings</span>
+      </nav>
+      <div className="flex items-center gap-2 md:gap-4 ml-2">
+        <button className="hidden sm:block p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0">
+          <Bell className="w-5 h-5" />
+          <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="bg-primary text-white px-4 md:px-6 py-1.5 md:py-2 rounded-xl font-bold text-[10px] md:text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70 shrink-0"
+        >
+          {isSaving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </header>
+  );
+
+  const renderPageHeader = () => (
+    <header className="mb-6 md:mb-8">
+      <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
+      <p className="text-xs md:text-base text-slate-500 mt-1 md:mt-2">Update profile and stay secure.</p>
+    </header>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
@@ -280,34 +309,11 @@ export default function TeacherProfilePage() {
           )}
         </AnimatePresence>
 
-        {/* Header */}
-        <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
-          <nav className="flex items-center gap-2 text-[10px] md:text-sm text-slate-500 overflow-hidden">
-            <button onClick={() => navigate('/teacher/dashboard')} className="hover:text-primary transition-colors shrink-0">Dashboard</button>
-            <ChevronRight className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
-            <span className="font-semibold text-slate-900 truncate">Settings</span>
-          </nav>
-          <div className="flex items-center gap-2 md:gap-4 ml-2">
-            <button className="hidden sm:block p-2 text-slate-500 hover:bg-slate-100 rounded-full relative shrink-0">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
-            </button>
-            <button 
-              onClick={handleSave}
-              disabled={isSaving}
-              className="bg-primary text-white px-4 md:px-6 py-1.5 md:py-2 rounded-xl font-bold text-[10px] md:text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-70 shrink-0"
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-4xl mx-auto space-y-8 pb-20">
-            <header className="mb-6 md:mb-8">
-              <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
-              <p className="text-xs md:text-base text-slate-500 mt-1 md:mt-2">Update profile and stay secure.</p>
-            </header>
+            {renderPageHeader()}
 
             {errorMessage && (
               <div className="bg-rose-50 border border-rose-100 rounded-2xl px-4 py-3 text-sm font-bold text-rose-700">
@@ -330,7 +336,7 @@ export default function TeacherProfilePage() {
                 <div className="p-4 md:p-8 flex flex-col lg:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner">
-                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
+                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : DEFAULT_AVATAR} alt={profileForm.fullName || 'Teacher'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}

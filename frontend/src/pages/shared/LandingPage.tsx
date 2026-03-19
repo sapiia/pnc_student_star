@@ -83,13 +83,13 @@ export default function LandingPage() {
         <div className="flex items-center gap-6">
           <button 
             onClick={() => setShowSupportModal(true)}
-            className="hidden md:block text-sm font-medium text-slate-600 hover:text-primary transition-colors"
+            className="hidden md:block text-sm font-medium text-slate-600 hover:text-primary transition-colors pressable"
           >
             Contact Support
           </button>
           <button 
             onClick={() => navigate('/register')}
-            className="bg-primary/10 text-primary px-5 py-2 rounded-lg text-sm font-semibold hover:bg-primary/20 transition-all"
+            className="bg-primary/10 text-primary px-5 py-2 rounded-lg text-sm font-semibold hover:bg-primary/20 transition-all pressable"
           >
             Register
           </button>
@@ -144,7 +144,7 @@ export default function LandingPage() {
             transition={{ ...smoothTransition, delay: 0.15 }}
             className="relative flex justify-center lg:justify-end"
           >
-            <div className="w-full max-w-[440px] bg-white p-8 lg:p-10 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100 backdrop-blur-xl">
+            <div className="w-full max-w-[440px] bg-white p-8 lg:p-10 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-100 backdrop-blur-xl hover-lift">
               <div className="mb-8">
                 <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>
                 <p className="text-slate-500 text-sm mt-1">Please enter your details to access your dashboard.</p>
@@ -189,7 +189,7 @@ export default function LandingPage() {
                 <button 
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70"
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70 pressable"
                 >
                   {isLoggingIn ? 'Logging in...' : 'Login to Account'}
                 </button>
@@ -209,7 +209,7 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="px-6 lg:px-20 py-12 border-t border-slate-100 bg-white">
+      <footer className="px-6 lg:px-20 py-12 border-t border-slate-100 bg-white" data-reveal="fade-up">
         <div className="flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-2 items-center md:items-start">
             <BrandLogo className="gap-2" markClassName="size-8" titleClassName="text-base font-bold" />
@@ -220,7 +220,7 @@ export default function LandingPage() {
             <a className="text-sm font-medium text-slate-500 hover:text-primary transition-colors" href="#">Terms of Service</a>
             <button 
               onClick={() => setShowSupportModal(true)}
-              className="text-sm font-medium text-slate-500 hover:text-primary transition-colors"
+              className="text-sm font-medium text-slate-500 hover:text-primary transition-colors pressable"
             >
               Help Center
             </button>
@@ -260,7 +260,7 @@ export default function LandingPage() {
                   </div>
                   <button 
                     onClick={() => setShowSupportModal(false)}
-                    className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
+                    className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors pressable"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -330,7 +330,7 @@ export default function LandingPage() {
                         <button 
                           disabled={isSubmitting}
                           type="submit"
-                          className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-70"
+                          className="w-full bg-primary text-white font-black py-4 rounded-2xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-70 pressable"
                         >
                           {isSubmitting ? (
                             <div className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

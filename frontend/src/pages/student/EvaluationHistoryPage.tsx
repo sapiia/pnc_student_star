@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -9,13 +9,15 @@ import {
   Settings,
   Star,
   TrendingUp,
-  Clock3
+  Clock3,
+  Pencil
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import {
   ResponsiveContainer,
   Area,
   AreaChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -44,6 +46,15 @@ type EvaluationRecord = {
   submitted_at: string;
   created_at: string;
   responses?: EvaluationResponse[];
+};
+
+type FeedbackRecord = {
+  id: number;
+  teacher_id: number;
+  student_id: number;
+  evaluation_id?: number | null;
+  evaluation_period?: string | null;
+  created_at?: string | null;
 };
 
 type HistoryItem = {
@@ -91,11 +102,16 @@ export default function EvaluationHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'highest' | 'lowest' | 'title'>('recent');
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
+  const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
   const [cycleDays, setCycleDays] = useState(90);
   const [isLoading, setIsLoading] = useState(true);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
+  const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
+  const [activeCriterionId, setActiveCriterionId] = useState<string>('overall');
+  const [canEditAfterSubmit, setCanEditAfterSubmit] = useState(false);
 
   useEffect(() => {
     const loadEvaluationHistory = async () => {
@@ -121,21 +137,27 @@ export default function EvaluationHistoryPage() {
           return;
         }
 
-        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse] = await Promise.all([
+        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse, editPermissionResponse, feedbackResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${userId}`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
           fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
-          fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`),
+          fetch(`${API_BASE_URL}/feedbacks/student/${userId}`)
         ]);
 
         const userData = await userResponse.json().catch(() => ({}));
         const intervalData = await intervalResponse.json().catch(() => ({}));
         const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
         const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+        const editPermissionData = await editPermissionResponse.json().catch(() => ({}));
+        const feedbackData = await feedbackResponse.json().catch(() => ([]));
 
         const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
         const ratingScale = nextRatingScale;
         setGlobalRatingScale(nextRatingScale);
+        setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+        setCanEditAfterSubmit(!['false', '0'].includes(String(editPermissionData?.value || 'false').trim().toLowerCase()));
 
         const resolvedName =
           String(userData?.name || '').trim() ||
@@ -149,7 +171,13 @@ export default function EvaluationHistoryPage() {
         setStudentId(resolvedStudentId);
         setCycleDays(resolvedCycleDays);
 
-        const normalizedHistory = (Array.isArray(evaluationsData) ? evaluationsData : [])
+        const sortedEvaluations = (Array.isArray(evaluationsData) ? evaluationsData : [])
+          .sort((a: EvaluationRecord, b: EvaluationRecord) => new Date(String(b.submitted_at || b.created_at || '')).getTime() - new Date(String(a.submitted_at || a.created_at || '')).getTime());
+
+        setEvaluations(sortedEvaluations);
+        setFeedbacks(Array.isArray(feedbackData) ? feedbackData : []);
+
+        const normalizedHistory = sortedEvaluations
           .map((evaluation: EvaluationRecord) => {
             const completedDate = String(evaluation.submitted_at || evaluation.created_at || '').trim();
             const nextDueDate = buildNextDueDate(completedDate, resolvedCycleDays);
@@ -166,8 +194,6 @@ export default function EvaluationHistoryPage() {
               ratingScale: nextRatingScale,
             };
           })
-          .sort((a, b) => new Date(b.completedDate).getTime() - new Date(a.completedDate).getTime());
-
         setHistoryItems(normalizedHistory);
       } catch {
         setHistoryItems([]);
@@ -210,16 +236,123 @@ export default function EvaluationHistoryPage() {
   }, [historyItems, searchQuery, sortBy]);
 
   const trendData = useMemo(() => {
+    const feedbackByPeriod = new Map<string, Set<number>>();
+    feedbacks.forEach((feedback) => {
+      const rawPeriod = String(feedback.evaluation_period || '').trim();
+      let label = '';
+      if (rawPeriod) {
+        label = toPeriodTitle(rawPeriod).replace(' Evaluation', '');
+      } else if (feedback.created_at) {
+        const date = new Date(String(feedback.created_at || ''));
+        if (!Number.isNaN(date.getTime())) {
+          const quarter = Math.floor(date.getMonth() / 3) + 1;
+          label = `Q${quarter} ${date.getFullYear()}`;
+        }
+      }
+      if (!label) return;
+      const teacherId = Number(feedback.teacher_id);
+      if (!Number.isInteger(teacherId) || teacherId <= 0) return;
+      const set = feedbackByPeriod.get(label) || new Set<number>();
+      set.add(teacherId);
+      feedbackByPeriod.set(label, set);
+    });
+
     const items = [...historyItems].reverse();
     return items.map((item) => ({
       name: item.title.replace(' Evaluation', ''),
       score: Number(item.rating.toFixed(2)),
+      feedbackCount: feedbackByPeriod.get(item.title.replace(' Evaluation', ''))?.size || 0,
     }));
-  }, [historyItems]);
+  }, [feedbacks, historyItems]);
+
+  const maxFeedbackCount = useMemo(() => {
+    if (trendData.length === 0) return 1;
+    return Math.max(1, ...trendData.map((entry) => Number(entry.feedbackCount || 0)));
+  }, [trendData]);
+
+  const latestEvaluationRecord = evaluations[0];
+  const evaluationSeries = useMemo(() => {
+    const ordered = [...evaluations].sort((a, b) =>
+      new Date(String(a.submitted_at || a.created_at || '')).getTime() -
+      new Date(String(b.submitted_at || b.created_at || '')).getTime()
+    );
+    return ordered.map((evaluation) => ({
+      evaluation,
+      label: toPeriodTitle(evaluation.period).replace(' Evaluation', '')
+    }));
+  }, [evaluations]);
+
+  const criteriaNav = useMemo(() => {
+    const activeCriteria = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    return activeCriteria.map((criterion: any, idx: number) => ({
+      id: String(criterion.id || `criterion-${idx}`),
+      name: String(criterion.name || `Criterion ${idx + 1}`)
+    }));
+  }, [globalCriteria]);
+
+  useEffect(() => {
+    if (activeCriterionId === 'overall') return;
+    const exists = criteriaNav.some((criterion) => criterion.id === activeCriterionId);
+    if (!exists) setActiveCriterionId('overall');
+  }, [activeCriterionId, criteriaNav]);
+
+  const activeCriterion = criteriaNav.find((criterion) => criterion.id === activeCriterionId) || null;
+  const activeCriterionProgress = useMemo(() => {
+    if (!activeCriterion) return [];
+    return evaluationSeries.map(({ evaluation, label }) => {
+      const response = (evaluation.responses || []).find((r: EvaluationResponse) =>
+        String(r.criterion_key || '').trim() === String(activeCriterion.id || '').trim() ||
+        String(r.criterion_name || '').trim().toLowerCase() === String(activeCriterion.name || '').trim().toLowerCase()
+      );
+      return {
+        name: label,
+        score: response ? Number(response.star_value || 0) : 0
+      };
+    });
+  }, [activeCriterion, evaluationSeries]);
+
+  const activeTrendData = useMemo(() => {
+    if (activeCriterionId === 'overall') return trendData;
+    return activeCriterionProgress;
+  }, [activeCriterionId, activeCriterionProgress, trendData]);
 
   const highestRating = historyItems.reduce((max, item) => Math.max(max, item.rating), 0);
   const latestEvaluation = historyItems[0];
   const nextDueLabel = latestEvaluation?.nextDueLabel || 'No evaluation yet';
+  const renderTopBar = () => (
+    <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
+      <div className="flex-1 max-w-xl relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search evaluations..."
+          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+        />
+      </div>
+      <div className="flex items-center justify-end gap-3 md:gap-4">
+        <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl relative border border-transparent hover:border-slate-200 transition-all">
+          <Bell className="w-5 h-5" />
+          <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
+        </button>
+      </div>
+    </header>
+  );
+
+  const renderPageHeader = () => (
+    <div className="mb-8">
+      <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">My Evaluation History</h1>
+      <p className="text-sm md:text-base text-slate-500 mt-2">
+        Review your submitted evaluations and upcoming schedule.
+      </p>
+      {studentId ? (
+        <div className="flex items-center gap-2 mt-4 px-3 py-1.5 bg-slate-100 rounded-lg w-fit">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{studentName} • {studentId}</span>
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
@@ -227,39 +360,11 @@ export default function EvaluationHistoryPage() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <StudentMobileNav />
-        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
-          <div className="flex-1 max-w-xl relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search evaluations..."
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-            />
-          </div>
-          <div className="flex items-center justify-end gap-3 md:gap-4">
-            <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl relative border border-transparent hover:border-slate-200 transition-all">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full ring-2 ring-white" />
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-7xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">My Evaluation History</h1>
-              <p className="text-sm md:text-base text-slate-500 mt-2">
-                Review your submitted evaluations and upcoming schedule.
-              </p>
-              {studentId ? (
-                <div className="flex items-center gap-2 mt-4 px-3 py-1.5 bg-slate-100 rounded-lg w-fit">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{studentName} • {studentId}</span>
-                </div>
-              ) : null}
-            </div>
-
+            {renderPageHeader()}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-8">
                 <motion.div
@@ -267,14 +372,38 @@ export default function EvaluationHistoryPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200"
                 >
-                  <div className="flex items-center justify-between mb-8">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900">Performance Trend</h3>
                       <p className="text-xs text-slate-500 mt-1">Average score across your submitted evaluations</p>
                     </div>
-                    <span className="px-3 py-1 bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-widest rounded-full border border-primary/10">
-                      Saved History
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCriterionId('overall')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          activeCriterionId === 'overall'
+                            ? 'bg-white text-primary shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        Overall
+                      </button>
+                      {criteriaNav.map((criterion) => (
+                        <button
+                          key={criterion.id}
+                          type="button"
+                          onClick={() => setActiveCriterionId(criterion.id)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                            activeCriterionId === criterion.id
+                              ? 'bg-white text-primary shadow-sm'
+                              : 'text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          {criterion.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex items-baseline gap-4 mb-8">
@@ -288,40 +417,59 @@ export default function EvaluationHistoryPage() {
                     </div>
                   </div>
 
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={trendData}>
-                        <defs>
-                          <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.12} />
-                            <stop offset="95%" stopColor="#5d5fef" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="name"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: '#94a3b8', fontSize: 10 }}
-                          dy={10}
-                        />
-                        <YAxis hide domain={[0, globalRatingScale]} />
-                        <Tooltip 
-                          contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} 
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="score"
-                          stroke="#5d5fef"
-                          strokeWidth={4}
-                          fillOpacity={1}
-                          fill="url(#colorScore)"
-                          dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }}
-                          activeDot={{ r: 8, fill: '#5d5fef', stroke: '#fff', strokeWidth: 3 }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {activeTrendData.length === 0 ? (
+                    <div className="h-[200px] flex items-center justify-center text-sm font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
+                      No evaluation data available yet.
+                    </div>
+                  ) : (
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={activeTrendData}>
+                          <defs>
+                            <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.12} />
+                              <stop offset="95%" stopColor="#5d5fef" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis
+                            dataKey="name"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#94a3b8', fontSize: 10 }}
+                            dy={10}
+                          />
+                          <YAxis yAxisId="score" hide domain={[0, globalRatingScale]} />
+                          <YAxis yAxisId="feedback" hide domain={[0, maxFeedbackCount]} />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} 
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="score"
+                            yAxisId="score"
+                            stroke="#5d5fef"
+                            strokeWidth={4}
+                            fillOpacity={1}
+                            fill="url(#colorScore)"
+                            dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }}
+                            activeDot={{ r: 8, fill: '#5d5fef', stroke: '#fff', strokeWidth: 3 }}
+                          />
+                          {activeCriterionId === 'overall' && (
+                            <Line
+                              type="monotone"
+                              dataKey="feedbackCount"
+                              yAxisId="feedback"
+                              stroke="#10b981"
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 7, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                            />
+                          )}
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
                 </motion.div>
 
                 <div className="space-y-6">
@@ -397,6 +545,17 @@ export default function EvaluationHistoryPage() {
                               >
                                 View Full Report
                               </button>
+                              {canEditAfterSubmit && (
+                                <button
+                                  onClick={() => {
+                                    navigate(`/evaluate?edit=${evalItem.id}`);
+                                  }}
+                                  className="px-4 py-2 border border-slate-200 text-slate-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                  Edit
+                                </button>
+                              )}
                             </div>
                           </div>
                         </motion.div>
@@ -455,8 +614,11 @@ export default function EvaluationHistoryPage() {
           </div>
         </div>
       </main>
+
     </div>
   );
 }
+
+
 
 

@@ -9,6 +9,7 @@ import {
   Power,
   Minus,
   Plus,
+  Pencil,
   X,
   CheckCircle2
 } from 'lucide-react';
@@ -42,6 +43,19 @@ type UserRecord = {
   className?: string;
   major?: StudentMajor;
   gender?: Gender;
+};
+
+const formatPeriodLabel = (period: string) => {
+  const trimmed = String(period || '').trim();
+  const quarterMatch = trimmed.match(/^(\d{4})-Q([1-4])$/i);
+  if (quarterMatch) return `Q${quarterMatch[2]} ${quarterMatch[1]}`;
+  return trimmed || 'Evaluation';
+};
+
+const formatEvalDate = (value?: string) => {
+  const date = new Date(String(value || '').trim());
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
 
 type BulkInvitedUser = {
@@ -152,6 +166,22 @@ const toDisplayNameFromEmail = (email: string) => {
     .join(' ');
 };
 
+const splitNameParts = (fullName: string) => {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  };
+};
+
+const buildStudentClassLabel = (generation: string, major: string, className: string) => {
+  const gen = String(generation || '').trim();
+  if (!gen) return className || '';
+  const majorValue = String(major || '').trim();
+  const classValue = String(className || '').trim();
+  return `Gen ${gen}${majorValue ? ` - ${majorValue}` : ''}${classValue ? ` - Class ${classValue}` : ''}`;
+};
+
 const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
   const roleLower = (apiUser.role || '').toString().toLowerCase();
   const role: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
@@ -179,7 +209,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     ? Number(apiUser.is_registered || 0) === 0
     : (apiUser.registration_status || '').toString().toLowerCase() === 'pending'
       || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
-  const status: UserStatus = isDeleted ? 'Deleted' : isPending ? 'Pending' : isDisabled ? 'Inactive' : 'Active';
+  const status: UserStatus = isDeleted ? 'Deleted' : isDisabled ? 'Inactive' : isPending ? 'Pending' : 'Active';
   const classText = (apiUser.class || '').toString().trim();
   const group = role === 'Student'
     ? (classText || 'Pending Class Assignment')
@@ -209,15 +239,27 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
 export default function AdminUserManagementPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedProfileUser, setSelectedProfileUser] = useState<UserRecord | null>(null);
+  const [pendingProfileId, setPendingProfileId] = useState<number | null>(null);
+  const [pendingEditId, setPendingEditId] = useState<number | null>(null);
   const [profileEvaluations, setProfileEvaluations] = useState<any[]>([]);
+  const [selectedEvaluationId, setSelectedEvaluationId] = useState<number | null>(null);
+  const [isEvaluationListOpen, setIsEvaluationListOpen] = useState(false);
+  const [deletingEvaluationId, setDeletingEvaluationId] = useState<number | null>(null);
+  const [confirmDeleteEvaluation, setConfirmDeleteEvaluation] = useState<{
+    id: number;
+    title: string;
+    finishedAt: string;
+  } | null>(null);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [editStudentId, setEditStudentId] = useState('');
   const [editClassName, setEditClassName] = useState('');
   const [editGender, setEditGender] = useState<Gender | ''>('');
+  const [editGeneration, setEditGeneration] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'warning'>('success');
@@ -234,26 +276,56 @@ export default function AdminUserManagementPage() {
   const [bulkValidationErrorCount, setBulkValidationErrorCount] = useState(0);
   const [bulkExistingUsers, setBulkExistingUsers] = useState<BulkExistingUser[]>([]);
   const [isInviteFinished, setIsInviteFinished] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState(defaultNewUser);
   const [majorOptions, setMajorOptions] = useState<string[]>(DEFAULT_MAJOR_OPTIONS);
   const [customMajorDraft, setCustomMajorDraft] = useState('');
-  // Extract unique class options from student data based on selected generation
-  const classOptions = useMemo(() => {
+  const [customClassDraft, setCustomClassDraft] = useState('');
+  const [customClassOptions, setCustomClassOptions] = useState<string[]>([]);
+
+  const normalizeClassLabel = (value: string) =>
+    value
+      .toString()
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+
+  const extractClassLabel = (user: UserRecord) => {
+    if (user.className) return user.className.trim();
+    if (!user.group) return '';
+    const match = user.group.match(/Class\s+(.+)$/i);
+    return match ? match[1].trim() : '';
+  };
+
+  // Extract unique class options for filters based on selected generation
+  const classFilterOptions = useMemo(() => {
     const students = users.filter(u => u.role === 'Student');
     const filteredByGen = generationFilter === 'All Generations' 
       ? students 
       : students.filter(u => u.generation === generationFilter);
-    // Extract class from group string like "Gen 2026 - WEB DEV - Class WEB B" -> "WEB B"
-    // Use case-insensitive regex to handle inconsistent capitalization
     const uniqueClasses = Array.from(new Set(
-      filteredByGen.map(u => {
-        if (!u.group) return null;
-        const match = u.group.match(/Class\s+(.+)$/i);
-        return match ? match[1].trim() : null;
-      }).filter(Boolean)
+      filteredByGen.map(extractClassLabel).filter(Boolean).map(normalizeClassLabel)
     ));
     return uniqueClasses.sort();
   }, [users, generationFilter]);
+
+  // Invite modal class options based on invite generation + custom classes
+  const inviteClassOptions = useMemo(() => {
+    const students = users.filter(u => u.role === 'Student');
+    const filteredByGen = newUser.generation
+      ? students.filter(u => u.generation === newUser.generation)
+      : students;
+    const existing = filteredByGen
+      .map(extractClassLabel)
+      .filter(Boolean)
+      .map(normalizeClassLabel);
+    const custom = customClassOptions
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(normalizeClassLabel);
+    const merged = Array.from(new Set([...existing, ...custom]));
+    return merged.sort();
+  }, [users, newUser.generation, customClassOptions]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageDirection, setPageDirection] = useState(0);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -261,6 +333,22 @@ export default function AdminUserManagementPage() {
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('auth_user');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const userId = Number(parsed?.id);
+      if (Number.isInteger(userId) && userId > 0) {
+        setAuthUserId(userId);
+      }
+    } catch {
+      setAuthUserId(null);
+    }
+  }, []);
+
+  const isSelfUser = (userId?: number) =>
+    Number.isInteger(userId) && userId > 0 && authUserId != null && userId === authUserId;
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -296,19 +384,66 @@ export default function AdminUserManagementPage() {
   }, []);
 
   useEffect(() => {
-    const state = location.state as { openInvite?: boolean; prefillClass?: string; prefillGen?: string };
+    const state = location.state as {
+      openInvite?: boolean;
+      prefillClass?: string;
+      prefillGen?: string;
+      openProfileId?: number;
+      openEditId?: number;
+    };
+    let shouldClearState = false;
+
     if (state?.openInvite) {
       setIsModalOpen(true);
+      setEditingUserId(null);
       const prefillClass = state.prefillClass || '';
       setNewUser(prev => ({
         ...prev,
         className: prefillClass || prev.className,
         generation: state.prefillGen || prev.generation
       }));
+      shouldClearState = true;
+    }
+
+    if (typeof state?.openProfileId !== 'undefined') {
+      const parsedId = Number(state.openProfileId);
+      if (Number.isInteger(parsedId)) {
+        setPendingProfileId(parsedId);
+      }
+      shouldClearState = true;
+    }
+
+    if (typeof state?.openEditId !== 'undefined') {
+      const parsedId = Number(state.openEditId);
+      if (Number.isInteger(parsedId)) {
+        setPendingEditId(parsedId);
+      }
+      shouldClearState = true;
+    }
+
+    if (shouldClearState) {
       // Clear state so it doesn't reopen on refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
+
+  useEffect(() => {
+    if (!pendingProfileId) return;
+    const match = users.find((user) => user.id === pendingProfileId);
+    if (match) {
+      handleViewUser(match);
+      setPendingProfileId(null);
+    }
+  }, [pendingProfileId, users]);
+
+  useEffect(() => {
+    if (!pendingEditId) return;
+    const match = users.find((user) => user.id === pendingEditId);
+    if (match) {
+      openEditUser(match);
+      setPendingEditId(null);
+    }
+  }, [pendingEditId, users]);
 
   const filteredUsers = users.filter(user => {
     const normalizedQuery = searchQuery.toLowerCase();
@@ -316,6 +451,7 @@ export default function AdminUserManagementPage() {
       user.name.toLowerCase().includes(normalizedQuery) ||
       user.email.toLowerCase().includes(normalizedQuery) ||
       (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
+    const shouldHideDisabledStudent = user.role === 'Student' && user.status === 'Inactive';
     const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
     const matchesGender = genderFilter === 'All Genders' || 
       (genderFilter === 'Male' && user.gender === 'male') ||
@@ -324,7 +460,7 @@ export default function AdminUserManagementPage() {
       (user.role === 'Student' && user.generation === generationFilter);
     const matchesClass = classFilter === 'All Classes' || 
       (user.role === 'Student' && user.group?.toLowerCase().includes(`class ${classFilter}`.toLowerCase()));
-    return matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
+    return !shouldHideDisabledStudent && matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
@@ -348,8 +484,8 @@ export default function AdminUserManagementPage() {
     e.preventDefault();
     setFormError('');
 
-  const trimmedEmail = newUser.email.trim().toLowerCase();
-  const trimmedFirstName = newUser.firstName.trim();
+    const trimmedEmail = newUser.email.trim().toLowerCase();
+    const trimmedFirstName = newUser.firstName.trim();
     const trimmedLastName = newUser.lastName.trim();
     const trimmedClass = newUser.className.trim().toUpperCase();
     const trimmedGeneration = newUser.generation.trim();
@@ -385,7 +521,7 @@ export default function AdminUserManagementPage() {
       }
     }
 
-    if (users.some((u) => u.email.toLowerCase() === trimmedEmail)) {
+    if (users.some((u) => u.email.toLowerCase() === trimmedEmail && u.id !== editingUserId)) {
       setFormError('Email already exists.');
       return;
     }
@@ -408,13 +544,64 @@ export default function AdminUserManagementPage() {
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const group =
       newUser.role === 'Student'
-        ? `Gen ${trimmedGeneration}${trimmedMajor ? ` - ${trimmedMajor}` : ''}${trimmedClass ? ` - Class ${trimmedClass}` : ''}`
+        ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
         : newUser.role === 'Teacher'
           ? 'Teaching Staff'
           : 'Administration';
 
     try {
       const roleValue = newUser.role.toLowerCase();
+      if (editingUserId) {
+        const response = await fetch(`${API_BASE_URL}/users/${editingUserId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: resolvedName,
+            email: trimmedEmail,
+            gender: newUser.gender,
+            role: roleValue,
+            class_name: roleValue === 'student'
+              ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
+              : (newUser.className || null),
+            student_id: roleValue === 'student' ? trimmedStudentId : null,
+            generation: roleValue === 'student' ? trimmedGeneration : null,
+            major: roleValue === 'student' ? trimmedMajor : null,
+            className: roleValue === 'student' ? trimmedClass : (newUser.className || null)
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          setFormError(data.error || 'Failed to update user.');
+          return;
+        }
+
+        setUsers((prev) => prev.map((u) => (
+          u.id === editingUserId
+            ? {
+                ...u,
+                name: resolvedName,
+                email: trimmedEmail,
+                role: newUser.role,
+                gender: newUser.gender,
+                generation: roleValue === 'student' ? trimmedGeneration : undefined,
+                major: roleValue === 'student' ? trimmedMajor : undefined,
+                className: roleValue === 'student' ? trimmedClass : undefined,
+                studentId: roleValue === 'student' ? trimmedStudentId : undefined,
+                group
+              }
+            : u
+        )));
+
+        setSuccessMessage(data.message || 'User updated successfully.');
+        setToastType('success');
+        setShowSuccess(true);
+        setIsModalOpen(false);
+        setEditingUserId(null);
+        setNewUser(defaultNewUser);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/users/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -461,10 +648,48 @@ export default function AdminUserManagementPage() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      setFormError('Failed to send invitation email.');
+      setFormError(editingUserId ? 'Failed to update user.' : 'Failed to send invitation email.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const openEditUser = (user: UserRecord) => {
+    const { firstName, lastName } = splitNameParts(user.name);
+    const classLabel = normalizeClassLabel(
+      extractClassLabel(user)
+        || user.className
+        || (user.role !== 'Student' ? user.group : '')
+        || ''
+    );
+    const nextMajor = user.major ? user.major.toUpperCase() : defaultNewUser.major;
+
+    if (nextMajor && !majorOptions.includes(nextMajor)) {
+      setMajorOptions((prev) => [...prev, nextMajor]);
+    }
+    if (classLabel && !customClassOptions.includes(classLabel)) {
+      setCustomClassOptions((prev) => [...prev, classLabel]);
+    }
+
+    setNewUser({
+      firstName,
+      lastName,
+      email: user.email || '',
+      role: user.role,
+      generation: user.generation || defaultNewUser.generation,
+      major: nextMajor,
+      className: classLabel,
+      studentId: user.studentId || '',
+      gender: user.gender || defaultNewUser.gender,
+      status: user.status
+    });
+    setEditingUserId(user.id);
+    setIsInviteFinished(false);
+    setFormError('');
+    setIsModalOpen(true);
+    setBulkExistingUsers([]);
+    setBulkValidatedRows([]);
+    setBulkValidationErrorCount(0);
   };
 
   const handleViewUser = async (user: UserRecord) => {
@@ -472,15 +697,20 @@ export default function AdminUserManagementPage() {
     setEditStudentId(user.studentId || '');
     setEditClassName(user.group || ''); // Group usually acts as class for students
     setEditGender(user.gender || '');
+    setEditGeneration(user.generation || '');
     setIsProfileModalOpen(true);
     setProfileEvaluations([]);
+    setSelectedEvaluationId(null);
+    setIsEvaluationListOpen(false);
     
     if (user.role === 'Student') {
       try {
         const res = await fetch(`${API_BASE_URL}/evaluations/user/${user.id}`);
         if (res.ok) {
            const json = await res.json();
-           setProfileEvaluations(Array.isArray(json) ? json : []);
+           const evaluations = Array.isArray(json) ? json : [];
+           setProfileEvaluations(evaluations);
+           setSelectedEvaluationId(evaluations[0]?.id || null);
         }
       } catch (err) {
         console.error("Failed to load student performance", err);
@@ -501,14 +731,15 @@ export default function AdminUserManagementPage() {
           role: selectedProfileUser.role.toLowerCase(),
           class_name: editClassName,
           student_id: editStudentId,
-          gender: editGender || undefined
+          gender: editGender || undefined,
+          generation: editGeneration || undefined
         })
       });
       const data = await res.json();
       if (res.ok) {
         setUsers(prev => prev.map(u => 
           u.id === selectedProfileUser.id 
-            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName, gender: editGender || undefined } 
+            ? { ...u, studentId: editStudentId, group: editClassName, className: editClassName, gender: editGender || undefined, generation: editGeneration || undefined } 
             : u
         ));
         setSuccessMessage('Student details updated.');
@@ -525,8 +756,49 @@ export default function AdminUserManagementPage() {
     }
   };
 
+  const openDeleteEvaluationConfirm = (evaluation: any) => {
+    setConfirmDeleteEvaluation({
+      id: evaluation.id,
+      title: `${formatPeriodLabel(evaluation.period)} Evaluation`,
+      finishedAt: formatEvalDate(evaluation.submitted_at || evaluation.created_at)
+    });
+  };
+
+  const handleDeleteEvaluation = async (evaluationId: number) => {
+    if (!selectedProfileUser || selectedProfileUser.role !== 'Student') return;
+    if (deletingEvaluationId) return;
+
+    setDeletingEvaluationId(evaluationId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/evaluations/${evaluationId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFormError(data.error || 'Failed to delete evaluation.');
+        return;
+      }
+
+      setProfileEvaluations((prev) => {
+        const next = prev.filter((item) => item.id !== evaluationId);
+        const nextSelected = next[0]?.id || null;
+        if (selectedEvaluationId === evaluationId) {
+          setSelectedEvaluationId(nextSelected);
+        }
+        return next;
+      });
+      setConfirmDeleteEvaluation(null);
+    } catch {
+      setFormError('Network error while deleting evaluation.');
+    } finally {
+      setDeletingEvaluationId(null);
+    }
+  };
+
   const toggleUserActive = (user: UserRecord) => {
     if (user.status === 'Deleted') return;
+    if (isSelfUser(user.id)) {
+      setFormError('You cannot disable your own admin account.');
+      return;
+    }
     const shouldEnable = user.status !== 'Active';
     setConfirmAction({ kind: 'toggle-active', user, shouldEnable });
   };
@@ -558,6 +830,11 @@ export default function AdminUserManagementPage() {
     try {
       if (confirmAction.kind === 'toggle-active') {
         const { user, shouldEnable } = confirmAction;
+        if (isSelfUser(user.id)) {
+          setFormError('You cannot disable your own admin account.');
+          setConfirmAction(null);
+          return;
+        }
         const response = await fetch(`${API_BASE_URL}/users/${user.id}/active`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -573,6 +850,11 @@ export default function AdminUserManagementPage() {
         setToastType('success');
       } else if (confirmAction.kind === 'hard-delete') {
         const { user } = confirmAction;
+        if (isSelfUser(user.id)) {
+          setFormError('You cannot delete your own admin account.');
+          setConfirmAction(null);
+          return;
+        }
         const response = await fetch(`${API_BASE_URL}/users/${user.id}/hard`, { method: 'DELETE' });
         const data = await getResponseData(response);
         if (!response.ok) {
@@ -836,7 +1118,16 @@ export default function AdminUserManagementPage() {
                 </button>
               </div>
               <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setEditingUserId(null);
+                  setNewUser(defaultNewUser);
+                  setIsInviteFinished(false);
+                  setFormError('');
+                  setBulkExistingUsers([]);
+                  setBulkValidatedRows([]);
+                  setBulkValidationErrorCount(0);
+                  setIsModalOpen(true);
+                }}
                 className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
               >
                 <UserPlus className="w-4 h-4" />
@@ -908,7 +1199,7 @@ export default function AdminUserManagementPage() {
                     className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   >
                     <option>All Classes</option>
-                    {classOptions.map((cls) => (
+                    {classFilterOptions.map((cls) => (
                       <option key={cls} value={cls}>{cls}</option>
                     ))}
                   </select>
@@ -1006,10 +1297,18 @@ export default function AdminUserManagementPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            onClick={(e) => { e.stopPropagation(); openEditUser(user); }}
+                            disabled={isActionSubmitting}
+                            className="p-2 text-slate-400 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                            title="Edit user"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleUserActive(user); }}
-                            disabled={user.status === 'Deleted' || isActionSubmitting}
+                            disabled={user.status === 'Deleted' || isActionSubmitting || isSelfUser(user.id)}
                             className="p-2 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
-                            title={user.status === 'Active' ? 'Disable user' : 'Enable user'}
+                            title={isSelfUser(user.id) ? 'You cannot disable your own account' : (user.status === 'Active' ? 'Disable user' : 'Enable user')}
                           >
                             <Power className="w-4 h-4" />
                           </button>
@@ -1019,9 +1318,9 @@ export default function AdminUserManagementPage() {
                               const u = users.find(u => u.id === user.id);
                               if (u) setConfirmAction({ kind: 'hard-delete', user: u });
                             }}
-                            disabled={isActionSubmitting}
+                            disabled={isActionSubmitting || isSelfUser(user.id)}
                             className="p-2 text-slate-400 hover:text-rose-600 transition-colors disabled:opacity-40"
-                            title="Hard Delete (Permanent Removal)"
+                            title={isSelfUser(user.id) ? 'You cannot delete your own account' : 'Hard Delete (Permanent Removal)'}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1173,14 +1472,18 @@ export default function AdminUserManagementPage() {
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                      {isInviteFinished ? 'Invitation Sent' : 'Invite New User'}
+                      {isInviteFinished ? 'Invitation Sent' : editingUserId ? 'Edit User' : 'Invite New User'}
                     </h3>
                     <p className="text-slate-500 text-sm">
-                      {isInviteFinished ? 'The invitation process has completed successfully.' : 'Send an email invite with registration link.'}
+                      {isInviteFinished
+                        ? 'The invitation process has completed successfully.'
+                        : editingUserId
+                          ? 'Update the selected user information.'
+                          : 'Send an email invite with registration link.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {!isInviteFinished && (
+                    {!isInviteFinished && !editingUserId && (
                       <>
                         <input
                           ref={fileInputRef}
@@ -1213,6 +1516,8 @@ export default function AdminUserManagementPage() {
                          setIsModalOpen(false);
                          setTimeout(() => {
                            setIsInviteFinished(false);
+                           setEditingUserId(null);
+                           setNewUser(defaultNewUser);
                            setBulkExistingUsers([]);
                            setBulkValidatedRows([]);
                            setBulkValidationErrorCount(0);
@@ -1251,6 +1556,8 @@ export default function AdminUserManagementPage() {
                         setIsModalOpen(false);
                         setTimeout(() => {
                           setIsInviteFinished(false);
+                          setEditingUserId(null);
+                          setNewUser(defaultNewUser);
                           setBulkExistingUsers([]);
                           setBulkValidatedRows([]);
                         }, 300);
@@ -1262,11 +1569,13 @@ export default function AdminUserManagementPage() {
                   </motion.div>
                 ) : (
                   <form onSubmit={handleAddUser} className="space-y-4">
-                    <p className="text-[10px] text-slate-400 font-bold">
-                      Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation (e.g., 2026), Class (e.g., A), Student ID (Format: YYYY-XXX), Major.
-                    </p>
+                    {!editingUserId && (
+                      <p className="text-[10px] text-slate-400 font-bold">
+                        Excel template headers: First Name, Last Name, Email Address, Gender (Male/Female/Other), Role (Student/Teacher/Admin), Generation (e.g., 2026), Class (e.g., A), Student ID (Format: YYYY-XXX), Major.
+                      </p>
+                    )}
                     
-                    {bulkExistingUsers.length > 0 && (
+                    {!editingUserId && bulkExistingUsers.length > 0 && (
                       <div className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 shadow-sm">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
@@ -1284,7 +1593,7 @@ export default function AdminUserManagementPage() {
                       </div>
                     )}
 
-                    {bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
+                    {!editingUserId && bulkValidatedRows.length > 0 && bulkValidationErrorCount === 0 && (
                       <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
                         <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                         <p>Excel validation passed for {bulkValidatedRows.length} rows. Click <strong>Send Invite Email</strong> to process.</p>
@@ -1325,7 +1634,9 @@ export default function AdminUserManagementPage() {
                         onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                       />
-                      <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
+                      {!editingUserId && (
+                        <p className="text-[10px] text-slate-400 font-bold ml-1">Invite will be sent to this email.</p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1452,11 +1763,38 @@ export default function AdminUserManagementPage() {
                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                           >
                             <option value="">Select class</option>
-                            {classOptions.map((classOption) => (
-                              <option key={classOption} value={classOption}>{classOption}</option>
-                            ))}
-                          </select>
+                          {inviteClassOptions.map((classOption) => (
+                            <option key={classOption} value={classOption}>{classOption}</option>
+                          ))}
+                        </select>
                           <p className="text-[10px] text-slate-400 font-bold ml-1">Classes available for selected generation</p>
+                          <div className="mt-3 flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={customClassDraft}
+                              onChange={(e) => setCustomClassDraft(e.target.value)}
+                              placeholder="Add new class manually"
+                              className="flex-1 px-4 py-2.5 bg-white border border-emerald-100 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextClass = customClassDraft.trim();
+                                if (!nextClass) return;
+                                const normalized = nextClass.toUpperCase();
+                                setCustomClassOptions((prev) => (
+                                  prev.some((item) => item.toUpperCase() === normalized)
+                                    ? prev
+                                    : [...prev, normalized]
+                                ));
+                                setNewUser((prev) => ({ ...prev, className: normalized }));
+                                setCustomClassDraft('');
+                              }}
+                              className="px-3 py-2.5 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-2 md:col-span-1">
@@ -1485,7 +1823,9 @@ export default function AdminUserManagementPage() {
                         disabled={isSubmitting}
                         className="w-full py-3 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all uppercase tracking-widest"
                       >
-                        {isSubmitting ? 'Sending Invite...' : 'Send Invite Email'}
+                        {isSubmitting
+                          ? (editingUserId ? 'Saving...' : 'Sending Invite...')
+                          : (editingUserId ? 'Save Changes' : 'Send Invite Email')}
                       </button>
                     </div>
                   </form>
@@ -1522,7 +1862,7 @@ export default function AdminUserManagementPage() {
                 </button>
               </div>
 
-              <div className="p-8 overflow-y-auto">
+                <div className="p-8 overflow-y-auto">
                  <div className="flex items-start gap-6 mb-8">
                    {selectedProfileUser.profileImage ? (
                      <img src={selectedProfileUser.profileImage} alt={selectedProfileUser.name} className="size-24 rounded-2xl object-cover" />
@@ -1534,13 +1874,81 @@ export default function AdminUserManagementPage() {
                    <div>
                      <h2 className="text-2xl font-black text-slate-900 mb-1">{selectedProfileUser.name}</h2>
                      <p className="text-sm font-bold text-slate-500 mb-4">{selectedProfileUser.email}</p>
-                     <div className="flex gap-2">
+                     <div className="flex gap-2 flex-wrap">
                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black uppercase tracking-widest">{selectedProfileUser.role}</span>
                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs font-black uppercase tracking-widest shrink-0">{selectedProfileUser.status}</span>
                        {selectedProfileUser.gender && (
                          <span className="px-3 py-1 bg-sky-50 text-sky-600 rounded-lg text-xs font-black uppercase tracking-widest shrink-0">{selectedProfileUser.gender}</span>
                        )}
+                       {selectedProfileUser.role === 'Student' && (
+                         <button
+                           type="button"
+                           onClick={() => setIsEvaluationListOpen((prev) => !prev)}
+                           className="px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-colors"
+                         >
+                           {isEvaluationListOpen ? 'Hide Evaluations' : 'Evaluation List'}
+                         </button>
+                       )}
                      </div>
+                     {selectedProfileUser.role === 'Student' && isEvaluationListOpen && (
+                       <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                         {profileEvaluations.length > 0 ? (
+                           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                             {profileEvaluations.map((evaluation) => {
+                               const isActive = selectedEvaluationId === evaluation.id;
+                               return (
+                                 <button
+                                   key={evaluation.id}
+                                   type="button"
+                                   onClick={() => setSelectedEvaluationId(evaluation.id)}
+                                   className={cn(
+                                     "w-full text-left px-4 py-3 rounded-xl border transition-all",
+                                     isActive
+                                       ? "border-primary bg-white shadow-sm"
+                                       : "border-slate-200 bg-white hover:border-slate-300"
+                                   )}
+                                 >
+                                   <div className="flex items-center justify-between gap-3">
+                                     <div>
+                                       <p className="text-sm font-black text-slate-900">
+                                         {formatPeriodLabel(evaluation.period)} Evaluation
+                                       </p>
+                                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                         Finished: {formatEvalDate(evaluation.submitted_at || evaluation.created_at)}
+                                       </p>
+                                     </div>
+                                     <div className="flex items-center gap-3">
+                                       <span className="text-xs font-black text-primary">
+                                         {Number(evaluation.average_score || 0).toFixed(1)}
+                                       </span>
+                                         <button
+                                         type="button"
+                                         onClick={(event) => {
+                                           event.stopPropagation();
+                                           openDeleteEvaluationConfirm(evaluation);
+                                         }}
+                                         disabled={deletingEvaluationId === evaluation.id}
+                                         className={cn(
+                                           "p-2 rounded-lg border transition-colors",
+                                           deletingEvaluationId === evaluation.id
+                                             ? "border-rose-200 bg-rose-50 text-rose-400"
+                                             : "border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                         )}
+                                         title="Delete evaluation"
+                                       >
+                                         <Trash2 className="w-4 h-4" />
+                                       </button>
+                                     </div>
+                                   </div>
+                                 </button>
+                               );
+                             })}
+                           </div>
+                         ) : (
+                           <p className="text-xs font-bold text-slate-400">No evaluations found for this student.</p>
+                         )}
+                       </div>
+                     )}
                    </div>
                  </div>
 
@@ -1556,6 +1964,10 @@ export default function AdminUserManagementPage() {
                            <div>
                              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Class</label>
                              <input type="text" value={editClassName} onChange={e => setEditClassName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
+                           </div>
+                           <div>
+                             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Generation</label>
+                             <input type="text" value={editGeneration} onChange={e => setEditGeneration(e.target.value)} placeholder="e.g., 2026" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-primary/20 rounded-2xl text-sm transition-all" />
                            </div>
                            <div>
                              <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Gender</label>
@@ -1579,7 +1991,8 @@ export default function AdminUserManagementPage() {
                                  data={globalCriteria
                                    .filter(c => String(c.status).toLowerCase() === 'active')
                                    .map((criterion, idx) => {
-                                     const response = (profileEvaluations[0]?.responses || []).find((r: any) =>
+                                     const activeEvaluation = profileEvaluations.find((item) => item.id === selectedEvaluationId) || profileEvaluations[0];
+                                     const response = (activeEvaluation?.responses || []).find((r: any) =>
                                        String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
                                        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
                                      );
@@ -1607,6 +2020,68 @@ export default function AdminUserManagementPage() {
                       </div>
                    </div>
                  )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmDeleteEvaluation && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+              onClick={() => !deletingEvaluationId && setConfirmDeleteEvaluation(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-6"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-rose-500">Confirm Delete</p>
+                  <h3 className="text-xl font-black text-slate-900 mt-1">Delete this evaluation?</h3>
+                  <p className="text-sm font-medium text-slate-500 mt-2">
+                    {confirmDeleteEvaluation.title}
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    Finished: {confirmDeleteEvaluation.finishedAt}
+                  </p>
+                </div>
+                <button
+                  onClick={() => !deletingEvaluationId && setConfirmDeleteEvaluation(null)}
+                  className="p-2 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-600">
+                This action cannot be undone.
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteEvaluation(null)}
+                  disabled={Boolean(deletingEvaluationId)}
+                  className="w-full py-3 rounded-2xl border border-slate-200 bg-white text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteEvaluation(confirmDeleteEvaluation.id)}
+                  disabled={Boolean(deletingEvaluationId)}
+                  className="w-full py-3 rounded-2xl bg-rose-600 text-white font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-500/20 disabled:opacity-60"
+                >
+                  {deletingEvaluationId ? 'Deleting...' : 'Delete'}
+                </button>
               </div>
             </motion.div>
           </div>

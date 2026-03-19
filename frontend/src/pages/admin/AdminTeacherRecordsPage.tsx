@@ -35,6 +35,7 @@ interface TeacherRecord {
   profileImage: string;
   joinDate: string;
   phone?: string;
+  gender?: string;
 }
 
 export default function AdminTeacherRecordsPage() {
@@ -44,6 +45,7 @@ export default function AdminTeacherRecordsPage() {
   const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [selectedGender, setSelectedGender] = useState<'All' | 'Male' | 'Female' | 'Other'>('All');
   
   // Confirmation action flow
   const [confirmAction, setConfirmAction] = useState<{
@@ -71,6 +73,11 @@ export default function AdminTeacherRecordsPage() {
             .filter((u: any) => u.role.toLowerCase() === 'teacher')
             .map((u: any) => {
               const genderLower = String(u.gender || '').toLowerCase();
+              const gender =
+                genderLower === 'male' ? 'Male' :
+                genderLower === 'female' ? 'Female' :
+                genderLower === 'other' ? 'Other' :
+                'Other';
               return {
                 id: u.id,
                 name: (u.name || '').trim() || [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Teacher',
@@ -80,7 +87,8 @@ export default function AdminTeacherRecordsPage() {
                 specialization: u.specialization || 'General',
                 profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
                 joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A',
-                phone: u.phone || 'N/A'
+                phone: u.phone || 'N/A',
+                gender
               };
             });
           setTeachers(teacherList);
@@ -210,11 +218,14 @@ export default function AdminTeacherRecordsPage() {
     }
   };
 
-  const filteredTeachers = teachers.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.department.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTeachers = teachers.filter(t => {
+    const matchesSearch =
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.department.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesGender = selectedGender === 'All' || (t.gender || 'Other') === selectedGender;
+    return matchesSearch && matchesGender;
+  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -305,6 +316,19 @@ export default function AdminTeacherRecordsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gender</label>
+                  <select
+                    value={selectedGender}
+                    onChange={(e) => setSelectedGender(e.target.value as 'All' | 'Male' | 'Female' | 'Other')}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="All">All</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
                   <Filter className="w-4 h-4" />

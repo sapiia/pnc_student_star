@@ -35,7 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const INITIAL_CRITERIA = [
   { id: 'CRIT-001', icon: 'ð ', name: 'Living', description: 'Focus on your living environment, cleanliness of housing, and overall organization of daily chores.', status: 'Active' },
@@ -231,6 +231,7 @@ export default function AdminSettingsPage() {
   const [criteriaList, setCriteriaList] = useState<CriterionSetting[]>(() => DEFAULT_CRITERIA_SETTINGS);
   const [ratingScale, setRatingScale] = useState(5);
   const [evaluationIntervalDays, setEvaluationIntervalDays] = useState(90);
+  const [notificationRetentionDays, setNotificationRetentionDays] = useState(7);
   const [rolePermissions, setRolePermissions] = useState<RolePermissionSettings>(DEFAULT_ROLE_PERMISSIONS);
   const [showAddModal, setShowAddModal] = useState(false);
   const [iconSearchQuery, setIconSearchQuery] = useState('');
@@ -366,9 +367,10 @@ export default function AdminSettingsPage() {
       setIsLoadingCriteria(true);
 
       try {
-        const [criteriaResponse, intervalResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse] = await Promise.all([
+        const [criteriaResponse, intervalResponse, notificationRetentionResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
+          fetch(`${API_BASE_URL}/settings/key/notification_auto_delete_days`),
           fetch(`${API_BASE_URL}/settings/key/student_can_start_evaluation`),
           fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`),
           fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
@@ -391,6 +393,7 @@ export default function AdminSettingsPage() {
 
         let data: Record<string, unknown> = {};
         let intervalData: Record<string, unknown> = {};
+        let notificationRetentionData: Record<string, unknown> = {};
         let studentStartData: Record<string, unknown> = {};
         let studentEditData: Record<string, unknown> = {};
         let studentFeedbackData: Record<string, unknown> = {};
@@ -418,6 +421,11 @@ export default function AdminSettingsPage() {
           intervalData = await intervalResponse.json();
         } catch {
           intervalData = {};
+        }
+        try {
+          notificationRetentionData = await notificationRetentionResponse.json();
+        } catch {
+          notificationRetentionData = {};
         }
         try {
           studentStartData = await studentStartResponse.json();
@@ -522,6 +530,11 @@ export default function AdminSettingsPage() {
         } else {
           setEvaluationIntervalDays(90);
         }
+        if (notificationRetentionResponse.ok) {
+          setNotificationRetentionDays(parseNumberSetting(notificationRetentionData.value, 7, 7, 365));
+        } else {
+          setNotificationRetentionDays(7);
+        }
         setRolePermissions({
           studentCanStartEvaluation: studentStartResponse.ok
             ? parseBooleanSetting(studentStartData.value, DEFAULT_ROLE_PERMISSIONS.studentCanStartEvaluation)
@@ -572,7 +585,7 @@ export default function AdminSettingsPage() {
             ? parseBooleanSetting(teacherDeadlineData.value, DEFAULT_ROLE_PERMISSIONS.teacherCanManageEvaluationDeadlines)
             : DEFAULT_ROLE_PERMISSIONS.teacherCanManageEvaluationDeadlines,
           teacherMaxAssignedStudents: teacherMaxResponse.ok
-            ? parseNumberSetting(teacherMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents, 1, 200)
+            ? parseNumberSetting(teacherMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents, 0, 200)
             : DEFAULT_ROLE_PERMISSIONS.teacherMaxAssignedStudents,
           teacherMaxFeedbackCharacters: teacherFeedbackMaxResponse.ok
             ? parseNumberSetting(teacherFeedbackMaxData.value, DEFAULT_ROLE_PERMISSIONS.teacherMaxFeedbackCharacters, 100, 10000)
@@ -666,7 +679,7 @@ export default function AdminSettingsPage() {
     if (activeTab === 'system') {
       setIsSaving(true);
       try {
-        const [criteriaResponse, intervalResponse, studentStartSaveResponse, studentEditSaveResponse, studentFeedbackSaveResponse, studentHistorySaveResponse, studentExtensionSaveResponse, studentHelpSaveResponse, studentReminderSaveResponse, studentMaxSaveResponse, studentReflectionMaxSaveResponse, teacherReviewSaveResponse, teacherEditSaveResponse, teacherProfileSaveResponse, teacherMeetingSaveResponse, teacherBulkMessageSaveResponse, teacherExportSaveResponse, teacherDeadlineSaveResponse, teacherMaxSaveResponse, teacherFeedbackMaxSaveResponse] = await Promise.all([
+        const [criteriaResponse, intervalResponse, notificationRetentionResponse, studentStartSaveResponse, studentEditSaveResponse, studentFeedbackSaveResponse, studentHistorySaveResponse, studentExtensionSaveResponse, studentHelpSaveResponse, studentReminderSaveResponse, studentMaxSaveResponse, studentReflectionMaxSaveResponse, teacherReviewSaveResponse, teacherEditSaveResponse, teacherProfileSaveResponse, teacherMeetingSaveResponse, teacherBulkMessageSaveResponse, teacherExportSaveResponse, teacherDeadlineSaveResponse, teacherMaxSaveResponse, teacherFeedbackMaxSaveResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/evaluation-criteria`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -692,6 +705,13 @@ export default function AdminSettingsPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               value: String(evaluationIntervalDays)
+            })
+          }),
+          fetch(`${API_BASE_URL}/settings/key/notification_auto_delete_days`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              value: String(notificationRetentionDays)
             })
           }),
           fetch(`${API_BASE_URL}/settings/key/student_can_start_evaluation`, {
@@ -788,6 +808,7 @@ export default function AdminSettingsPage() {
 
         let data: Record<string, unknown> = {};
         let intervalData: Record<string, unknown> = {};
+        let notificationRetentionData: Record<string, unknown> = {};
         let studentStartSaveData: Record<string, unknown> = {};
         let studentEditSaveData: Record<string, unknown> = {};
         let studentFeedbackSaveData: Record<string, unknown> = {};
@@ -815,6 +836,11 @@ export default function AdminSettingsPage() {
           intervalData = await intervalResponse.json();
         } catch {
           intervalData = {};
+        }
+        try {
+          notificationRetentionData = await notificationRetentionResponse.json();
+        } catch {
+          notificationRetentionData = {};
         }
         try {
           studentStartSaveData = await studentStartSaveResponse.json();
@@ -913,6 +939,9 @@ export default function AdminSettingsPage() {
         if (!intervalResponse.ok) {
           throw new Error((intervalData.error as string) || 'Failed to save evaluation interval.');
         }
+        if (!notificationRetentionResponse.ok) {
+          throw new Error((notificationRetentionData.error as string) || 'Failed to save notification retention.');
+        }
         if (!studentStartSaveResponse.ok) {
           throw new Error((studentStartSaveData.error as string) || 'Failed to save student permissions.');
         }
@@ -974,6 +1003,10 @@ export default function AdminSettingsPage() {
         setSuccessMessage('Criteria, interval, and role permissions saved successfully!');
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
+        
+        // Notify all students that settings have been updated
+        console.log('📢 Broadcasting settings update to all students');
+        window.dispatchEvent(new Event('student-settings-updated'));
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to save criteria configuration.');
       } finally {
@@ -1612,6 +1645,75 @@ export default function AdminSettingsPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Notification Retention */}
+                  <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="size-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
+                        <Bell className="w-5 h-5" />
+                      </div>
+                      <h4 className="font-black text-slate-900">Notification Retention</h4>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between items-end mb-2">
+                          <label className="text-xs font-black text-slate-900 uppercase tracking-widest">Auto-delete After (Days)</label>
+                          <span className="text-xs font-black text-primary">{notificationRetentionDays} days</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold mb-4">
+                          Notifications are automatically removed for all users after this many days. Minimum is 7 days.
+                        </p>
+                        <input
+                          type="range"
+                          min={7}
+                          max={365}
+                          step={7}
+                          value={notificationRetentionDays}
+                          onChange={(e) => setNotificationRetentionDays(Number(e.target.value))}
+                          className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Retention Policy</p>
+                          <p className="text-sm font-bold text-slate-900">{notificationRetentionDays} days</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNotificationRetentionDays((prev) => Math.max(7, prev - 7))}
+                            className="size-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <input
+                            type="number"
+                            min={7}
+                            max={365}
+                            step={1}
+                            value={notificationRetentionDays}
+                            onChange={(e) => {
+                              const nextValue = Number(e.target.value);
+                              if (Number.isNaN(nextValue)) return;
+                              setNotificationRetentionDays(Math.min(365, Math.max(7, nextValue)));
+                            }}
+                            className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setNotificationRetentionDays((prev) => Math.min(365, prev + 7))}
+                            className="size-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold">
+                        Allowed range: 7 to 365 days. This applies to all roles (students, teachers, admins).
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -1658,6 +1760,26 @@ export default function AdminSettingsPage() {
                           )}
                         >
                           {rolePermissions.studentCanEditAfterSubmit ? 'Allowed' : 'Locked'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-black text-slate-900">Multiple Evaluations Per Cycle</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Allow students to evaluate more than once per cycle</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRolePermissions((prev) => ({ 
+                            ...prev, 
+                            studentMaxEvaluationsPerCycle: prev.studentMaxEvaluationsPerCycle === 1 ? 999 : 1 
+                          }))}
+                          className={cn(
+                            "rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors",
+                            rolePermissions.studentMaxEvaluationsPerCycle > 1 ? "bg-indigo-500 text-white" : "bg-slate-200 text-slate-600"
+                          )}
+                        >
+                          {rolePermissions.studentMaxEvaluationsPerCycle > 1 ? 'Enabled' : 'Disabled'}
                         </button>
                       </div>
 
@@ -1923,17 +2045,19 @@ export default function AdminSettingsPage() {
                         </button>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="mb-3 flex items-center justify-between gap-4">
                           <div>
-                            <p className="text-sm font-black text-slate-900">Max Assigned Students</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Boundary for teacher workload and assignment volume</p>
+                            <p className="text-sm font-black text-slate-900">Max feedback to Students</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Limit unique students a teacher can feedback (0 = unlimited)</p>
                           </div>
-                          <span className="text-lg font-black text-primary">{rolePermissions.teacherMaxAssignedStudents}</span>
+                          <span className="text-lg font-black text-primary">
+                            {rolePermissions.teacherMaxAssignedStudents === 0 ? 'Unlimited' : rolePermissions.teacherMaxAssignedStudents}
+                          </span>
                         </div>
                         <input
                           type="range"
-                          min={1}
+                          min={0}
                           max={200}
                           step={1}
                           value={rolePermissions.teacherMaxAssignedStudents}
