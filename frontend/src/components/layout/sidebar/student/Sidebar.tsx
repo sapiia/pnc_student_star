@@ -13,7 +13,7 @@ export default function Sidebar({ className }: SidebarProps) {
     { icon: FileText, label: 'My Evaluations', path: '/history' },
     { icon: MessageSquare, label: 'Feedback', path: '/feedback' },
     { icon: Bell, label: 'Notifications', path: '/notifications', hasNotification: unreadNotificationCount > 0 },
-    { icon: MessageSquare, label: 'Message', path: '/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount },
+    { icon: MessageSquare, label: 'Messager', path: '/messages', hasNotification: unreadMessageCount > 0, badgeCount: unreadMessageCount },
   ];
 
   const settingsItems = [

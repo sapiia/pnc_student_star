@@ -7,16 +7,19 @@ import TeacherMobileNav from '../../components/common/TeacherMobileNav';
 import StudentCard from '../../components/teacher/StudentCard';
 
 import { motion } from 'motion/react';
-import { getRealtimeSocket, type NotificationRealtimePayload } from '../../lib/realtime';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { useTeacherNotifications } from '../../hooks/useTeacherNotifications';
 import { 
   API_BASE_URL, 
+  DEFAULT_AVATAR,
   toDisplayName, 
   extractGeneration, 
   extractClassNameLegacy,
   getEvaluationSortValue,
   formatShortDateWithTime,
   getStudentStatus,
-  getTeacherIdFromStorage
+  normalizeGender,
+  resolveAvatarUrl
 } from '../../lib/teacher/utils';
 import type { Gender } from '../../lib/teacher/types';
 
@@ -36,26 +39,44 @@ interface StudentData {
 export default function TeacherAttentionStudentsPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [teacherId, setTeacherId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
-
-  useEffect(() => {
-    const id = getTeacherIdFromStorage();
-    setTeacherId(id);
-  }, []);
+  const { teacherId } = useTeacherIdentity();
+  const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
+    if (!teacherId) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`),
+        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
         fetch(`${API_BASE_URL}/evaluations`)
       ]);
 
-      const usersData = await usersResponse.json().catch(() => []);
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      let usersData = [];
+      if (usersResponse.ok) {
+        usersData = await usersResponse.json().catch(() => []);
+      } else {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
+        usersData = await fallbackResponse.json().catch(() => []);
+      }
+
+      const evaluationsData = evaluationsResponse.ok
+        ? await evaluationsResponse.json().catch(() => [])
+        : [];
+
+      const studentIdSet = new Set(
+        Array.isArray(usersData)
+          ? usersData
+              .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+              .map((user) => Number(user.id))
+              .filter((id) => Number.isInteger(id) && id > 0)
+          : []
+      );
 
       const latestEvaluationByUser = new Map<number, any>();
       if (Array.isArray(evaluationsData)) {
@@ -63,7 +84,12 @@ export default function TeacherAttentionStudentsPage() {
           .sort((left, right) => getEvaluationSortValue(right) - getEvaluationSortValue(left))
           .forEach((evaluation: any) => {
             const userId = Number(evaluation.user_id);
-            if (Number.isInteger(userId) && userId > 0 && !latestEvaluationByUser.has(userId)) {
+            if (
+              Number.isInteger(userId) &&
+              userId > 0 &&
+              studentIdSet.has(userId) &&
+              !latestEvaluationByUser.has(userId)
+            ) {
               latestEvaluationByUser.set(userId, evaluation);
             }
           });
@@ -84,10 +110,10 @@ export default function TeacherAttentionStudentsPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                avatar: resolveAvatarUrl(String(user.profile_image || '').trim(), DEFAULT_AVATAR),
                 generation: extractGeneration(user),
                 className: extractClassNameLegacy(user),
-                gender: (String(user.gender || '').trim().toLowerCase() as Gender) || 'unknown',
+                gender: (normalizeGender(user.gender) as Gender) || 'unknown',
                 rating: averageScore,
                 status: status,
                 lastEval: latestEvaluation ? formatShortDateWithTime(latestEvaluation.submitted_at || latestEvaluation.created_at) : 'No Data',
@@ -108,50 +134,11 @@ export default function TeacherAttentionStudentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     void loadDashboardData();
   }, [loadDashboardData]);
-
-  const loadNotifications = useCallback(async () => {
-    if (!teacherId) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/notifications/user/${teacherId}`);
-      const data = await response.json().catch(() => []);
-      if (response.ok && Array.isArray(data)) {
-        setNotifications(data);
-      }
-    } catch {
-      // Ignore
-    }
-  }, [teacherId]);
-
-  useEffect(() => {
-    void loadNotifications();
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    if (!teacherId) return;
-    const socket = getRealtimeSocket();
-    const subscription = { userId: teacherId };
-    const handleNotificationEvent = (payload: NotificationRealtimePayload = {}) => {
-      if (Number(payload.userId) !== teacherId) return;
-      void loadNotifications();
-    };
-
-    socket.emit('notification:subscribe', subscription);
-    socket.on('notification:created', handleNotificationEvent);
-    socket.on('notification:updated', handleNotificationEvent);
-    socket.on('notification:deleted', handleNotificationEvent);
-
-    return () => {
-      socket.emit('notification:unsubscribe', subscription);
-      socket.off('notification:created', handleNotificationEvent);
-      socket.off('notification:updated', handleNotificationEvent);
-      socket.off('notification:deleted', handleNotificationEvent);
-    };
-  }, [loadNotifications, teacherId]);
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -163,8 +150,6 @@ export default function TeacherAttentionStudentsPage() {
       return matchesSearch;
     });
   }, [students, searchQuery]);
-
-  const unreadNotificationCount = notifications.filter(n => Number(n.is_read) !== 1).length;
 
   const renderTopBar = () => (
     <header className="h-auto min-h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
@@ -222,7 +207,7 @@ export default function TeacherAttentionStudentsPage() {
                 <div>
                     <h2 className="text-xl md:text-2xl font-black text-rose-900 mb-2">Priority Intervention List</h2>
                     <p className="text-sm text-rose-700 font-medium">
-                        These {students.length} students have recorded an average self-evaluation rating below 3.0 stars. Prompt coaching and direct messaging is strongly recommended.
+an average self-evaluation rating below 2.5 stars. Prompt coaching and direct messaging is strongly recommended.
                     </p>
                 </div>
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 text-center shrink-0 min-w-32">

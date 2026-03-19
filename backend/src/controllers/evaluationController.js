@@ -163,6 +163,45 @@ const getSummaryStats = async (req, res) => {
   }
 };
 
+const getUserTableColumns = async () => {
+  const db = require('../config/database');
+  const [rows] = await db.query('SHOW COLUMNS FROM users');
+  return new Set(rows.map((row) => row.Field));
+};
+
+const buildDisplayName = (row, columns) => {
+  const direct = String(row?.name || '').trim();
+  if (direct) return direct;
+  const first = columns.has('first_name') ? String(row?.first_name || '').trim() : '';
+  const last = columns.has('last_name') ? String(row?.last_name || '').trim() : '';
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
+  const email = String(row?.email || '').trim();
+  return email || `User #${row?.id || ''}`.trim();
+};
+
+const parseQuarterLabel = (value = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  const yqMatch = trimmed.match(/^(\d{4})\s*[-/ ]\s*Q([1-4])$/i);
+  if (yqMatch) return { year: Number(yqMatch[1]), quarter: Number(yqMatch[2]) };
+  const qyMatch = trimmed.match(/^Q([1-4])\s*[-/ ]?\s*(\d{4})$/i);
+  if (qyMatch) return { year: Number(qyMatch[2]), quarter: Number(qyMatch[1]) };
+  return null;
+};
+
+const getQuarterFromEvaluation = (evaluation) => {
+  const parsed = parseQuarterLabel(evaluation?.period);
+  if (parsed) return parsed;
+  const dateValue = evaluation?.submitted_at || evaluation?.created_at;
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getUTCFullYear();
+  const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+  return { year, quarter };
+};
+
 // Export report to Excel
 const exportReport = async (req, res) => {
   try {
@@ -170,9 +209,121 @@ const exportReport = async (req, res) => {
       class: classFilter,
       gender,
       generation,
-      scope = 'overview',
-      quarter
+      scope = 'students',
+      quarter,
+      level
     } = req.query;
+    const scopeValue = String(scope || 'students').toLowerCase();
+
+    if (scopeValue === 'teachers') {
+      const db = require('../config/database');
+      const columns = await getUserTableColumns();
+
+      const teacherFields = ['id'];
+      ['name', 'first_name', 'last_name', 'email', 'class', 'profile_image'].forEach((field) => {
+        if (columns.has(field)) teacherFields.push(field);
+      });
+      const [teacherRows] = await db.query(
+        `SELECT ${teacherFields.join(', ')} FROM users WHERE role = 'teacher'`
+      );
+      const [studentRows] = await db.query(
+        "SELECT id FROM users WHERE role = 'student'"
+      );
+      const [feedbackRows] = await db.query(
+        `
+          SELECT f.*, e.period, e.average_score, e.submitted_at, e.created_at
+          FROM feedbacks f
+          LEFT JOIN evaluations e ON f.evaluation_id = e.id
+        `
+      );
+
+      const requestedQuarter = parseQuarterLabel(quarter);
+      const filteredFeedbacks = requestedQuarter
+        ? feedbackRows.filter((feedback) => {
+            const evalQuarter = getQuarterFromEvaluation(feedback);
+            return (
+              evalQuarter &&
+              evalQuarter.year === requestedQuarter.year &&
+              evalQuarter.quarter === requestedQuarter.quarter
+            );
+          })
+        : feedbackRows;
+
+      const feedbackByTeacher = new Map();
+      filteredFeedbacks.forEach((feedback) => {
+        const teacherId = Number(feedback.teacher_id);
+        if (!Number.isInteger(teacherId) || teacherId <= 0) return;
+        const list = feedbackByTeacher.get(teacherId) || [];
+        list.push(feedback);
+        feedbackByTeacher.set(teacherId, list);
+      });
+
+      const teacherPerformance = teacherRows.map((teacher) => {
+        const teacherId = Number(teacher.id);
+        const list = feedbackByTeacher.get(teacherId) || [];
+        const uniqueStudents = new Set(list.map((f) => Number(f.student_id)).filter((id) => Number.isInteger(id) && id > 0));
+        const scores = list
+          .map((f) => Number(f.average_score || 0))
+          .filter((score) => Number.isFinite(score));
+        const avgScore = scores.length > 0
+          ? Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(1))
+          : 0;
+
+        return {
+          id: teacherId,
+          name: buildDisplayName(teacher, columns),
+          dept: String(teacher.class || 'Teaching Staff'),
+          avgScore,
+          studentCount: uniqueStudents.size
+        };
+      }).sort((a, b) => b.studentCount - a.studentCount || b.avgScore - a.avgScore);
+
+      const totalStudents = studentRows.length;
+      const studentsWithFeedback = new Set(
+        filteredFeedbacks.map((feedback) => Number(feedback.student_id)).filter((id) => Number.isInteger(id) && id > 0)
+      );
+      const completed = studentsWithFeedback.size;
+      const pending = Math.max(0, totalStudents - completed);
+
+      const workbook = XLSX.utils.book_new();
+      const summaryData = [
+        ['PNC Student Star - Teacher Report'],
+        ['Generated:', new Date().toLocaleString()],
+        [''],
+        ['Summary'],
+        ['Total Teachers', teacherRows.length],
+        ['Total Students', totalStudents],
+        ['Students With Feedback', completed],
+        ['Pending Feedback', pending],
+        [''],
+        ['Filters Applied'],
+        ['Quarter', quarter || 'All']
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+      const performanceData = [['Teacher', 'Department', 'Avg Score', 'Students']];
+      teacherPerformance.forEach((teacher) => {
+        performanceData.push([teacher.name, teacher.dept, teacher.avgScore, teacher.studentCount]);
+      });
+      const performanceSheet = XLSX.utils.aoa_to_sheet(performanceData);
+      XLSX.utils.book_append_sheet(workbook, performanceSheet, 'Teacher Performance');
+
+      const feedbackStatusData = [
+        ['Status', 'Count'],
+        ['With Feedback', completed],
+        ['Pending', pending]
+      ];
+      const feedbackSheet = XLSX.utils.aoa_to_sheet(feedbackStatusData);
+      XLSX.utils.book_append_sheet(workbook, feedbackSheet, 'Feedback Status');
+
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const filename = `Admin_Teachers_Report_${timestamp}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      return res.send(buffer);
+    }
 
     const db = require('../config/database');
     const [columnRows] = await db.query('SHOW COLUMNS FROM users');
@@ -182,6 +333,20 @@ const exportReport = async (req, res) => {
       const normalized = String(value || '').trim().toLowerCase();
       if (!normalized || normalized === 'all') return null;
       return normalized;
+    };
+
+    const normalizeLevel = (value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      if (!normalized || normalized === 'all') return null;
+      if (['low', 'medium', 'high'].includes(normalized)) return normalized;
+      return null;
+    };
+
+    const getScoreLevel = (score) => {
+      if (score === null || score === undefined || Number.isNaN(score)) return null;
+      if (Number(score) < 3) return 'low';
+      if (Number(score) < 4) return 'medium';
+      return 'high';
     };
 
     const buildStudentWhere = () => {
@@ -227,6 +392,7 @@ const exportReport = async (req, res) => {
     };
 
     const buildStudentExport = async () => {
+      const normalizedLevel = normalizeLevel(level);
       const { where, params } = buildStudentWhere();
       const selectColumns = ['id'];
       if (userColumns.has('name')) selectColumns.push('name');
@@ -238,10 +404,45 @@ const exportReport = async (req, res) => {
       if (userColumns.has('gender')) selectColumns.push('gender');
       if (userColumns.has('generation')) selectColumns.push('generation');
 
-      const [studentRows] = await db.query(
+      let [studentRows] = await db.query(
         `SELECT ${selectColumns.join(', ')} FROM users ${where}`,
         params
       );
+
+      const studentIds = studentRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
+      const placeholders = studentIds.map(() => '?').join(', ');
+      let evalRows = studentIds.length === 0
+        ? []
+        : (await db.query(
+            `SELECT * FROM evaluations WHERE user_id IN (${placeholders}) ORDER BY submitted_at DESC, created_at DESC`,
+            studentIds
+          ))[0];
+
+      if (normalizedLevel) {
+        const levelTotals = new Map();
+        evalRows.forEach((row) => {
+          const userId = Number(row.user_id);
+          const score = Number(row.average_score || 0);
+          if (!Number.isInteger(userId) || !Number.isFinite(score)) return;
+          const entry = levelTotals.get(userId) || { total: 0, count: 0 };
+          entry.total += score;
+          entry.count += 1;
+          levelTotals.set(userId, entry);
+        });
+
+        const allowedIds = new Set();
+        levelTotals.forEach((entry, userId) => {
+          if (entry.count <= 0) return;
+          const avg = entry.total / entry.count;
+          if (getScoreLevel(avg) === normalizedLevel) {
+            allowedIds.add(userId);
+          }
+        });
+
+        studentRows = studentRows.filter((row) => allowedIds.has(Number(row.id)));
+        const allowedIdList = new Set(studentRows.map((row) => Number(row.id)));
+        evalRows = evalRows.filter((row) => allowedIdList.has(Number(row.user_id)));
+      }
 
       const studentMap = new Map();
       studentRows.forEach((row) => {
@@ -250,15 +451,6 @@ const exportReport = async (req, res) => {
           displayName: getDisplayNameFromUser(row) || `Student #${row.id}`
         });
       });
-
-      const studentIds = studentRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
-      const placeholders = studentIds.map(() => '?').join(', ');
-      const evalRows = studentIds.length === 0
-        ? []
-        : (await db.query(
-            `SELECT * FROM evaluations WHERE user_id IN (${placeholders}) ORDER BY submitted_at DESC, created_at DESC`,
-            studentIds
-          ))[0];
 
       const evalIdList = evalRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
       const evalPlaceholders = evalIdList.map(() => '?').join(', ');
@@ -557,7 +749,8 @@ const exportReport = async (req, res) => {
         ['Filters Applied'],
         ['Class', classFilter || 'All'],
         ['Gender', gender || 'All'],
-        ['Generation', generation || 'All']
+        ['Generation', generation || 'All'],
+        ['Level', level || 'All']
       ];
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryData), 'Summary');
 

@@ -14,107 +14,111 @@ import {
 import TeacherSidebar from '../../components/layout/sidebar/teacher/TeacherSidebar';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { API_BASE_URL } from '../../lib/teacher/utils';
+import { useTeacherIdentity } from '../../hooks/useTeacherIdentity';
+import { mapApiNotifications, type MappedNotification } from '../../lib/notifications/mapper';
 
 type NotificationType = 'message' | 'system' | 'alert';
+type Notification = MappedNotification;
 
-interface Notification {
-  id: string;
-  type: NotificationType;
-  sender: {
-    name: string;
-    role: 'Student' | 'Admin' | 'Teacher';
-    avatar: string;
-  };
-  content: string;
-  time: string;
-  isRead: boolean;
-}
-
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    type: 'message',
-    sender: {
-      name: 'Dany Chan',
-      role: 'Student',
-      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
-    },
-    content: 'sent you a message: "Teacher, I have a question about my evaluation results."',
-    time: '2 mins ago',
-    isRead: false
-  },
-  {
-    id: '2',
-    type: 'message',
-    sender: {
-      name: 'Admin Sarah',
-      role: 'Admin',
-      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
-    },
-    content: 'sent you a message: "Please review the Q4 evaluation schedule for Gen 2026."',
-    time: '1 hour ago',
-    isRead: false
-  },
-  {
-    id: '3',
-    type: 'message',
-    sender: {
-      name: 'Teacher Sokha',
-      role: 'Teacher',
-      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
-    },
-    content: 'sent you a message: "Can we discuss the student performance in WEB A?"',
-    time: '3 hours ago',
-    isRead: true
-  },
-  {
-    id: '4',
-    type: 'alert',
-    sender: {
-      name: 'System',
-      role: 'Admin',
-      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
-    },
-    content: 'New urgent alert: 3 students in Gen 2026 need immediate attention.',
-    time: '5 hours ago',
-    isRead: true
-  },
-  {
-    id: '5',
-    type: 'message',
-    sender: {
-      name: 'Leakna Roeun',
-      role: 'Student',
-      avatar: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
-    },
-    content: 'sent you a message: "Thank you for the feedback, teacher!"',
-    time: 'Yesterday',
-    isRead: true
-  }
-];
+let cachedNotifications: Notification[] | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000;
 
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [typeFilter, setTypeFilter] = useState<NotificationType | 'any'>('any');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);
+  const { teacherId } = useTeacherIdentity();
 
-  const filteredNotifications = notifications.filter(n => 
-    filter === 'all' ? true : !n.isRead
-  );
+  const loadNotifications = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const primary = await fetch(`${API_BASE_URL}/notifications`);
+      const data = await primary.json().catch(() => []);
+      if (!primary.ok) {
+        throw new Error(data?.error || 'Failed to load notifications.');
+      }
+
+      const mapped: Notification[] = mapApiNotifications(data);
+      const teacherStudentOnly = mapped.filter((n) => {
+        const isMessageBetweenTeacherStudent = n.type === 'message' && (n.sender.role === 'Student' || n.sender.role === 'Teacher');
+        const isForMe = teacherId ? n.user_id === teacherId : true;
+        return isMessageBetweenTeacherStudent && isForMe;
+      });
+
+      setNotifications(teacherStudentOnly);
+      cachedNotifications = teacherStudentOnly;
+      cachedAt = Date.now();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load notifications.');
+      setNotifications([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const now = Date.now();
+    if (cachedNotifications && now - cachedAt < CACHE_TTL_MS) {
+      setNotifications(cachedNotifications);
+      setIsLoading(false);
+      void loadNotifications();
+      return;
+    }
+    void loadNotifications();
+  }, [teacherId]);
+
+  const filteredNotifications = useMemo(() => (
+    notifications.filter((n) => {
+      const matchesRead = filter === 'all' ? true : !n.isRead;
+      const matchesType = typeFilter === 'any' ? true : n.type === typeFilter;
+      const normalized = searchQuery.trim().toLowerCase();
+      const matchesSearch = !normalized || n.sender.name.toLowerCase().includes(normalized) || n.content.toLowerCase().includes(normalized);
+      return matchesRead && matchesType && matchesSearch;
+    })
+  ), [notifications, filter, typeFilter, searchQuery]);
 
   const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => 
+    setNotifications((prev) => prev.map(n => 
       n.id === id ? { ...n, isRead: true } : n
     ));
+    void fetch(`${API_BASE_URL}/notifications/${id}/read`, { method: 'PUT' }).catch(() => null);
   };
 
   const deleteNotification = (id: string) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+    setNotifications((prev) => prev.filter(n => n.id !== id));
+    void fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE' }).catch(() => null);
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+    setNotifications((prev) => {
+      void Promise.all(prev.map((n) => fetch(`${API_BASE_URL}/notifications/${n.id}/read`, { method: 'PUT' }))).catch(() => null);
+      return prev.map(n => ({ ...n, isRead: true }));
+    });
+  };
+
+  const clearRead = () => {
+    setNotifications(notifications.filter((n) => !n.isRead));
+    // optional: remove read on server? skip to avoid extra calls
+  };
+
+  const formatTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value || '—';
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(date);
   };
 
   const renderTopBar = () => (
@@ -130,9 +134,17 @@ export default function TeacherNotificationsPage() {
           <input
             type="text"
             placeholder="Search notifications..."
-            className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-72 pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none"
           />
         </div>
+        <button
+          onClick={() => void loadNotifications()}
+          className="px-3 py-2 rounded-lg text-sm font-bold border border-slate-200 text-slate-600 hover:border-primary/30 hover:text-primary transition-colors"
+        >
+          Refresh
+        </button>
         <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full relative">
           <Bell className="w-5 h-5" />
           {notifications.some(n => !n.isRead) && (
@@ -144,17 +156,25 @@ export default function TeacherNotificationsPage() {
   );
 
   const renderListHeader = () => (
-    <header className="mb-8 flex items-center justify-between">
+    <header className="mb-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div>
         <h1 className="text-3xl font-black text-slate-900 tracking-tight">Notifications</h1>
         <p className="text-slate-500 mt-2">Stay updated with messages and alerts from students and staff.</p>
       </div>
-      <button
-        onClick={markAllAsRead}
-        className="text-sm font-bold text-primary hover:underline"
-      >
-        Mark all as read
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={markAllAsRead}
+          className="px-3 py-2 rounded-lg text-sm font-bold bg-primary text-white hover:bg-primary/90 transition-colors"
+        >
+          Mark all as read
+        </button>
+        <button
+          onClick={clearRead}
+          className="px-3 py-2 rounded-lg text-sm font-bold border border-slate-200 text-slate-600 hover:border-rose-200 hover:text-rose-600 transition-colors"
+        >
+          Clear read
+        </button>
+      </div>
     </header>
   );
 
@@ -170,37 +190,71 @@ export default function TeacherNotificationsPage() {
             {renderListHeader()}
 
             {/* Filter Tabs */}
-            <div className="flex gap-4 mb-6">
-              <button 
-                onClick={() => setFilter('all')}
-                className={cn(
-                  "px-6 py-2 rounded-xl text-sm font-bold transition-all",
-                  filter === 'all' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
-                )}
-              >
-                All Notifications
-              </button>
-              <button 
-                onClick={() => setFilter('unread')}
-                className={cn(
-                  "px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2",
-                  filter === 'unread' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white text-slate-500 hover:bg-slate-100 border border-slate-200"
-                )}
-              >
-                Unread
-                {notifications.filter(n => !n.isRead).length > 0 && (
+            <div className="flex flex-wrap gap-3 mb-6">
+              {[
+                { key: 'all', label: 'All', count: notifications.length },
+                { key: 'unread', label: 'Unread', count: notifications.filter(n => !n.isRead).length },
+              ].map((tab) => (
+                <button 
+                  key={tab.key}
+                  onClick={() => setFilter(tab.key as 'all' | 'unread')}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border",
+                    filter === tab.key ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : "bg-white text-slate-600 hover:bg-slate-100 border-slate-200"
+                  )}
+                >
+                  {tab.label}
                   <span className={cn(
-                    "size-5 rounded-full flex items-center justify-center text-[10px]",
-                    filter === 'unread' ? "bg-white text-primary" : "bg-primary text-white"
+                    "px-2 py-0.5 rounded-full text-[11px] font-bold",
+                    filter === tab.key ? "bg-white text-primary" : "bg-slate-100 text-slate-600"
                   )}>
-                    {notifications.filter(n => !n.isRead).length}
+                    {tab.count}
                   </span>
-                )}
-              </button>
+                </button>
+              ))}
+
+              <div className="flex items-center gap-2 ml-auto">
+                {(['any', 'message', 'alert', 'system'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setTypeFilter(type)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all",
+                      typeFilter === type
+                        ? "bg-primary text-white border-primary shadow-sm"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-primary/30"
+                    )}
+                  >
+                    {type === 'any' ? 'All types' : type.charAt(0).toUpperCase() + type.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Notifications List */}
             <div className="space-y-3">
+              {isLoading && (
+                <div className="space-y-3">
+                  {[1,2,3].map((i) => (
+                    <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200 animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="size-12 rounded-full bg-slate-200" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-3 bg-slate-200 rounded w-1/3" />
+                          <div className="h-3 bg-slate-100 rounded w-2/3" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-rose-50 border border-rose-100 text-rose-700 text-sm font-bold rounded-2xl p-4">
+                  {error}
+                </div>
+              )}
+
               <AnimatePresence mode="popLayout">
                 {filteredNotifications.map((notification) => (
                   <motion.div
@@ -229,53 +283,78 @@ export default function TeacherNotificationsPage() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-slate-900">{notification.sender.name}</span>
-                            <span className={cn(
-                              "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md",
-                              notification.sender.role === 'Student' ? "bg-blue-50 text-blue-600" :
-                              notification.sender.role === 'Admin' ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"
-                            )}>
-                              {notification.sender.role}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {notification.time}
-                            </span>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                              {!notification.isRead && (
-                                <button 
-                                  onClick={() => markAsRead(notification.id)}
-                                  className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
-                                  title="Mark as read"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button 
-                                onClick={() => deleteNotification(notification.id)}
-                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        <p className={cn(
-                          "text-sm leading-relaxed",
-                          notification.isRead ? "text-slate-500" : "text-slate-700 font-medium"
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900">{notification.sender.name}</span>
+                        <span className={cn(
+                          "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md",
+                          notification.sender.role === 'Student' ? "bg-blue-50 text-blue-600" :
+                          notification.sender.role === 'Admin' ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"
                         )}>
-                          {notification.content}
-                        </p>
+                          {notification.sender.role}
+                        </span>
+                        <span className={cn(
+                          "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md",
+                          notification.type === 'message' ? "bg-primary/10 text-primary" :
+                          notification.type === 'alert' ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-600"
+                        )}>
+                          {notification.type === 'system' ? 'System' : notification.type}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(notification.time)}
+                        </span>
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                          {!notification.isRead && (
+                            <button 
+                              onClick={() => markAsRead(notification.id)}
+                              className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="Mark as read"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => deleteNotification(notification.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <p className={cn(
+                      "text-sm leading-relaxed",
+                      notification.isRead ? "text-slate-500" : "text-slate-700 font-medium"
+                    )}>
+                      {notification.content}
+                    </p>
                       </div>
                     </div>
                     {!notification.isRead && (
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-2xl" />
                     )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {notification.type === 'message' && (
+                        <button
+                          onClick={() => navigate('/teacher/messages', { state: { selectedContactId: notification.sender.id, selectedContactName: notification.sender.name } })}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                        >
+                          Open message
+                        </button>
+                      )}
+                      {notification.type === 'alert' && (
+                        <button
+                          onClick={() => navigate('/teacher/attention')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors"
+                        >
+                          View alerts
+                        </button>
+                      )}
+                    </div>
                   </motion.div>
                 ))}
               </AnimatePresence>

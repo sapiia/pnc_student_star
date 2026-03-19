@@ -40,10 +40,11 @@ export default function StudentCard({
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
+      whileInView={{ opacity: 1, y: 0 }}
       transition={{ delay: (index || 0) * 0.05 }}
+      viewport={{ once: true, amount: 0.2 }}
       className={cn(
-        "bg-white rounded-2xl border shadow-sm transition-all overflow-hidden flex flex-col",
+        "bg-white rounded-2xl border shadow-sm transition-all overflow-hidden flex flex-col hover-lift",
         status === 'Action Needed' 
           ? "border-rose-100 shadow-rose-100/50 hover:shadow-md hover:border-rose-300" 
           : "border-slate-200 hover:shadow-md"
@@ -104,14 +105,14 @@ export default function StudentCard({
       <div className="p-4 bg-white mt-auto flex gap-3">
         <button 
           onClick={() => navigate(`/teacher/students/${id}`)}
-          className="flex-1 py-2.5 bg-white border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-all"
+          className="flex-1 py-2.5 bg-white border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-all pressable"
         >
           Profile
         </button>
         <button 
           onClick={() => onMessageClick ? onMessageClick(id) : navigate(`/teacher/messages?contactId=${Number(id)}`)}
           className={cn(
-            "flex-1 py-2.5 border-2 flex justify-center items-center gap-2 rounded-xl text-xs font-bold transition-all shadow-lg",
+            "flex-1 py-2.5 border-2 flex justify-center items-center gap-2 rounded-xl text-xs font-bold transition-all shadow-lg pressable",
             status === 'Action Needed' 
               ? "bg-rose-600 border-rose-600 hover:bg-rose-700 hover:border-rose-700 text-white shadow-rose-600/20" 
               : "bg-slate-800 border-slate-800 hover:bg-slate-900 hover:border-slate-900 text-white shadow-slate-800/20"

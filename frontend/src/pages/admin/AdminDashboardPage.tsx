@@ -15,7 +15,8 @@ import {
   Clock,
   ArrowUpRight,
   ArrowUpDown,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -31,6 +32,27 @@ const normalizeClassLabel = (value: string) =>
     .trim()
     .replace(/\s+/g, ' ')
     .toUpperCase();
+
+const splitNameParts = (fullName: string) => {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' ')
+  };
+};
+
+const extractClassLabel = (value: string) => {
+  const match = String(value || '').match(/Class\s+(.+)$/i);
+  return match ? match[1].trim() : String(value || '').trim();
+};
+
+const buildStudentClassLabel = (generation: string, major: string, className: string) => {
+  const gen = String(generation || '').trim();
+  if (!gen) return className || '';
+  const majorValue = String(major || '').trim();
+  const classValue = String(className || '').trim();
+  return `Gen ${gen}${majorValue ? ` - ${majorValue}` : ''}${classValue ? ` - Class ${classValue}` : ''}`;
+};
 
 const extractGeneration = (user: any) => {
   const classText = String(user.class || '').trim();
@@ -92,12 +114,28 @@ export default function AdminDashboardPage() {
   const [sortBy, setSortBy] = useState<string>('generation');
   const [sortOrder, setSortOrder] = useState<string>('desc');
   const [generationActionLoading, setGenerationActionLoading] = useState<Record<string, boolean>>({});
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editUserId, setEditUserId] = useState<number | null>(null);
+  const [editError, setEditError] = useState('');
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editUser, setEditUser] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: 'Student',
+    gender: 'male',
+    generation: '',
+    major: '',
+    className: '',
+    studentId: ''
+  });
   const PENDING_PAGE_SIZE = 5;
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
+        const response = await fetch(`${API_BASE_URL}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
         const data = await response.json();
         if (Array.isArray(data)) {
           const students = data.filter((u: any) => u.role.toLowerCase() === 'student');
@@ -192,7 +230,7 @@ export default function AdminDashboardPage() {
       setGenerationActionLoading((prev) => ({ ...prev, [generation]: true }));
       const shouldEnable = activeCount === 0;
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users/generation/${generation}/active`,
+        `${API_BASE_URL}/users/generation/${generation}/active`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -204,7 +242,7 @@ export default function AdminDashboardPage() {
         alert(data.error || 'Failed to update generation status.');
         return;
       }
-      const refreshed = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
+      const refreshed = await fetch(`${API_BASE_URL}/users?sortBy=${sortBy}&sortOrder=${sortOrder}`);
       const data = await refreshed.json();
       if (Array.isArray(data)) {
         const students = data.filter((u: any) => u.role.toLowerCase() === 'student');
@@ -251,6 +289,137 @@ export default function AdminDashboardPage() {
       alert('Failed to update generation status.');
     } finally {
       setGenerationActionLoading((prev) => ({ ...prev, [generation]: false }));
+    }
+  };
+
+  const openEditPendingUser = async (userId: number) => {
+    setEditError('');
+    setIsEditModalOpen(true);
+    setEditUserId(userId);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to load user details.');
+      }
+      const user = await response.json();
+      const resolvedName = String(user.name || `${user.first_name || ''} ${user.last_name || ''}` || '').trim();
+      const { firstName, lastName } = splitNameParts(resolvedName);
+      const roleLower = String(user.role || '').toLowerCase();
+      const role = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
+      const classValue = String(user.class || '').trim();
+      const generation = String(user.generation || '').trim() || extractGeneration(user);
+      const major = String(user.major || '').trim().toUpperCase();
+      const className = normalizeClassLabel(extractClassLabel(classValue));
+
+      setEditUser({
+        firstName,
+        lastName,
+        email: String(user.email || ''),
+        role,
+        gender: String(user.gender || 'male').toLowerCase() === 'female' ? 'female' : 'male',
+        generation: generation || '',
+        major: major || '',
+        className: className || '',
+        studentId: String(user.student_id || '')
+      });
+    } catch (err: any) {
+      setEditError(err?.message || 'Failed to load user details.');
+    }
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editUserId || isEditSubmitting) return;
+    setEditError('');
+
+    const trimmedEmail = editUser.email.trim().toLowerCase();
+    const trimmedFirstName = editUser.firstName.trim();
+    const trimmedLastName = editUser.lastName.trim();
+    const trimmedGeneration = editUser.generation.trim();
+    const trimmedMajor = editUser.major.trim().toUpperCase();
+    const trimmedClass = editUser.className.trim().toUpperCase();
+    const trimmedStudentId = editUser.studentId.trim();
+    const roleValue = editUser.role.toLowerCase();
+
+    if (!trimmedEmail) {
+      setEditError('Email is required.');
+      return;
+    }
+    if (!trimmedFirstName) {
+      setEditError('First name is required.');
+      return;
+    }
+
+    if (roleValue === 'student') {
+      const studentIdPattern = /^\d{4}-\d{3}$/;
+      if (!trimmedGeneration || !/^\d{4}$/.test(trimmedGeneration)) {
+        setEditError('Generation must be a 4-digit year.');
+        return;
+      }
+      if (!trimmedMajor) {
+        setEditError('Major is required for student.');
+        return;
+      }
+      if (trimmedStudentId && !studentIdPattern.test(trimmedStudentId)) {
+        setEditError('Student ID must match format YYYY-XXX (example: 2028-001).');
+        return;
+      }
+      if (trimmedStudentId && !trimmedStudentId.startsWith(`${trimmedGeneration}-`)) {
+        setEditError('Student ID year must match selected generation.');
+        return;
+      }
+    }
+
+    const resolvedName = `${trimmedFirstName} ${trimmedLastName}`.trim();
+    const classLabel = roleValue === 'student'
+      ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
+      : trimmedClass || null;
+
+    try {
+      setIsEditSubmitting(true);
+      const response = await fetch(`${API_BASE_URL}/users/${editUserId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: resolvedName,
+          email: trimmedEmail,
+          gender: editUser.gender,
+          role: roleValue,
+          class_name: classLabel,
+          student_id: roleValue === 'student' ? trimmedStudentId : null,
+          generation: roleValue === 'student' ? trimmedGeneration : null,
+          major: roleValue === 'student' ? trimmedMajor : null,
+          className: roleValue === 'student' ? trimmedClass : trimmedClass
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update user.');
+      }
+
+      setPendingUsers((prev) =>
+        prev.map((u) =>
+          u.id === editUserId
+            ? {
+                ...u,
+                name: resolvedName,
+                email: trimmedEmail,
+                role: editUser.role,
+                group: classLabel || u.group
+              }
+            : u
+        )
+      );
+
+      setIsEditModalOpen(false);
+      setEditUserId(null);
+    } catch (err: any) {
+      setEditError(err?.message || 'Failed to update user.');
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -438,6 +607,9 @@ export default function AdminDashboardPage() {
                 >
                   <Plus className="w-4 h-4" />
                   Add User
+                  <span className="ml-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black tracking-widest text-white">
+                    {pendingUsers.length}
+                  </span>
                 </button>
               </div>
               
@@ -483,7 +655,11 @@ export default function AdminDashboardPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button className="p-2 text-slate-400 hover:text-primary transition-colors">
+                          <button
+                            onClick={() => openEditPendingUser(user.id)}
+                            className="p-2 text-slate-400 hover:text-primary transition-colors"
+                            title="Edit user"
+                          >
                             <Edit2 className="w-4 h-4" />
                           </button>
                         </td>
@@ -612,6 +788,164 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </main>
+
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => !isEditSubmitting && setIsEditModalOpen(false)}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 14 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 14 }}
+            className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Edit Pending User</h3>
+                <p className="text-xs text-slate-500 font-bold">Update the user information below.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-2 rounded-full hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">First Name</label>
+                  <input
+                    required
+                    type="text"
+                    value={editUser.firstName}
+                    onChange={(e) => setEditUser((prev) => ({ ...prev, firstName: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Last Name</label>
+                  <input
+                    type="text"
+                    value={editUser.lastName}
+                    onChange={(e) => setEditUser((prev) => ({ ...prev, lastName: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Address</label>
+                <input
+                  required
+                  type="email"
+                  value={editUser.email}
+                  onChange={(e) => setEditUser((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Gender</label>
+                  <select
+                    value={editUser.gender}
+                    onChange={(e) => setEditUser((prev) => ({ ...prev, gender: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Role</label>
+                  <select
+                    value={editUser.role}
+                    onChange={(e) => setEditUser((prev) => ({ ...prev, role: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  >
+                    <option value="Student">Student</option>
+                    <option value="Teacher">Teacher</option>
+                    <option value="Admin">Admin</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Generation</label>
+                  <input
+                    type="text"
+                    value={editUser.generation}
+                    onChange={(e) => setEditUser((prev) => ({ ...prev, generation: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {editUser.role === 'Student' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Major</label>
+                    <input
+                      type="text"
+                      value={editUser.major}
+                      onChange={(e) => setEditUser((prev) => ({ ...prev, major: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</label>
+                    <input
+                      type="text"
+                      value={editUser.className}
+                      onChange={(e) => setEditUser((prev) => ({ ...prev, className: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Student ID</label>
+                    <input
+                      type="text"
+                      value={editUser.studentId}
+                      onChange={(e) => setEditUser((prev) => ({ ...prev, studentId: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {editError && (
+                <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={isEditSubmitting}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditSubmitting}
+                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-black uppercase tracking-widest hover:bg-primary/90 disabled:opacity-60"
+                >
+                  {isEditSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import React from 'react';
 import {
   Star,
   Bell,
@@ -21,7 +20,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import StarRating from '../../components/ui/StarRating';
 import RadarChart from '../../components/ui/RadarChart';
 import Sidebar from '../../components/layout/sidebar/student/Sidebar';
@@ -137,9 +136,11 @@ export default function DashboardPage() {
   const [activeCriterion, setActiveCriterion] = useState<CriterionDetail | null>(null);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
-  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState(1);
+  const [maxEvaluationsPerCycle, setMaxEvaluationsPerCycle] = useState<number>(1);
   const [evaluationsUsed, setEvaluationsUsed] = useState(0);
-  const canStartEvaluation = daysLeft === 0 && evaluationsUsed < maxEvaluationsPerCycle;
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const canStartEvaluation = !latestEvaluation || daysLeft === 0;
 
   const currentStatusCriteria = useMemo(() => {
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
@@ -161,15 +162,15 @@ export default function DashboardPage() {
     return activeGlobal.map((criterion, index) => {
       const criterionId = String(criterion.id || '');
       const criterionName = String(criterion.name || '').trim().toLowerCase();
-      
+
       // Try to find a matching response using multiple strategies
       const response = (latestEvaluation?.responses || []).find(r => {
         const responseKey = String(r.criterion_key || '').trim();
         const responseId = String(r.criterion_id || '').trim();
         const responseName = String(r.criterion_name || '').trim().toLowerCase();
-        
+
         // Match by: criterion_id directly, criterion_key mapping, or name
-        return responseId === criterionId || 
+        return responseId === criterionId ||
                keyToIdMap.get(responseKey) === criterionId ||
                responseName === criterionName;
       });
@@ -229,15 +230,15 @@ export default function DashboardPage() {
           : evaluationIndex === 0
             ? 'previous'
             : 'current';
-            
+
         // Try to find a matching response using multiple strategies
         const response = (evaluation.responses || []).find(r => {
           const responseKey = String(r.criterion_key || '').trim();
           const responseId = String(r.criterion_id || '').trim();
           const responseName = String(r.criterion_name || '').trim().toLowerCase();
-          
+
           // Match by: criterion_id directly, criterion_key mapping, or name
-          return responseId === criterionId || 
+          return responseId === criterionId ||
                  keyToIdMap.get(responseKey) === criterionId ||
                  responseName === criterionName;
         });
@@ -255,7 +256,6 @@ export default function DashboardPage() {
 
     return { data, dataKeys, maxValue };
   }, [evaluations, globalRatingScale, globalCriteria]);
-
 
   useEffect(() => { setShowUrgentNotification(daysLeft <= 3); }, [daysLeft]);
 
@@ -291,43 +291,47 @@ export default function DashboardPage() {
 
       const prefsRaw = localStorage.getItem(`student_notify_${userId}`);
       const prefs = prefsRaw ? JSON.parse(prefsRaw) : null;
-      const remindersEnabled = prefs?.remindersEnabled !== false;
+      const remindersEnabledPref = prefs?.remindersEnabled !== false;
+      setRemindersEnabled(remindersEnabledPref);
 
       const [
         response,
         intervalResponse,
         evaluationsResponse,
-        maxEvaluationsResponse,
         studentFeedbackVisibilityResponse,
         reminderNotificationsResponse,
         feedbackResponse,
         notificationsResponse,
         criteriaConfigResponse,
+        maxEvaluationsResponse,
       ] = await Promise.all([
         fetch(`${API_BASE_URL}/users/${userId}`),
         fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
         fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
-        fetch(`${API_BASE_URL}/settings/key/student_max_evaluations_per_cycle`),
         fetch(`${API_BASE_URL}/settings/key/student_can_view_teacher_feedback`),
         fetch(`${API_BASE_URL}/settings/key/student_receives_reminder_notifications`),
         fetch(`${API_BASE_URL}/feedbacks/student/${userId}`),
         fetch(`${API_BASE_URL}/notifications/user/${userId}`),
-        fetch(`${API_BASE_URL}/settings/evaluation-criteria`)
+        fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
+        fetch(`${API_BASE_URL}/settings/key/student_max_evaluations_per_cycle`)
       ]);
 
       const data = await response.json().catch(() => ({}));
       const intervalData = await intervalResponse.json().catch(() => ({}));
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
-      const maxEvaluationsData = await maxEvaluationsResponse.json().catch(() => ({}));
+      const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
       const visibilityData = await studentFeedbackVisibilityResponse.json().catch(() => ({}));
       const reminderData = await reminderNotificationsResponse.json().catch(() => ({}));
-      const feedbackData = await feedbackResponse.json().catch(() => []);
-      const notifData = await notificationsResponse.json().catch(() => []);
+      const feedbackData = await feedbackResponse.json().catch(() => ([]));
+      const notifData = await notificationsResponse.json().catch(() => ([]));
       const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
+      const maxEvaluationsData = await maxEvaluationsResponse.json().catch(() => ({}));
 
       const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
       setGlobalRatingScale(nextRatingScale);
       setGlobalCriteria(Array.isArray(criteriaConfigData?.criteria) ? criteriaConfigData.criteria : []);
+
+      const maxPerCycle = Math.min(12, Math.max(1, Number(maxEvaluationsData?.value || 1)));
+      setMaxEvaluationsPerCycle(maxPerCycle);
 
       const sortedEvals = Array.isArray(evaluationsData) ? [...evaluationsData].sort((a, b) => getEvaluationSortValue(b) - getEvaluationSortValue(a)) : [];
       const latestEval = sortedEvals.length > 0 ? sortedEvals[0] : null;
@@ -343,21 +347,21 @@ export default function DashboardPage() {
       if (canViewFeedback && Array.isArray(feedbackData)) {
         const normalized = [...feedbackData].sort((a, b) => new Date(String(b.created_at || '')).getTime() - new Date(String(a.created_at || '')).getTime()).slice(0, 3);
         setRecentFeedback(normalized);
+      } else {
+        setRecentFeedback([]);
       }
 
-      const notifications = Array.isArray(notifData) ? notifData : [];
-      setUnreadNotificationCount(notifications.filter(n => Number(n.is_read) !== 1).length);
+      const notificationsList = Array.isArray(notifData) ? notifData : [];
+      setNotifications(notificationsList);
+      setUnreadNotificationCount(notificationsList.filter(n => Number(n.is_read) !== 1).length);
 
       const resolvedCycle = Math.min(365, Math.max(30, Number(intervalData?.value || 90)));
-      const resolvedMaxEvaluations = Math.min(12, Math.max(1, Number(maxEvaluationsData?.value || 1)));
       setCycleDays(resolvedCycle);
-      setMaxEvaluationsPerCycle(resolvedMaxEvaluations);
-
       setLatestEvaluation(latestEval);
 
       const now = Date.now();
       const windowStart = now - resolvedCycle * 24 * 60 * 60 * 1000;
-      const evaluationsInWindow = sortedEvals.filter((evaluation) => {
+      const evaluationsInWindow = sortedEvals.filter((evaluation: any) => {
         const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
         const timestamp = new Date(submittedAt).getTime();
         return Number.isFinite(timestamp) && timestamp >= windowStart;
@@ -367,11 +371,12 @@ export default function DashboardPage() {
       setEvaluationsUsed(usedCount);
 
       let nextAvailableDate: Date | null = null;
+      let computedDaysLeft = 0;
 
-      if (usedCount < resolvedMaxEvaluations) {
-        setDaysLeft(0);
+      if (usedCount < maxPerCycle) {
+        computedDaysLeft = 0;
       } else {
-        const earliestTimestamp = evaluationsInWindow.reduce((min, evaluation) => {
+        const earliestTimestamp = evaluationsInWindow.reduce((min: number, evaluation: any) => {
           const submittedAt = String(evaluation?.submitted_at || evaluation?.created_at || '').trim();
           const timestamp = new Date(submittedAt).getTime();
           if (!Number.isFinite(timestamp)) return min;
@@ -379,30 +384,54 @@ export default function DashboardPage() {
         }, Number.POSITIVE_INFINITY);
 
         if (!Number.isFinite(earliestTimestamp)) {
-          setDaysLeft(0);
+          computedDaysLeft = 0;
         } else {
           const nextDate = new Date(earliestTimestamp);
           nextDate.setDate(nextDate.getDate() + resolvedCycle);
           nextAvailableDate = nextDate;
           const remaining = nextDate.getTime() - now;
-          setDaysLeft(Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24))));
+          computedDaysLeft = Math.max(0, Math.ceil(remaining / (1000 * 60 * 60 * 24)));
         }
       }
 
+      setDaysLeft(computedDaysLeft);
+
       const adminAllowsReminders = !['false', '0'].includes(String(reminderData?.value || 'true').trim().toLowerCase());
-      if (adminAllowsReminders && remindersEnabled && usedCount >= resolvedMaxEvaluations && daysLeft === 3 && nextAvailableDate) {
+      if (adminAllowsReminders && remindersEnabledPref && usedCount >= maxPerCycle && computedDaysLeft === 3 && nextAvailableDate) {
         const msg = `Reminder: your next evaluation opens in 3 days on ${formatLongDate(nextAvailableDate)}.`;
-        if (!notifications.some(n => String(n.message || '').trim() === msg)) {
+        if (!notificationsList.some(n => String(n.message || '').trim() === msg)) {
           const res = await fetch(`${API_BASE_URL}/notifications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, message: msg, is_read: 0 }) });
           if (res.ok) { setUnreadNotificationCount(c => c + 1); window.dispatchEvent(new Event('student-notifications-updated')); }
         }
       }
     } catch {
-      setStudentUserId(null); setCycleDays(90); setDaysLeft(0); setEvaluations([]); setRecentFeedback([]); setUnreadNotificationCount(0); setLatestEvaluation(null); setMaxEvaluationsPerCycle(1); setEvaluationsUsed(0);
+      setStudentUserId(null);
+      setCycleDays(90);
+      setDaysLeft(0);
+      setEvaluations([]);
+      setRecentFeedback([]);
+      setUnreadNotificationCount(0);
+      setLatestEvaluation(null);
+      setMaxEvaluationsPerCycle(1);
+      setEvaluationsUsed(0);
     }
   }, []);
 
   useEffect(() => { void loadIdentity(); }, [loadIdentity]);
+
+  // Add real-time listener for settings changes
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      console.log('🔄 Dashboard: Settings updated - refreshing evaluation eligibility');
+      void loadIdentity();
+    };
+
+    window.addEventListener('student-settings-updated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('student-settings-updated', handleSettingsUpdate);
+    };
+  }, [loadIdentity]);
   useEffect(() => { void loadRecentFeedback(); }, [loadRecentFeedback]);
 
   useEffect(() => {
@@ -416,7 +445,7 @@ export default function DashboardPage() {
   }, [loadRecentFeedback, studentUserId]);
 
   const getIcon = (name: string) => {
-    const icons: Record<string, React.ReactNode> = { Home: <Home />, Briefcase: <Briefcase />, Users: <Users />, Users2: <Users2 />, Heart: <Heart />, Smile: <Smile />, Brain: <Brain />, CreditCard: <CreditCard />, Wrench: <Wrench />, MessageCircle: <MessageCircle /> };
+    const icons: Record<string, ReactNode> = { Home: <Home />, Briefcase: <Briefcase />, Users: <Users />, Users2: <Users2 />, Heart: <Heart />, Smile: <Smile />, Brain: <Brain />, CreditCard: <CreditCard />, Wrench: <Wrench />, MessageCircle: <MessageCircle /> };
     const IconComponent = icons[name] || <Star />;
     return <span className="w-6 h-6">{IconComponent}</span>;
   };

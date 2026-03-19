@@ -13,7 +13,7 @@ export default function TeacherSidebar({ className }: TeacherSidebarProps) {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/teacher/dashboard' },
     { icon: Users, label: 'Student List', path: '/teacher/students' },
     { icon: Bell, label: 'Notifications', path: '/teacher/notifications' },
-    { icon: MessageSquare, label: 'Message Admin', path: '/teacher/messages' },
+    { icon: MessageSquare, label: 'Messager', path: '/teacher/messages' },
     { icon: BarChart3, label: 'Reports', path: '/teacher/reports' },
     { icon: Settings, label: 'Settings', path: '/teacher/settings' },
   ];
