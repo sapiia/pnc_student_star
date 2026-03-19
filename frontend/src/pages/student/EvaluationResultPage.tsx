@@ -329,12 +329,36 @@ export default function EvaluationResultPage() {
   const criteriaData = useMemo<CriterionView[]>(() => {
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
     
+    // Create a mapping from criterion key to CRIT-XXX ID for matching
+    const keyToIdMap = new Map<string, string>();
+    activeGlobal.forEach((c: any) => {
+      if (c.id) {
+        // Generate camelCase key from name (same logic as toCriterionKey)
+        const camelKey = String(c.name || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+          .replace(/[^a-zA-Z0-9]/g, '');
+        keyToIdMap.set(camelKey, c.id);
+        keyToIdMap.set(c.id, c.id); // Also map id to itself
+      }
+    });
+    
     if (activeGlobal.length > 0) {
       return activeGlobal.map((criterion, index) => {
-        const response = (evaluation?.responses || []).find(r => 
-          String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-          String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-        );
+        const criterionId = String(criterion.id || '');
+        const criterionName = String(criterion.name || '').trim().toLowerCase();
+        
+        // Try to find a matching response using multiple strategies
+        const response = (evaluation?.responses || []).find(r => {
+          const responseKey = String(r.criterion_key || '').trim();
+          const responseId = String(r.criterion_id || '').trim();
+          const responseName = String(r.criterion_name || '').trim().toLowerCase();
+          
+          // Match by: criterion_id directly, criterion_key mapping, or name
+          return responseId === criterionId || 
+                 keyToIdMap.get(responseKey) === criterionId ||
+                 responseName === criterionName;
+        });
         
         return {
           key: String(criterion.id || criterion.name || `criterion-${index}`),
@@ -407,25 +431,29 @@ export default function EvaluationResultPage() {
   ];
   const completedLabel = formatLongDate(String(evaluation?.submitted_at || evaluation?.created_at || new Date().toISOString()));
 
+  const renderTopBar = () => (
+    <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
+      <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
+        <h2 className="text-slate-900 text-sm md:text-lg font-bold leading-tight tracking-tight uppercase tracking-widest font-black">Evaluation Results</h2>
+      </div>
+      <div className="flex items-center justify-end gap-3 md:gap-4">
+        <button className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl">
+          <Bell className="w-5 h-5" />
+        </button>
+        <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl hidden md:block">
+          <Settings className="w-5 h-5" />
+        </button>
+      </div>
+    </header>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <Sidebar />
 
       <main className="relative flex-1 flex flex-col overflow-hidden pb-16 md:pb-0">
         <StudentMobileNav />
-        <header className="h-auto min-h-16 bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-4 text-primary cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <h2 className="text-slate-900 text-sm md:text-lg font-bold leading-tight tracking-tight uppercase tracking-widest font-black">Evaluation Results</h2>
-          </div>
-          <div className="flex items-center justify-end gap-3 md:gap-4">
-            <button className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl">
-              <Bell className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl hidden md:block">
-              <Settings className="w-5 h-5" />
-            </button>
-          </div>
-        </header>
+        {renderTopBar()}
 
         {/* Toast notification banner */}
         <AnimatePresence>

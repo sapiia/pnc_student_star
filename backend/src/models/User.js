@@ -88,6 +88,96 @@ class User {
       throw error;
     }
   }
+
+  // Find users by filters
+  static async findByFilters(filters) {
+    try {
+      let query = "SELECT * FROM users WHERE 1=1";
+      const params = [];
+
+      if (filters.generation) {
+        query += " AND class LIKE ?";
+        params.push(`%${filters.generation}%`);
+      }
+
+      if (filters.class_name) {
+        query += " AND class = ?";
+        params.push(filters.class_name);
+      }
+
+      if (filters.id) {
+        query += " AND id = ?";
+        params.push(filters.id);
+      }
+
+      // Note: gender filtering would require adding a gender field to the users table
+      // For now, we'll include the parameter but won't filter by it
+      if (filters.gender && false) { // Set to false to prevent filtering until gender field exists
+        query += " AND gender = ?";
+        params.push(filters.gender);
+      }
+
+      query += " ORDER BY first_name, last_name";
+
+      const [rows] = await db.query(query, params);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get teacher's assigned classes (unique class values from students)
+  static async getTeacherClasses(teacherId) {
+    try {
+      // Get unique classes from students (could be extended to use a teacher_class_assignment table)
+      const [rows] = await db.query(`
+        SELECT DISTINCT class 
+        FROM users 
+        WHERE role = 'student' 
+        AND class IS NOT NULL 
+        AND class != ''
+        ORDER BY class
+      `);
+      return rows.map(row => row.class);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get students by class
+  static async getStudentsByClass(className) {
+    try {
+      const [rows] = await db.query(`
+        SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
+        FROM users 
+        WHERE role = 'student' 
+        AND class = ?
+        AND is_active = 1
+        AND is_deleted = 0
+        ORDER BY first_name, last_name
+      `, [className]);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get all students for teacher (all classes teacher has access to)
+  static async getTeacherStudents(teacherId) {
+    try {
+      const [rows] = await db.query(`
+        SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
+        FROM users 
+        WHERE role = 'student' 
+        AND is_active = 1
+        AND is_deleted = 0
+        ORDER BY class, first_name, last_name
+      `);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = User;

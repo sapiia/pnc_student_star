@@ -21,6 +21,19 @@ const getFeedbackCharacterLimit = async () => {
   }
 };
 
+const getTeacherMaxAssignedStudents = async () => {
+  try {
+    const [rows] = await db.query(
+      "SELECT `value` FROM settings WHERE `key` = 'teacher_max_assigned_students' LIMIT 1"
+    );
+    const parsed = Number(rows?.[0]?.value);
+    if (!Number.isFinite(parsed)) return 30;
+    return parsed <= 0 ? 0 : parsed;
+  } catch {
+    return 30;
+  }
+};
+
 const canStudentViewTeacherFeedback = async () => {
   try {
     const [rows] = await db.query(
@@ -149,6 +162,27 @@ const createFeedback = async (req, res) => {
     }
 
     await ensureFeedbackParticipants(teacherId, studentId);
+
+    const maxAssignedStudents = await getTeacherMaxAssignedStudents();
+    if (maxAssignedStudents > 0) {
+      const [limitRows] = await db.query(
+        `
+          SELECT 
+            COUNT(DISTINCT student_id) AS total,
+            SUM(student_id = ?) AS existing
+          FROM feedbacks
+          WHERE teacher_id = ?
+        `,
+        [studentId, teacherId]
+      );
+      const total = Number(limitRows?.[0]?.total) || 0;
+      const existing = Number(limitRows?.[0]?.existing) || 0;
+      if (!existing && total >= maxAssignedStudents) {
+        return res.status(400).json({
+          error: `Teacher feedback limit reached (${maxAssignedStudents} students).`
+        });
+      }
+    }
 
     const feedbackId = await Feedback.create(req.body);
     const createdFeedback = await Feedback.findById(feedbackId);

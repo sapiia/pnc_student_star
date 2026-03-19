@@ -12,6 +12,28 @@ const getUsersTableColumns = async () => {
   return usersTableColumnsPromise;
 };
 
+const getNotificationRetentionDays = async () => {
+  try {
+    const [rows] = await db.query(
+      "SELECT `value` FROM settings WHERE `key` = 'notification_auto_delete_days' LIMIT 1"
+    );
+    const parsed = Number(rows?.[0]?.value);
+    if (!Number.isFinite(parsed)) return 7;
+    return Math.min(365, Math.max(7, parsed));
+  } catch {
+    return 7;
+  }
+};
+
+const purgeExpiredNotifications = async () => {
+  const retentionDays = await getNotificationRetentionDays();
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return;
+  await db.query(
+    'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+    [retentionDays]
+  );
+};
+
 const buildDisplayNameSql = (alias, columns) => {
   if (columns.has('name')) {
     return `${alias}.name`;
@@ -36,6 +58,80 @@ const buildDisplayNameSql = (alias, columns) => {
 };
 
 class Notification {
+  static parsePayload(rawMessage = '') {
+    const text = String(rawMessage || '').trim();
+
+    // Default shape
+    const result = {
+      type: 'message',
+      from_id: null,
+      from_name: null,
+      from_role: null,
+      from_avatar: null,
+      to_id: null,
+      content: text,
+    };
+
+    // [DirectMessage] from=1; to=2; sender_name=Alice; text=Hello
+    const directMatch = text.match(/^\[DirectMessage\]\s*from=(\d+);\s*to=(\d+);\s*sender_name=([^;]+);\s*text=(.*)$/i);
+    if (directMatch) {
+      result.type = 'message';
+      result.from_id = Number(directMatch[1]);
+      result.to_id = Number(directMatch[2]);
+      result.from_name = directMatch[3].trim() || null;
+      result.content = directMatch[4].trim();
+      return result;
+    }
+
+    // [TeacherFeedback] { json }
+    if (text.startsWith('[TeacherFeedback]')) {
+      const json = text.replace(/^\[TeacherFeedback\]\s*/, '');
+      try {
+        const parsed = JSON.parse(json);
+        result.type = 'message';
+        result.from_id = Number(parsed.teacherId) || null;
+        result.from_name = parsed.teacherName || null;
+        result.from_role = 'Teacher';
+        result.from_avatar = parsed.teacherProfile || null;
+        result.content = parsed.text || 'Your teacher sent you feedback.';
+        return result;
+      } catch {
+        return result;
+      }
+    }
+
+    // [StudentReply] ...
+    if (text.startsWith('[StudentReply]')) {
+      result.type = 'message';
+      return result;
+    }
+
+    // [Alert] ... (optional future)
+    if (text.toLowerCase().startsWith('[alert]')) {
+      result.type = 'alert';
+      result.content = text.replace(/^\[alert\]\s*/i, '') || text;
+      return result;
+    }
+
+    return result;
+  }
+
+  static decorate(rows = []) {
+    return rows.map((row) => {
+      const parsed = this.parsePayload(row.message);
+      return {
+        ...row,
+        type: parsed.type,
+        from_id: parsed.from_id,
+        from_name: parsed.from_name || row.user_name || 'Unknown',
+        from_role: parsed.from_role || 'Student',
+        from_avatar: parsed.from_avatar || row.user_profile_image || null,
+        to_id: parsed.to_id || null,
+        content: parsed.content,
+      };
+    });
+  }
+
   static async buildBaseSelectSql() {
     const columns = await getUsersTableColumns();
     const displayNameSql = buildDisplayNameSql('u', columns);
@@ -55,12 +151,13 @@ class Notification {
 
   static async findAll() {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         ORDER BY n.created_at DESC
       `;
       const [rows] = await db.query(sql);
-      return rows;
+      return this.decorate(rows);
     } catch (error) {
       throw error;
     }
@@ -68,12 +165,14 @@ class Notification {
 
   static async findById(id) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.id = ?
       `;
       const [rows] = await db.query(sql, [id]);
-      return rows[0] || null;
+      const decorated = this.decorate(rows);
+      return decorated[0] || null;
     } catch (error) {
       throw error;
     }
@@ -81,13 +180,14 @@ class Notification {
 
   static async findByUserId(userId) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.user_id = ?
         ORDER BY n.created_at DESC
       `;
       const [rows] = await db.query(sql, [userId]);
-      return rows;
+      return this.decorate(rows);
     } catch (error) {
       throw error;
     }
@@ -95,6 +195,7 @@ class Notification {
 
   static async findStudentReplyThread(studentId, teacherId) {
     try {
+      await purgeExpiredNotifications();
       const [rows] = await db.query(`
         SELECT id, user_id, message, is_read, created_at, updated_at
         FROM notifications
@@ -134,13 +235,14 @@ class Notification {
 
   static async findUnreadByUserId(userId) {
     try {
+      await purgeExpiredNotifications();
       const sql = `
         ${await this.buildBaseSelectSql()}
         WHERE n.user_id = ? AND n.is_read = 0
         ORDER BY n.created_at DESC
       `;
       const [rows] = await db.query(sql, [userId]);
-      return rows;
+      return this.decorate(rows);
     } catch (error) {
       throw error;
     }
