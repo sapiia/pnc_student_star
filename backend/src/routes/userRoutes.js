@@ -18,6 +18,7 @@ const {
   hardDeleteAllUsers,
   disableAllUsers,
   setUserActive,
+  setGenerationActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,
@@ -59,6 +60,9 @@ const profileImageUpload = multer({
 
 // GET /api/users - Get all users
 router.get('/', getAllUsers);
+
+// PATCH /api/users/generation/:generation/active - Enable/disable all students in a generation
+router.patch('/generation/:generation/active', setGenerationActive);
 
 // GET /api/users/:id - Get user by ID
 router.get('/:id', getUserById);

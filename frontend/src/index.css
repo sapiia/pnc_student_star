@@ -20,4 +20,63 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  .hover-lift {
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+    will-change: transform, box-shadow;
+  }
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  }
+  .hover-lift:active {
+    transform: translateY(-1px);
+  }
+
+  .pressable {
+    transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    will-change: transform;
+  }
+  .pressable:active {
+    transform: scale(0.98);
+  }
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 600ms ease, transform 600ms ease;
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+  [data-reveal="fade"] {
+    transform: none;
+  }
+  [data-reveal="fade-up"] {
+    transform: translateY(24px);
+  }
+  [data-reveal="fade-left"] {
+    transform: translateX(24px);
+  }
+  [data-reveal="fade-right"] {
+    transform: translateX(-24px);
+  }
+  [data-reveal="zoom"] {
+    transform: scale(0.96);
+  }
+  [data-reveal].is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hover-lift,
+    .pressable,
+    [data-reveal] {
+      transition: none;
+      transform: none;
+    }
+    [data-reveal] {
+      opacity: 1;
+    }
+  }
 }

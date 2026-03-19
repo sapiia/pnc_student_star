@@ -40,7 +40,7 @@ export default function AdminNotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | 'any'>('any');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);

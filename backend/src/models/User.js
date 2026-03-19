@@ -89,6 +89,43 @@ class User {
     }
   }
 
+  // Find users by filters
+  static async findByFilters(filters) {
+    try {
+      let query = "SELECT * FROM users WHERE 1=1";
+      const params = [];
+
+      if (filters.generation) {
+        query += " AND class LIKE ?";
+        params.push(`%${filters.generation}%`);
+      }
+
+      if (filters.class_name) {
+        query += " AND class = ?";
+        params.push(filters.class_name);
+      }
+
+      if (filters.id) {
+        query += " AND id = ?";
+        params.push(filters.id);
+      }
+
+      // Note: gender filtering would require adding a gender field to the users table
+      // For now, we'll include the parameter but won't filter by it
+      if (filters.gender && false) { // Set to false to prevent filtering until gender field exists
+        query += " AND gender = ?";
+        params.push(filters.gender);
+      }
+
+      query += " ORDER BY first_name, last_name";
+
+      const [rows] = await db.query(query, params);
+      return rows;
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Get teacher's assigned classes (unique class values from students)
   static async getTeacherClasses(teacherId) {
     try {

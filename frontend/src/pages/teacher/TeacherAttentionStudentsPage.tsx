@@ -15,9 +15,11 @@ import {
   toDisplayName, 
   extractGeneration, 
   extractClassNameLegacy,
-  getEvaluationSortValue,
   formatShortDateWithTime,
-  getStudentStatus
+  getEvaluationSortValue,
+  getStudentStatus,
+  normalizeGender,
+  resolveAvatarUrl
 } from '../../lib/teacher/utils';
 import type { Gender } from '../../lib/teacher/types';
 
@@ -43,23 +45,51 @@ export default function TeacherAttentionStudentsPage() {
   const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
+    if (!teacherId) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`),
+        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
         fetch(`${API_BASE_URL}/evaluations`)
       ]);
 
-      const usersData = await usersResponse.json().catch(() => []);
-      const evaluationsData = await evaluationsResponse.json().catch(() => []);
+      let usersData = [];
+      if (usersResponse.ok) {
+        usersData = await usersResponse.json().catch(() => []);
+      } else {
+        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
+        usersData = await fallbackResponse.json().catch(() => []);
+      }
+
+      const evaluationsData = evaluationsResponse.ok
+        ? await evaluationsResponse.json().catch(() => [])
+        : [];
+
+      const studentIdSet = new Set(
+        Array.isArray(usersData)
+          ? usersData
+              .filter((user: any) => String(user.role || '').trim().toLowerCase() === 'student')
+              .map((user: any) => Number(user.id))
+              .filter((id: number) => Number.isInteger(id) && id > 0)
+          : []
+      );
 
       const latestEvaluationByUser = new Map<number, any>();
       if (Array.isArray(evaluationsData)) {
         [...evaluationsData]
-          .sort((left, right) => getEvaluationSortValue(right) - getEvaluationSortValue(left))
+          .sort((left: any, right: any) => getEvaluationSortValue(right) - getEvaluationSortValue(left))
           .forEach((evaluation: any) => {
             const userId = Number(evaluation.user_id);
-            if (Number.isInteger(userId) && userId > 0 && !latestEvaluationByUser.has(userId)) {
+            if (
+              Number.isInteger(userId) &&
+              userId > 0 &&
+              studentIdSet.has(userId) &&
+              !latestEvaluationByUser.has(userId)
+            ) {
               latestEvaluationByUser.set(userId, evaluation);
             }
           });
@@ -67,8 +97,8 @@ export default function TeacherAttentionStudentsPage() {
 
       const mappedStudents: StudentData[] = Array.isArray(usersData)
         ? (usersData as any[])
-            .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
-            .map((user) => {
+            .filter((user: any) => String(user.role || '').trim().toLowerCase() === 'student')
+            .map((user: any) => {
               const latestEvaluation = latestEvaluationByUser.get(Number(user.id)) || null;
               const averageScore = latestEvaluation && Number.isFinite(Number(latestEvaluation.average_score))
                 ? Number(latestEvaluation.average_score)
@@ -80,21 +110,21 @@ export default function TeacherAttentionStudentsPage() {
                 id: Number(user.id),
                 studentId: String(user.student_id || user.resolved_student_id || '').trim() || `STU-${user.id}`,
                 name: toDisplayName(user),
-                avatar: String(user.profile_image || '').trim() || DEFAULT_AVATAR,
+                avatar: resolveAvatarUrl(String(user.profile_image || '').trim(), DEFAULT_AVATAR),
                 generation: extractGeneration(user),
                 className: extractClassNameLegacy(user),
-                gender: (String(user.gender || '').trim().toLowerCase() as Gender) || 'unknown',
+                gender: (normalizeGender(user.gender) as Gender) || 'unknown',
                 rating: averageScore,
                 status: status,
                 lastEval: latestEvaluation ? formatShortDateWithTime(latestEvaluation.submitted_at || latestEvaluation.created_at) : 'No Data',
               };
             })
-            .filter(student => student.status === 'Action Needed')
+            .filter((student) => student.status === 'Action Needed')
             .sort((a, b) => {
-               if (a.rating !== null && b.rating !== null) {
-                  return a.rating - b.rating;
-               }
-               return a.name.localeCompare(b.name);
+              if (a.rating !== null && b.rating !== null) {
+                return a.rating - b.rating;
+              }
+              return a.name.localeCompare(b.name);
             })
         : [];
 
@@ -104,7 +134,7 @@ export default function TeacherAttentionStudentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     void loadDashboardData();
@@ -112,7 +142,7 @@ export default function TeacherAttentionStudentsPage() {
 
   const filteredStudents = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    return students.filter(student => {
+    return students.filter((student) => {
       const matchesSearch = !normalizedQuery || 
                            student.name.toLowerCase().includes(normalizedQuery) || 
                            student.studentId.toLowerCase().includes(normalizedQuery) ||
@@ -174,16 +204,16 @@ export default function TeacherAttentionStudentsPage() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-[1200px] mx-auto space-y-6 md:space-y-8">
             <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row gap-6 md:items-center justify-between">
-                <div>
-                    <h2 className="text-xl md:text-2xl font-black text-rose-900 mb-2">Priority Intervention List</h2>
-                    <p className="text-sm text-rose-700 font-medium">
-an average self-evaluation rating below 2.5 stars. Prompt coaching and direct messaging is strongly recommended.
-                    </p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 text-center shrink-0 min-w-32">
-                    <p className="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1">Total</p>
-                    <p className="text-3xl font-black text-rose-700">{students.length}</p>
-                </div>
+              <div>
+                <h2 className="text-xl md:text-2xl font-black text-rose-900 mb-2">Priority Intervention List</h2>
+                <p className="text-sm text-rose-700 font-medium">
+                  Students with an average self-evaluation rating below 2.5 stars. Prompt coaching and direct messaging is strongly recommended.
+                </p>
+              </div>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 text-center shrink-0 min-w-32">
+                <p className="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1">Total</p>
+                <p className="text-3xl font-black text-rose-700">{students.length}</p>
+              </div>
             </div>
 
             <div className="relative sm:hidden w-full">
@@ -199,31 +229,32 @@ an average self-evaluation rating below 2.5 stars. Prompt coaching and direct me
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
               {isLoading ? (
-                  [...Array(6)].map((_, i) => (
-                      <div key={i} className="bg-white rounded-2xl p-6 min-h-48 border border-slate-100 shadow-sm animate-pulse" />
-                  ))
+                [...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl p-6 min-h-48 border border-slate-100 shadow-sm animate-pulse" />
+                ))
               ) : filteredStudents.length === 0 ? (
-                  <div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
-                      <div className="size-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                          <AlertCircle className="w-8 h-8" />
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-900 mb-1">No Students Found</h3>
-                      <p className="text-sm text-slate-500">There are no students requiring attention matching your search.</p>
+                <div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-16 bg-white border border-dashed border-slate-200 rounded-2xl">
+                  <div className="size-16 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <AlertCircle className="w-8 h-8" />
                   </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">No Students Found</h3>
+                  <p className="text-sm text-slate-500">There are no students requiring attention matching your search.</p>
+                </div>
               ) : filteredStudents.map((student, idx) => (
-                  <StudentCard
-                    id={student.id}
-                    name={student.name}
-                    avatar={student.avatar}
-                    studentId={student.studentId}
-                    generation={student.generation}
-                    className={student.className}
-                    gender={student.gender}
-                    rating={student.rating}
-                    status={student.status}
-                    lastEval={student.lastEval}
-                    index={idx}
-                  />
+                <StudentCard
+                  key={student.id}
+                  id={student.id}
+                  name={student.name}
+                  avatar={student.avatar}
+                  studentId={student.studentId}
+                  generation={student.generation}
+                  className={student.className}
+                  gender={student.gender}
+                  rating={student.rating}
+                  status={student.status}
+                  lastEval={student.lastEval}
+                  index={idx}
+                />
               ))}
             </div>
           </div>

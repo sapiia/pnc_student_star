@@ -454,23 +454,30 @@ export default function TeacherStudentProfilePage() {
                   <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs uppercase tracking-wider rounded-lg border border-slate-200">
                     {student.class || 'Unassigned Class'}
                   </span>
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-700 font-bold text-xs uppercase tracking-wider rounded-lg border border-emerald-200">
+                    {student.generation ? `Gen ${student.generation}` : 'Unknown Generation'}
+                  </span>
                   <span className="px-3 py-1 bg-primary/10 text-primary font-bold text-xs uppercase tracking-wider rounded-lg border border-primary/20">
                     {student.gender || 'Unknown Gender'}
                   </span>
                   <span className="text-xs font-bold text-slate-400 tracking-wider">ID: {studentIdDisplay}</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                <button onClick={() => navigate(`/teacher/messages?contactId=${Number(student.id)}`)}
-                  className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20">
-                  <MessageSquare className="w-4 h-4" /> Message Student
-                </button>
-                <button onClick={() => setShowEvaluationList(!showEvaluationList)}
-                  className="px-6 py-3 bg-white border-2 border-primary text-primary hover:bg-primary/5 font-bold text-sm rounded-xl transition-all flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4" /> 
-                  {showEvaluationList ? 'Hide Evaluation List' : 'Evaluation List'}
-                  {showEvaluationList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-              </div>
+                  <button
+                    onClick={() => navigate(`/teacher/messages?contactId=${Number(student.id)}`)}
+                    className="px-6 py-3 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Message Student
+                  </button>
+                  <button
+                    onClick={() => setShowEvaluationList(!showEvaluationList)}
+                    className="px-6 py-3 bg-white border-2 border-primary text-primary hover:bg-primary/5 font-bold text-sm rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    {showEvaluationList ? 'Hide Evaluation List' : 'Evaluation List'}
+                    {showEvaluationList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 

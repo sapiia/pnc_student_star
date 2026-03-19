@@ -149,7 +149,7 @@ export default function TeacherStudentListPage() {
         );
 
         setStudents(mappedStudents);
-setSelectedId((currentSelectedId: number | null) => currentSelectedId ?? mappedStudents[0]?.id ?? null);
+        setSelectedId((currentSelectedId: number | null) => currentSelectedId ?? mappedStudents[0]?.id ?? null);
       } catch (error) {
         setLoadError(error instanceof Error ? error.message : 'Failed to load students.');
         setStudents([]);
@@ -171,13 +171,13 @@ setSelectedId((currentSelectedId: number | null) => currentSelectedId ?? mappedS
     }
   }, [students, passedState, navigate, location.pathname]);
 
-const generationOptions = useMemo(() => {
+  const generationOptions = useMemo(() => {
     const derivedGenerations = students.map((s: StudentRecord) => s.generation).filter(Boolean);
     const uniqueGenerations = new Set([...derivedGenerations, ...GENERATION_HINTS]);
     return ['All Generations', ...Array.from(uniqueGenerations).sort()];
   }, [students]);
 
-const classOptions = useMemo(() => {
+  const classOptions = useMemo(() => {
     const scopedStudents = selectedGeneration === 'All Generations'
       ? students
       : students.filter((s: StudentRecord) => s.generation === selectedGeneration);
@@ -200,7 +200,7 @@ const classOptions = useMemo(() => {
     });
   }, [searchQuery, selectedClass, selectedGender, selectedGeneration, students]);
 
-useEffect(() => {
+  useEffect(() => {
     if (filteredStudents.length === 0) {
       setSelectedId(null);
       setIsPerformanceOpen(false);
@@ -405,7 +405,7 @@ useEffect(() => {
                     setIsPerformanceOpen(true);
                   }}
                   onViewProfile={(studentId) => navigate(`/teacher/students/${studentId}`)}
-onMessageStudent={(studentId) => navigate(`/teacher/messages?contactId=${studentId}`)}
+                  onMessageStudent={(studentId) => navigate('/teacher/messages', { state: { selectedContactId: studentId } })}
                 />
               </div>
 

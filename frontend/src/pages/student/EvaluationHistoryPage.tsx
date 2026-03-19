@@ -17,6 +17,7 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -45,6 +46,15 @@ type EvaluationRecord = {
   submitted_at: string;
   created_at: string;
   responses?: EvaluationResponse[];
+};
+
+type FeedbackRecord = {
+  id: number;
+  teacher_id: number;
+  student_id: number;
+  evaluation_id?: number | null;
+  evaluation_period?: string | null;
+  created_at?: string | null;
 };
 
 type HistoryItem = {
@@ -93,14 +103,14 @@ export default function EvaluationHistoryPage() {
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'highest' | 'lowest' | 'title'>('recent');
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>([]);
+  const [feedbacks, setFeedbacks] = useState<FeedbackRecord[]>([]);
   const [cycleDays, setCycleDays] = useState(90);
   const [isLoading, setIsLoading] = useState(true);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('');
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
-  const [showOverview, setShowOverview] = useState(false);
-  const [activeCriterionId, setActiveCriterionId] = useState<string | null>(null);
+  const [activeCriterionId, setActiveCriterionId] = useState<string>('overall');
   const [canEditAfterSubmit, setCanEditAfterSubmit] = useState(false);
 
   useEffect(() => {
@@ -127,12 +137,13 @@ export default function EvaluationHistoryPage() {
           return;
         }
 
-        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse, editPermissionResponse] = await Promise.all([
+        const [userResponse, intervalResponse, evaluationsResponse, criteriaConfigResponse, editPermissionResponse, feedbackResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/users/${userId}`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
           fetch(`${API_BASE_URL}/evaluations/user/${userId}`),
           fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
-          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`)
+          fetch(`${API_BASE_URL}/settings/key/student_can_edit_after_submit`),
+          fetch(`${API_BASE_URL}/feedbacks/student/${userId}`)
         ]);
 
         const userData = await userResponse.json().catch(() => ({}));
@@ -140,6 +151,7 @@ export default function EvaluationHistoryPage() {
         const evaluationsData = await evaluationsResponse.json().catch(() => ([]));
         const criteriaConfigData = await criteriaConfigResponse.json().catch(() => ({}));
         const editPermissionData = await editPermissionResponse.json().catch(() => ({}));
+        const feedbackData = await feedbackResponse.json().catch(() => ([]));
 
         const nextRatingScale = Math.max(1, Number(criteriaConfigData?.ratingScale || 5));
         const ratingScale = nextRatingScale;
@@ -163,6 +175,7 @@ export default function EvaluationHistoryPage() {
           .sort((a: EvaluationRecord, b: EvaluationRecord) => new Date(String(b.submitted_at || b.created_at || '')).getTime() - new Date(String(a.submitted_at || a.created_at || '')).getTime());
 
         setEvaluations(sortedEvaluations);
+        setFeedbacks(Array.isArray(feedbackData) ? feedbackData : []);
 
         const normalizedHistory = sortedEvaluations
           .map((evaluation: EvaluationRecord) => {
@@ -223,12 +236,39 @@ export default function EvaluationHistoryPage() {
   }, [historyItems, searchQuery, sortBy]);
 
   const trendData = useMemo(() => {
+    const feedbackByPeriod = new Map<string, Set<number>>();
+    feedbacks.forEach((feedback) => {
+      const rawPeriod = String(feedback.evaluation_period || '').trim();
+      let label = '';
+      if (rawPeriod) {
+        label = toPeriodTitle(rawPeriod).replace(' Evaluation', '');
+      } else if (feedback.created_at) {
+        const date = new Date(String(feedback.created_at || ''));
+        if (!Number.isNaN(date.getTime())) {
+          const quarter = Math.floor(date.getMonth() / 3) + 1;
+          label = `Q${quarter} ${date.getFullYear()}`;
+        }
+      }
+      if (!label) return;
+      const teacherId = Number(feedback.teacher_id);
+      if (!Number.isInteger(teacherId) || teacherId <= 0) return;
+      const set = feedbackByPeriod.get(label) || new Set<number>();
+      set.add(teacherId);
+      feedbackByPeriod.set(label, set);
+    });
+
     const items = [...historyItems].reverse();
     return items.map((item) => ({
       name: item.title.replace(' Evaluation', ''),
       score: Number(item.rating.toFixed(2)),
+      feedbackCount: feedbackByPeriod.get(item.title.replace(' Evaluation', ''))?.size || 0,
     }));
-  }, [historyItems]);
+  }, [feedbacks, historyItems]);
+
+  const maxFeedbackCount = useMemo(() => {
+    if (trendData.length === 0) return 1;
+    return Math.max(1, ...trendData.map((entry) => Number(entry.feedbackCount || 0)));
+  }, [trendData]);
 
   const latestEvaluationRecord = evaluations[0];
   const evaluationSeries = useMemo(() => {
@@ -242,23 +282,21 @@ export default function EvaluationHistoryPage() {
     }));
   }, [evaluations]);
 
-  const overviewCriteria = useMemo(() => {
+  const criteriaNav = useMemo(() => {
     const activeCriteria = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
-    return activeCriteria.map((criterion: any, idx: number) => {
-      const response = (latestEvaluationRecord?.responses || []).find((r: EvaluationResponse) =>
-        String(r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-        String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-      );
-      return {
-        id: String(criterion.id || `criterion-${idx}`),
-        name: String(criterion.name || `Criterion ${idx + 1}`),
-        score: response ? Number(response.star_value || 0) : 0
-      };
-    });
-  }, [globalCriteria, latestEvaluationRecord]);
+    return activeCriteria.map((criterion: any, idx: number) => ({
+      id: String(criterion.id || `criterion-${idx}`),
+      name: String(criterion.name || `Criterion ${idx + 1}`)
+    }));
+  }, [globalCriteria]);
 
+  useEffect(() => {
+    if (activeCriterionId === 'overall') return;
+    const exists = criteriaNav.some((criterion) => criterion.id === activeCriterionId);
+    if (!exists) setActiveCriterionId('overall');
+  }, [activeCriterionId, criteriaNav]);
 
-  const activeCriterion = overviewCriteria.find((criterion) => criterion.id === activeCriterionId) || null;
+  const activeCriterion = criteriaNav.find((criterion) => criterion.id === activeCriterionId) || null;
   const activeCriterionProgress = useMemo(() => {
     if (!activeCriterion) return [];
     return evaluationSeries.map(({ evaluation, label }) => {
@@ -272,6 +310,11 @@ export default function EvaluationHistoryPage() {
       };
     });
   }, [activeCriterion, evaluationSeries]);
+
+  const activeTrendData = useMemo(() => {
+    if (activeCriterionId === 'overall') return trendData;
+    return activeCriterionProgress;
+  }, [activeCriterionId, activeCriterionProgress, trendData]);
 
   const highestRating = historyItems.reduce((max, item) => Math.max(max, item.rating), 0);
   const latestEvaluation = historyItems[0];
@@ -329,18 +372,38 @@ export default function EvaluationHistoryPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200"
                 >
-                  <div className="flex items-center justify-between mb-8">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900">Performance Trend</h3>
                       <p className="text-xs text-slate-500 mt-1">Average score across your submitted evaluations</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowOverview((prev) => !prev)}
-                      className="px-3 py-1 bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-widest rounded-full border border-primary/10 hover:bg-primary/10 transition-colors"
-                    >
-                      {showOverview ? '< Back >' : '< Over view >'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCriterionId('overall')}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          activeCriterionId === 'overall'
+                            ? 'bg-white text-primary shadow-sm'
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        Overall
+                      </button>
+                      {criteriaNav.map((criterion) => (
+                        <button
+                          key={criterion.id}
+                          type="button"
+                          onClick={() => setActiveCriterionId(criterion.id)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                            activeCriterionId === criterion.id
+                              ? 'bg-white text-primary shadow-sm'
+                              : 'text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          {criterion.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex items-baseline gap-4 mb-8">
@@ -354,90 +417,14 @@ export default function EvaluationHistoryPage() {
                     </div>
                   </div>
 
-                  {showOverview ? (
-                    <div className="space-y-3">
-                      {activeCriterion ? (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Criterion Progress</p>
-                              <h4 className="text-lg font-black text-slate-900 mt-1">{activeCriterion.name}</h4>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setActiveCriterionId(null)}
-                              className="px-3 py-1 rounded-full border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors"
-                            >
-                              Back to Criteria
-                            </button>
-                          </div>
-
-                          {activeCriterionProgress.length === 0 ? (
-                            <div className="h-[200px] flex items-center justify-center text-sm font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
-                              No history available for this criterion.
-                            </div>
-                          ) : (
-                            <div className="h-[260px] w-full">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={activeCriterionProgress}>
-                                  <defs>
-                                    <linearGradient id="colorCriterionScore" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.12} />
-                                      <stop offset="95%" stopColor="#5d5fef" stopOpacity={0} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                  <XAxis
-                                    dataKey="name"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#94a3b8', fontSize: 10 }}
-                                    dy={10}
-                                  />
-                                  <YAxis hide domain={[0, globalRatingScale]} />
-                                  <Tooltip 
-                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} 
-                                  />
-                                  <Area
-                                    type="monotone"
-                                    dataKey="score"
-                                    stroke="#5d5fef"
-                                    strokeWidth={4}
-                                    fillOpacity={1}
-                                    fill="url(#colorCriterionScore)"
-                                    dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }}
-                                    activeDot={{ r: 8, fill: '#5d5fef', stroke: '#fff', strokeWidth: 3 }}
-                                  />
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            </div>
-                          )}
-                        </>
-                      ) : overviewCriteria.length === 0 ? (
-                        <div className="h-[200px] flex items-center justify-center text-sm font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
-                          No evaluation data available yet.
-                        </div>
-                      ) : (
-                        overviewCriteria.map((criterion) => (
-                          <button
-                            key={criterion.id}
-                            type="button"
-                            onClick={() => setActiveCriterionId(criterion.id)}
-                            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 hover:border-primary/30 hover:bg-white transition-all"
-                          >
-                            <span className="text-sm font-bold text-slate-700">{criterion.name}</span>
-                            <div className="flex items-center gap-3">
-                              <StarRating rating={criterion.score} max={globalRatingScale} starClassName="w-3.5 h-3.5" />
-                              <span className="text-sm font-black text-slate-900">{criterion.score.toFixed(1)}</span>
-                            </div>
-                          </button>
-                        ))
-                      )}
+                  {activeTrendData.length === 0 ? (
+                    <div className="h-[200px] flex items-center justify-center text-sm font-bold text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
+                      No evaluation data available yet.
                     </div>
                   ) : (
                     <div className="h-[300px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={trendData}>
+                        <AreaChart data={activeTrendData}>
                           <defs>
                             <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#5d5fef" stopOpacity={0.12} />
@@ -452,13 +439,15 @@ export default function EvaluationHistoryPage() {
                             tick={{ fill: '#94a3b8', fontSize: 10 }}
                             dy={10}
                           />
-                          <YAxis hide domain={[0, globalRatingScale]} />
+                          <YAxis yAxisId="score" hide domain={[0, globalRatingScale]} />
+                          <YAxis yAxisId="feedback" hide domain={[0, maxFeedbackCount]} />
                           <Tooltip 
                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} 
                           />
                           <Area
                             type="monotone"
                             dataKey="score"
+                            yAxisId="score"
                             stroke="#5d5fef"
                             strokeWidth={4}
                             fillOpacity={1}
@@ -466,6 +455,17 @@ export default function EvaluationHistoryPage() {
                             dot={{ r: 6, fill: '#fff', stroke: '#5d5fef', strokeWidth: 3 }}
                             activeDot={{ r: 8, fill: '#5d5fef', stroke: '#fff', strokeWidth: 3 }}
                           />
+                          {activeCriterionId === 'overall' && (
+                            <Line
+                              type="monotone"
+                              dataKey="feedbackCount"
+                              yAxisId="feedback"
+                              stroke="#10b981"
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                              activeDot={{ r: 7, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                            />
+                          )}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>

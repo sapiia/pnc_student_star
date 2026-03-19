@@ -884,40 +884,70 @@ const createUser = async (req, res) => {
 
 // Update user
 const updateUser = async (req, res) => {
-  const { name, email, role, class_name, student_id, gender } = req.body;
+  const { name, email, role, class_name, className, student_id, gender, generation, major } = req.body;
   const userId = req.params.id;
 
   try {
     const normalizedRole = normalizeRole(role);
     const normalizedStudentId = (student_id || '').toString().trim();
+    const generationValue = (generation || '').toString().trim();
+    const majorValue = (major || '').toString().trim().toUpperCase();
+    const classNameValue = (class_name || className || '').toString().trim();
+    const normalizedClassName = normalizedRole === 'student'
+      ? (classNameValue || majorValue)
+      : classNameValue;
+    const classForUser = normalizedRole === 'student' && generationValue
+      ? `Gen ${generationValue}${majorValue ? ` - ${majorValue}` : ''}${normalizedClassName ? ` - Class ${normalizedClassName}` : ''}`
+      : classNameValue || null;
+
+    const normalizedGeneration = generationValue;
     if (!['student', 'teacher', 'admin'].includes(normalizedRole)) {
       return res.status(400).json({ error: "Invalid role. Use student, teacher, or admin." });
     }
     if (normalizedRole === 'student' && !normalizedStudentId) {
       return res.status(400).json({ error: "student_id is required when role is student." });
     }
+    if (generationValue && !/^\d{4}$/.test(generationValue)) {
+      return res.status(400).json({ error: "Generation must be a 4-digit year." });
+    }
 
     // Get old user data to describe changes
-    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender FROM users WHERE id = ?", [userId]);
+    const [oldUserRows] = await db.query("SELECT first_name, last_name, email, role, class as class_name, student_id, gender, generation FROM users WHERE id = ?", [userId]);
     const oldUser = oldUserRows[0];
 
     const nameParts = (name || '').trim().split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ');
 
-    const sql = "UPDATE users SET first_name = ?, last_name = ?, email = ?, role = ?, class = ?, student_id = ?, gender = ? WHERE id = ?";
-    await db.query(sql, [firstName, lastName, email, normalizedRole, class_name || null, normalizedStudentId || null, gender || null, userId]);
+    const columns = await getUsersTableColumns();
+    const updates = ['first_name = ?', 'last_name = ?', 'email = ?', 'role = ?', 'class = ?', 'student_id = ?', 'gender = ?'];
+    const values = [firstName, lastName, email, normalizedRole, classForUser, normalizedStudentId || null, gender || null];
+
+    if (columns.has('generation')) {
+      updates.push('generation = ?');
+      values.push(generationValue || null);
+    }
+    if (columns.has('major')) {
+      updates.push('major = ?');
+      values.push(majorValue || null);
+    }
+
+    const sql = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(userId);
+    await db.query(sql, values);
 
     // Construct notification message
     if (oldUser) {
       let changes = [];
-      const newClass = class_name || null;
+      const newClass = classForUser || null;
       const newStudentId = normalizedStudentId || null;
       const newGender = gender || null;
+      const newGeneration = normalizedGeneration || null;
       
       if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
       if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
       if (oldUser.gender !== newGender) changes.push(`Gender: ${newGender || 'None'}`);
+      if (oldUser.generation !== newGeneration) changes.push(`Generation: ${newGeneration || 'None'}`);
       
       if (changes.length > 0) {
         // Notify the updated user (e.g. the student)
@@ -1760,6 +1790,69 @@ const setUserActive = async (req, res) => {
   }
 };
 
+// Enable/disable all students in a generation
+const setGenerationActive = async (req, res) => {
+  const { is_active } = req.body || {};
+  const generation = String(req.params.generation || '').trim();
+
+  if (!generation || !/^\d{4}$/.test(generation)) {
+    return res.status(400).json({ error: "Valid generation is required (YYYY)." });
+  }
+  if (typeof is_active === 'undefined') {
+    return res.status(400).json({ error: "is_active is required." });
+  }
+
+  try {
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const hasIsDisable = columns.has('is_disable');
+    const hasIsActive = columns.has('is_active');
+    const hasGeneration = columns.has('generation');
+
+    const setClauses = [];
+    const values = [];
+
+    if (hasIsActive) {
+      setClauses.push('is_active = ?');
+      values.push(is_active ? 1 : 0);
+    }
+    if (hasIsDisable) {
+      setClauses.push('is_disable = ?');
+      values.push(is_active ? 0 : 1);
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP()');
+
+    let where = "role = 'student'";
+    if (hasGeneration) {
+      where += " AND (generation = ? OR class LIKE ?)";
+      values.push(generation, `%${generation}%`);
+    } else {
+      where += " AND class LIKE ?";
+      values.push(`%${generation}%`);
+    }
+
+    if (hasIsDeleted) {
+      where += " AND (is_deleted IS NULL OR is_deleted = 0)";
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: "No status columns available to update." });
+    }
+
+    const sql = `UPDATE users SET ${setClauses.join(', ')} WHERE ${where}`;
+    const [result] = await db.query(sql, values);
+
+    return res.json({
+      message: is_active ? `Generation ${generation} enabled successfully.` : `Generation ${generation} disabled successfully.`,
+      affectedRows: result.affectedRows
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update generation status." });
+  }
+};
+
 // Delete user
 const deleteUser = async (req, res) => {
   const userId = Number(req.params.id);
@@ -1997,6 +2090,7 @@ module.exports = {
   hardDeleteAllUsers,
   disableAllUsers,
   setUserActive,
+  setGenerationActive,
   loginUser,
   inviteUser,
   inviteUsersBulk,

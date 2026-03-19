@@ -1,4 +1,24 @@
 const db = require('../config/database');
+let userColumnFlagsCache = null;
+
+const getUserColumnFlags = async () => {
+  if (userColumnFlagsCache) return userColumnFlagsCache;
+  const [rows] = await db.query(
+    `
+      SELECT COLUMN_NAME
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'users'
+        AND COLUMN_NAME IN ('is_active', 'is_deleted')
+    `
+  );
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  userColumnFlagsCache = {
+    hasIsActive: columns.has('is_active'),
+    hasIsDeleted: columns.has('is_deleted'),
+  };
+  return userColumnFlagsCache;
+};
 
 const ensureEvaluationUserForeignKey = async () => {
   const [databaseRows] = await db.query('SELECT DATABASE() AS database_name');
@@ -544,13 +564,30 @@ class Evaluation {
     return result.affectedRows > 0;
   }
 
+  static async findByUserIds(userIds) {
+    await this.ensureSchema();
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return [];
+    }
+    const placeholders = userIds.map(() => '?').join(', ');
+    const [rows] = await db.query(
+      `SELECT e.*, u.first_name, u.last_name, u.role, u.class 
+       FROM evaluations e 
+       JOIN users u ON e.user_id = u.id 
+       WHERE e.user_id IN (${placeholders}) 
+       ORDER BY e.submitted_at DESC, e.created_at DESC`,
+      userIds
+    );
+    return hydrateEvaluations(rows);
+  }
+
   // Get evaluation statistics for teacher's students
   static async getReportStats(teacherId, filters = {}) {
     const { class: classFilter, gender, period } = filters;
 
     try {
       await this.ensureSchema();
-
+      
       let query = `
         SELECT 
           u.class,
@@ -562,8 +599,8 @@ class Evaluation {
         FROM evaluations e
         INNER JOIN users u ON e.user_id = u.id
         WHERE u.role = 'student'
-AND (u.is_active IS NULL OR u.is_active = 1)
-        AND (u.is_deleted IS NULL OR u.is_deleted = 0)
+        AND u.is_active = 1
+        AND u.is_deleted = 0
       `;
 
       const params = [];
@@ -598,7 +635,7 @@ AND (u.is_active IS NULL OR u.is_active = 1)
 
     try {
       await this.ensureSchema();
-
+      
       let query = `
         SELECT 
           er.criterion_key,
@@ -610,8 +647,8 @@ AND (u.is_active IS NULL OR u.is_active = 1)
         INNER JOIN evaluations e ON er.evaluation_id = e.id
         INNER JOIN users u ON e.user_id = u.id
         WHERE u.role = 'student'
-AND (u.is_active IS NULL OR u.is_active = 1)
-        AND (u.is_deleted IS NULL OR u.is_deleted = 0)
+        AND u.is_active = 1
+        AND u.is_deleted = 0
       `;
 
       const params = [];
@@ -647,7 +684,7 @@ AND (u.is_active IS NULL OR u.is_active = 1)
 
     try {
       await this.ensureSchema();
-
+      
       let query = `
         SELECT 
           DATE_FORMAT(e.submitted_at, '%Y-%m') as month,
@@ -658,8 +695,8 @@ AND (u.is_active IS NULL OR u.is_active = 1)
         FROM evaluations e
         INNER JOIN users u ON e.user_id = u.id
         WHERE u.role = 'student'
-AND (u.is_active IS NULL OR u.is_active = 1)
-        AND (u.is_deleted IS NULL OR u.is_deleted = 0)
+        AND u.is_active = 1
+        AND u.is_deleted = 0
       `;
 
       const params = [];
@@ -694,14 +731,12 @@ AND (u.is_active IS NULL OR u.is_active = 1)
 
     try {
       await this.ensureSchema();
-
+      
       // Get total students
       let countQuery = `
         SELECT COUNT(*) as total
-        FROM users
-        WHERE role = 'student'
-        AND is_active = 1
-        AND is_deleted = 0
+        FROM users u
+        WHERE ${whereClauses.join(' AND ')}
       `;
       const countParams = [];
 
@@ -724,8 +759,8 @@ AND (u.is_active IS NULL OR u.is_active = 1)
         FROM evaluations e
         INNER JOIN users u ON e.user_id = u.id
         WHERE u.role = 'student'
-        AND (u.is_active IS NULL OR u.is_active = 1)
-        AND (u.is_deleted IS NULL OR u.is_deleted = 0)
+        AND u.is_active = 1
+        AND u.is_deleted = 0
       `;
       const evalParams = [];
 
@@ -760,7 +795,7 @@ AND (u.is_active IS NULL OR u.is_active = 1)
 
     try {
       await this.ensureSchema();
-
+      
       let query = `
         SELECT 
           COUNT(DISTINCT u.id) as total_students,
@@ -770,8 +805,8 @@ AND (u.is_active IS NULL OR u.is_active = 1)
         FROM users u
         LEFT JOIN evaluations e ON u.id = e.user_id
         WHERE u.role = 'student'
-        AND (u.is_active IS NULL OR u.is_active = 1)
-        AND (u.is_deleted IS NULL OR u.is_deleted = 0)
+        AND u.is_active = 1
+        AND u.is_deleted = 0
       `;
 
       const params = [];

@@ -22,13 +22,17 @@ import { mapApiNotifications, type MappedNotification } from '../../lib/notifica
 type NotificationType = 'message' | 'system' | 'alert';
 type Notification = MappedNotification;
 
+let cachedNotifications: Notification[] | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000;
+
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | 'any'>('any');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);
   const { teacherId } = useTeacherIdentity();
@@ -51,6 +55,8 @@ export default function TeacherNotificationsPage() {
       });
 
       setNotifications(teacherStudentOnly);
+      cachedNotifications = teacherStudentOnly;
+      cachedAt = Date.now();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load notifications.');
       setNotifications([]);
@@ -60,6 +66,13 @@ export default function TeacherNotificationsPage() {
   };
 
   useEffect(() => {
+    const now = Date.now();
+    if (cachedNotifications && now - cachedAt < CACHE_TTL_MS) {
+      setNotifications(cachedNotifications);
+      setIsLoading(false);
+      void loadNotifications();
+      return;
+    }
     void loadNotifications();
   }, [teacherId]);
 
@@ -270,55 +283,55 @@ export default function TeacherNotificationsPage() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-900">{notification.sender.name}</span>
-                        <span className={cn(
-                          "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md",
-                          notification.sender.role === 'Student' ? "bg-blue-50 text-blue-600" :
-                          notification.sender.role === 'Admin' ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"
-                        )}>
-                          {notification.sender.role}
-                        </span>
-                        <span className={cn(
-                          "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md",
-                          notification.type === 'message' ? "bg-primary/10 text-primary" :
-                          notification.type === 'alert' ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-600"
-                        )}>
-                          {notification.type === 'system' ? 'System' : notification.type}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatTime(notification.time)}
-                        </span>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                          {!notification.isRead && (
-                            <button 
-                              onClick={() => markAsRead(notification.id)}
-                              className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
-                              title="Mark as read"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button 
-                            onClick={() => deleteNotification(notification.id)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-900">{notification.sender.name}</span>
+                            <span className={cn(
+                              "text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md",
+                              notification.sender.role === 'Student' ? "bg-blue-50 text-blue-600" :
+                              notification.sender.role === 'Admin' ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"
+                            )}>
+                              {notification.sender.role}
+                            </span>
+                            <span className={cn(
+                              "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md",
+                              notification.type === 'message' ? "bg-primary/10 text-primary" :
+                              notification.type === 'alert' ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-600"
+                            )}>
+                              {notification.type === 'system' ? 'System' : notification.type}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatTime(notification.time)}
+                            </span>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                              {!notification.isRead && (
+                                <button 
+                                  onClick={() => markAsRead(notification.id)}
+                                  className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  title="Mark as read"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => deleteNotification(notification.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    <p className={cn(
-                      "text-sm leading-relaxed",
-                      notification.isRead ? "text-slate-500" : "text-slate-700 font-medium"
-                    )}>
-                      {notification.content}
-                    </p>
+                        <p className={cn(
+                          "text-sm leading-relaxed",
+                          notification.isRead ? "text-slate-500" : "text-slate-700 font-medium"
+                        )}>
+                          {notification.content}
+                        </p>
                       </div>
                     </div>
                     {!notification.isRead && (

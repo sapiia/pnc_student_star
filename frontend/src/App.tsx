@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import useScrollReveal from './hooks/useScrollReveal';
 import LandingPage from './pages/shared/LandingPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
@@ -33,6 +34,7 @@ import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 export default function App() {
   return (
     <Router>
+      <ScrollRevealManager />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -75,4 +77,10 @@ export default function App() {
       </Routes>
     </Router>
   );
+}
+
+function ScrollRevealManager() {
+  const location = useLocation();
+  useScrollReveal([location.pathname]);
+  return null;
 }

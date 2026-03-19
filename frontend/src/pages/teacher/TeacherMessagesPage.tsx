@@ -321,44 +321,35 @@ export default function TeacherMessagesPage() {
       return;
     }
 
-    const matchedByName = passedState?.selectedContactName
-      ? contacts.find(
-        (contact) => contact.name.toLowerCase() === passedState.selectedContactName?.trim().toLowerCase()
-      )
-      : null;
+    const contactPool = filteredContacts.length > 0 ? filteredContacts : contacts;
+    const existsInContacts = contactPool.some((contact) => contact.id === selectedContactId);
 
-    const existsInContacts = contacts.some((contact) => contact.id === selectedContactId);
     if (!existsInContacts && selectedContactId !== null) {
-      if (matchedByName) {
-        setSelectedContactId(matchedByName.id);
-        setIsMobileChatOpen(true);
-        if (!hasRequestedContact) {
-          updateContactInUrl(matchedByName.id);
+      if (passedState?.selectedContactName) {
+        const byName = contactPool.find(
+          (c) => c.name.toLowerCase() === passedState.selectedContactName?.toLowerCase()
+        );
+        if (byName) {
+          setSelectedContactId(byName.id);
+          updateContactInUrl(byName.id);
+          return;
         }
-        return;
       }
-      setSelectedContactId(null);
       if (!hasRequestedContact) {
-        updateContactInUrl(null);
+        const fallbackId = contactPool[0]?.id ?? null;
+        setSelectedContactId(fallbackId);
+        updateContactInUrl(fallbackId);
+      } else {
+        setSelectedContactId(null);
       }
       return;
     }
 
-    if (selectedContactId === null) {
-      if (matchedByName) {
-        setSelectedContactId(matchedByName.id);
-        setIsMobileChatOpen(true);
-        if (!hasRequestedContact) {
-          updateContactInUrl(matchedByName.id);
-        }
-        return;
-      }
-      if (!hasRequestedContact) {
-        setSelectedContactId(contacts[0].id);
-        updateContactInUrl(contacts[0].id);
-      }
+    if (selectedContactId === null && !hasRequestedContact) {
+      setSelectedContactId(contactPool[0].id);
+      updateContactInUrl(contactPool[0].id);
     }
-  }, [contacts, hasRequestedContact, isLoading, passedState?.selectedContactName, selectedContactId, updateContactInUrl]);
+  }, [contacts, filteredContacts, hasRequestedContact, isLoading, passedState?.selectedContactName, selectedContactId, updateContactInUrl]);
 
   const selectedContact = filteredContacts.find((contact) => contact.id === selectedContactId) || null;
 
@@ -715,3 +706,4 @@ export default function TeacherMessagesPage() {
     </div>
   );
 }
+

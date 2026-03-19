@@ -183,6 +183,18 @@ export default function EvaluationFormPage() {
     };
 
     loadEligibility();
+
+    // Add real-time listener for settings changes
+    const handleSettingsUpdate = () => {
+      console.log('🔄 Settings updated - refreshing evaluation eligibility');
+      loadEligibility();
+    };
+
+    window.addEventListener('student-settings-updated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('student-settings-updated', handleSettingsUpdate);
+    };
   }, [isEditMode]);
 
   useEffect(() => {
