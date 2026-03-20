@@ -73,6 +73,16 @@ export interface NotificationRecord {
   message: string;
   is_read: number;
   created_at?: string;
+  updated_at?: string;
+  type?: string;
+  content?: string;
+  from_id?: number | null;
+  from_name?: string | null;
+  from_role?: string | null;
+  from_avatar?: string | null;
+  to_id?: number | null;
+  user_name?: string | null;
+  user_profile_image?: string | null;
 }
 
 export interface StudentReplyRecord {

@@ -33,6 +33,10 @@ export function useTeacherMessages() {
   const passedState = location.state as {
     selectedContactId?: number;
     selectedContactName?: string;
+    selectedContactAvatar?: string;
+    selectedContactRole?: string;
+    selectedContactType?: Contact["type"];
+    selectedContactStudentId?: string;
     isMobileChatOpen?: boolean;
   } | null;
 
@@ -55,6 +59,23 @@ export function useTeacherMessages() {
   });
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [requestedContactSnapshot, setRequestedContactSnapshot] = useState<{
+    name?: string;
+    avatar?: string;
+    role?: string;
+    type?: Contact["type"];
+    studentId?: string;
+  } | null>(
+    passedState?.selectedContactName?.trim()
+      ? {
+          name: passedState.selectedContactName.trim(),
+          avatar: passedState.selectedContactAvatar?.trim() || undefined,
+          role: passedState.selectedContactRole?.trim() || undefined,
+          type: passedState.selectedContactType,
+          studentId: passedState.selectedContactStudentId?.trim() || undefined,
+        }
+      : null,
+  );
   const [selectedContactId, setSelectedContactId] = useState<number | null>(
     initialContactId,
   );
@@ -106,6 +127,56 @@ export function useTeacherMessages() {
     if (!teacherId) return;
     saveHiddenMessageIds(teacherId, hiddenMessageIds);
   }, [hiddenMessageIds, teacherId]);
+
+  const upsertNotification = useCallback((nextNotification: NotificationRecord) => {
+    const normalizedNotification: NotificationRecord = {
+      ...nextNotification,
+      id: Number(nextNotification.id),
+      user_id: Number(nextNotification.user_id),
+      is_read: Number(nextNotification.is_read) === 1 ? 1 : 0,
+      message: String(nextNotification.message || ""),
+      created_at: nextNotification.created_at || new Date().toISOString(),
+    };
+
+    setNotifications((current) => {
+      const existingIndex = current.findIndex(
+        (notification) => Number(notification.id) === normalizedNotification.id,
+      );
+
+      if (existingIndex === -1) {
+        return [normalizedNotification, ...current].sort(
+          (left, right) =>
+            new Date(String(right.created_at || "")).getTime() -
+            new Date(String(left.created_at || "")).getTime(),
+        );
+      }
+
+      return current.map((notification) =>
+        Number(notification.id) === normalizedNotification.id
+          ? { ...notification, ...normalizedNotification }
+          : notification,
+      );
+    });
+  }, []);
+
+  const removeNotification = useCallback((notificationId: number) => {
+    setNotifications((current) =>
+      current.filter((notification) => Number(notification.id) !== notificationId),
+    );
+  }, []);
+
+  const isTeacherRelatedNotification = useCallback(
+    (notification: NotificationRecord | null | undefined) => {
+      if (!teacherId || !notification) return false;
+      if (Number(notification.user_id) === teacherId) return true;
+
+      const parsed = parseDirectMessage(notification.message);
+      if (!parsed) return false;
+
+      return parsed.fromId === teacherId || parsed.toId === teacherId;
+    },
+    [teacherId],
+  );
 
   const loadData = useCallback(async () => {
     if (!teacherId) {
@@ -168,6 +239,25 @@ export function useTeacherMessages() {
     location.search,
   ]);
 
+  useEffect(() => {
+    const nextName = passedState?.selectedContactName?.trim();
+    if (nextName) {
+      setRequestedContactSnapshot({
+        name: nextName,
+        avatar: passedState.selectedContactAvatar?.trim() || undefined,
+        role: passedState.selectedContactRole?.trim() || undefined,
+        type: passedState.selectedContactType,
+        studentId: passedState.selectedContactStudentId?.trim() || undefined,
+      });
+    }
+  }, [
+    passedState?.selectedContactAvatar,
+    passedState?.selectedContactName,
+    passedState?.selectedContactRole,
+    passedState?.selectedContactStudentId,
+    passedState?.selectedContactType,
+  ]);
+
   const updateContactInUrl = useCallback(
     (nextId: number | null) => {
       const params = new URLSearchParams(location.search);
@@ -197,6 +287,7 @@ export function useTeacherMessages() {
 
   const handleSelectContact = useCallback(
     (contactId: number) => {
+      setRequestedContactSnapshot(null);
       setSelectedContactId(contactId);
       setIsMobileChatOpen(true);
       updateContactInUrl(contactId);
@@ -212,6 +303,18 @@ export function useTeacherMessages() {
     const handleNotificationEvent = (
       payload: NotificationRealtimePayload = {},
     ) => {
+      const payloadNotification = payload.notification as NotificationRecord | undefined;
+
+      if (payload.action === "deleted" && payload.notificationId) {
+        removeNotification(Number(payload.notificationId));
+        return;
+      }
+
+      if (payloadNotification && isTeacherRelatedNotification(payloadNotification)) {
+        upsertNotification(payloadNotification);
+        return;
+      }
+
       if (Number(payload.userId) !== teacherId) return;
       void loadData();
     };
@@ -238,7 +341,7 @@ export function useTeacherMessages() {
       socket.off("notification:deleted", handleNotificationEvent);
       socket.off("message:typing", handleTypingEvent);
     };
-  }, [loadData, teacherId]);
+  }, [isTeacherRelatedNotification, loadData, removeNotification, teacherId, upsertNotification]);
 
   useEffect(() => {
     setTypingByContactId({});
@@ -319,11 +422,47 @@ export function useTeacherMessages() {
       })
       .sort(
         (a, b) =>
-          b.activityCount - a.activityCount ||
           new Date(String(b.timestamp || "")).getTime() -
-            new Date(String(a.timestamp || "")).getTime(),
+            new Date(String(a.timestamp || "")).getTime() ||
+          b.activityCount - a.activityCount ||
+          a.name.localeCompare(b.name),
       );
   }, [directNotifications, teacherId, users]);
+
+  const displayContacts = useMemo<Contact[]>(() => {
+    if (!selectedContactId || !requestedContactSnapshot) return contacts;
+
+    const requestedContact: Contact = {
+      id: selectedContactId,
+      name: requestedContactSnapshot.name || "Unknown",
+      studentId: requestedContactSnapshot.studentId,
+      role: requestedContactSnapshot.role || "Student",
+      type: requestedContactSnapshot.type || "Student",
+      avatar: requestedContactSnapshot.avatar || DEFAULT_AVATAR,
+      lastMessage: "",
+      timestamp: undefined,
+      unreadCount: 0,
+      activityCount: 0,
+    };
+
+    const existingContact = contacts.find((contact) => contact.id === selectedContactId);
+    if (!existingContact) {
+      return [requestedContact, ...contacts];
+    }
+
+    return contacts.map((contact) =>
+      contact.id === selectedContactId
+        ? {
+            ...contact,
+            name: requestedContactSnapshot.name || contact.name,
+            avatar: requestedContactSnapshot.avatar || contact.avatar,
+            role: requestedContactSnapshot.role || contact.role,
+            type: requestedContactSnapshot.type || contact.type,
+            studentId: requestedContactSnapshot.studentId || contact.studentId,
+          }
+        : contact,
+    );
+  }, [contacts, requestedContactSnapshot, selectedContactId]);
 
   // Initial selection logic based on props/url
   useEffect(() => {
@@ -351,12 +490,14 @@ export function useTeacherMessages() {
       setSelectedContactId(nextId);
       setIsMobileChatOpen(true);
       setSearchQuery("");
+      setRoleFilter("All");
+      setShowUnreadOnly(false);
     }
   }, [contacts, passedState?.selectedContactId, queryContactToken]);
 
   const filteredContacts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return contacts.filter((c) => {
+    return displayContacts.filter((c) => {
       const matches =
         !q ||
         c.name.toLowerCase().includes(q) ||
@@ -368,17 +509,17 @@ export function useTeacherMessages() {
         (!showUnreadOnly || c.unreadCount > 0)
       );
     });
-  }, [contacts, roleFilter, searchQuery, showUnreadOnly]);
+  }, [displayContacts, roleFilter, searchQuery, showUnreadOnly]);
 
   // Fallback selection if invalid
   useEffect(() => {
     if (isLoading) return;
-    if (contacts.length === 0) {
+    if (displayContacts.length === 0) {
       setSelectedContactId(null);
       if (!hasRequestedContact) updateContactInUrl(null);
       return;
     }
-    const pool = filteredContacts.length > 0 ? filteredContacts : contacts;
+    const pool = filteredContacts.length > 0 ? filteredContacts : displayContacts;
     const exists = pool.some((c) => c.id === selectedContactId);
 
     if (!exists && selectedContactId !== null) {
@@ -408,7 +549,7 @@ export function useTeacherMessages() {
       updateContactInUrl(pool[0].id);
     }
   }, [
-    contacts,
+    displayContacts,
     filteredContacts,
     hasRequestedContact,
     isLoading,
@@ -417,8 +558,12 @@ export function useTeacherMessages() {
     updateContactInUrl,
   ]);
 
-  const selectedContact =
-    filteredContacts.find((c) => c.id === selectedContactId) || null;
+  const selectedContact = useMemo(() => {
+    const baseContact =
+      displayContacts.find((c) => c.id === selectedContactId) || null;
+    if (!baseContact) return null;
+    return baseContact;
+  }, [displayContacts, selectedContactId]);
 
   const currentMessages = useMemo<ChatMessage[]>(() => {
     if (!teacherId || !selectedContactId) return [];
@@ -469,6 +614,13 @@ export function useTeacherMessages() {
     );
     if (unread.length === 0) return;
     const markRead = async () => {
+      setNotifications((current) =>
+        current.map((notification) =>
+          unread.some((message) => Number(message.notificationId) === Number(notification.id))
+            ? { ...notification, is_read: 1 }
+            : notification,
+        ),
+      );
       await Promise.all(
         unread.map((m) =>
           fetch(`${API_BASE_URL}/notifications/${m.notificationId}/read`, {
@@ -476,10 +628,9 @@ export function useTeacherMessages() {
           }).catch(() => null),
         ),
       );
-      void loadData();
     };
     void markRead();
-  }, [currentMessages, loadData, selectedContactId, teacherId]);
+  }, [currentMessages, selectedContactId, teacherId]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -563,7 +714,7 @@ export function useTeacherMessages() {
       if (replyToMessageId === message.id) setReplyToMessageId(null);
       setConfirmDeleteMessageId(null);
       setOpenedActionMessageId(null);
-      void loadData();
+      removeNotification(Number(message.notificationId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete.");
     } finally {
@@ -601,10 +752,24 @@ export function useTeacherMessages() {
           },
         );
         if (!res.ok) throw new Error("Failed to edit.");
+        upsertNotification({
+          ...(notifications.find(
+            (notification) =>
+              Number(notification.id) === Number(editingTarget.notificationId),
+          ) || {
+            id: Number(editingTarget.notificationId),
+            user_id: selectedContactId,
+            created_at: editingTarget.createdAt,
+          }),
+          id: Number(editingTarget.notificationId),
+          user_id: selectedContactId,
+          message: msg,
+          is_read: editingTarget.rawIsRead,
+          created_at: editingTarget.createdAt || new Date().toISOString(),
+        });
         setMessageDraft("");
         setEditingMessageId(null);
         stopTyping();
-        void loadData();
         return;
       }
       const outgoing = replyTarget
@@ -625,10 +790,25 @@ export function useTeacherMessages() {
         }),
       });
       if (!res.ok) throw new Error("Failed to send.");
+      const payload = await res.json().catch(() => ({}));
+      const createdNotification = payload?.notification as NotificationRecord | null;
+      upsertNotification(
+        createdNotification || {
+          id: Number(payload?.notificationId) || Date.now(),
+          user_id: selectedContactId,
+          message: composeDirectMessage({
+            fromId: teacherId,
+            toId: selectedContactId,
+            senderName: teacherName,
+            text: outgoing,
+          }),
+          is_read: 0,
+          created_at: new Date().toISOString(),
+        },
+      );
       setMessageDraft("");
       setReplyToMessageId(null);
       stopTyping();
-      void loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send.");
     } finally {

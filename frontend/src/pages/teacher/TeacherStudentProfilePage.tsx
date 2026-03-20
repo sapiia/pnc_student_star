@@ -126,7 +126,16 @@ export default function TeacherStudentProfilePage() {
             studentIdDisplay={studentIdDisplay}
             showEvaluationList={showEvaluationList}
             onMessageStudent={() =>
-              navigate('/teacher/messages', { state: { selectedContactId: Number(student.id) } })
+              navigate('/teacher/messages', {
+                state: {
+                  selectedContactId: Number(student.id),
+                  selectedContactName: studentName,
+                  selectedContactAvatar: avatarUrl,
+                  selectedContactRole: 'Student',
+                  selectedContactType: 'Student',
+                  selectedContactStudentId: studentIdDisplay,
+                },
+              })
             }
             onToggleEvaluationList={() => setShowEvaluationList((currentValue) => !currentValue)}
           />

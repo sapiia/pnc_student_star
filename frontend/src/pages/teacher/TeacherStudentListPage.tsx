@@ -140,8 +140,17 @@ export default function TeacherStudentListPage() {
                   loadError={loadError}
                   onOpenOverview={openPerformanceForStudent}
                   onViewProfile={(studentId) => navigate(`/teacher/students/${studentId}`)}
-                  onMessageStudent={(studentId) =>
-                    navigate('/teacher/messages', { state: { selectedContactId: studentId } })
+                  onMessageStudent={(student) =>
+                    navigate('/teacher/messages', {
+                      state: {
+                        selectedContactId: student.id,
+                        selectedContactName: student.name,
+                        selectedContactAvatar: student.avatar,
+                        selectedContactRole: 'Student',
+                        selectedContactType: 'Student',
+                        selectedContactStudentId: student.studentId,
+                      },
+                    })
                   }
                 />
               </div>

@@ -12,6 +12,7 @@ interface NotificationItemProps {
 
 export default function NotificationItem({ notification, onMarkRead, onDelete }: NotificationItemProps) {
   const navigate = useNavigate();
+  const canOpenMessage = typeof notification.sender.id === 'number' && notification.sender.id > 0;
 
   const formatTime = (value: string) => {
     const date = new Date(value);
@@ -105,9 +106,19 @@ export default function NotificationItem({ notification, onMarkRead, onDelete }:
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-2xl" />
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        {notification.type === 'message' && (
+        {notification.type === 'message' && canOpenMessage && (
           <button
-            onClick={() => navigate('/teacher/messages', { state: { selectedContactId: notification.sender.id, selectedContactName: notification.sender.name } })}
+            onClick={() =>
+              navigate('/teacher/messages', {
+                state: {
+                  selectedContactId: notification.sender.id,
+                  selectedContactName: notification.sender.name,
+                  selectedContactAvatar: notification.sender.avatar,
+                  selectedContactRole: notification.sender.role,
+                  selectedContactType: notification.sender.role,
+                },
+              })
+            }
             className="px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
           >
             Open message

@@ -12,7 +12,7 @@ type StudentTableProps = {
   loadError: string;
   onOpenOverview: (studentId: number) => void;
   onViewProfile: (studentId: number) => void;
-  onMessageStudent: (studentId: number) => void;
+  onMessageStudent: (student: StudentRecord) => void;
 };
 
 const PAGE_SIZE = 10;
@@ -159,7 +159,7 @@ export default function StudentTable({
                           <User className="size-4" />
                         </button>
                         <button
-                          onClick={() => onMessageStudent(student.id)}
+                          onClick={() => onMessageStudent(student)}
                           className="p-2 rounded-lg border border-primary/20 text-primary hover:bg-primary/5 transition-all"
                           title="Message"
                         >

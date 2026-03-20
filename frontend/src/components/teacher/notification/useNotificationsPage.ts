@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTeacherIdentity } from "../../../hooks/useTeacherIdentity";
 import { useTeacherNotifications } from "../../../hooks/useTeacherNotifications";
+import type { MappedNotification } from "../../../lib/notifications/mapper";
 import {
   API_BASE_URL,
   DEFAULT_AVATAR,
@@ -9,23 +10,10 @@ import {
   parseDirectMessage,
   toDisplayName,
 } from "../../../lib/teacher/utils";
-import type { ApiUser, NotificationRecord } from "../../../lib/teacher/types";
+import type { ApiUser } from "../../../lib/teacher/types";
 
-type EnrichedNotification = NotificationRecord & {
-  avatar: string;
-  senderName: string;
-  sender: {
-    name: string;
-    avatar: string;
-    id: number | null;
-  };
-  user: {
-    name: string;
-    avatar: string;
-    id: number | null;
-  };
-  type: "reply" | "message" | "system";
-};
+export type ReadFilter = "all" | "unread";
+export type NotificationTypeFilter = "any" | "message" | "alert" | "system";
 
 export function useNotificationsPage() {
   const { teacherId } = useTeacherIdentity();
@@ -39,10 +27,8 @@ export function useNotificationsPage() {
 
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "unread">("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | "replies" | "messages">(
-    "all",
-  );
+  const [filter, setFilter] = useState<ReadFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<NotificationTypeFilter>("any");
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -64,24 +50,52 @@ export function useNotificationsPage() {
     loadUsers();
   }, []);
 
-  const enrichedNotifications = useMemo<EnrichedNotification[]>(() => {
+  const enrichedNotifications = useMemo<MappedNotification[]>(() => {
     return rawNotifications.map((n) => {
+      const rawMessage = String(n.message || "").trim();
       let avatar = DEFAULT_AVATAR;
       let senderName = "System";
       let senderId: number | null = null;
-      let type: "reply" | "message" | "system" = "system";
+      let senderRole: "Student" | "Admin" | "Teacher" = "Admin";
+      let type: "message" | "alert" | "system" = "system";
+      let content =
+        String(n.content || "").trim() ||
+        rawMessage.replace(/^\[alert\]\s*/i, "").trim() ||
+        "No content";
 
       const reply = parseStudentReplyNotification(n);
       if (reply) {
         senderId = reply.studentId;
         senderName = reply.studentName;
-        type = "reply";
+        senderRole = "Student";
+        type = "message";
+        content = reply.message || content;
       } else {
-        const dm = parseDirectMessage(n.message);
+        const dm = parseDirectMessage(rawMessage);
         if (dm) {
           senderId = dm.fromId;
           senderName = dm.senderName;
           type = "message";
+          content = dm.text || content;
+        } else {
+          const backendType = String(n.type || "").trim().toLowerCase();
+          if (backendType === "alert" || rawMessage.toLowerCase().startsWith("[alert]")) {
+            type = "alert";
+          } else if (backendType === "message") {
+            type = "message";
+          }
+
+          senderName =
+            String(n.from_name || "").trim() ||
+            String(n.user_name || "").trim() ||
+            "System";
+          avatar = resolveAvatarUrl(n.from_avatar, DEFAULT_AVATAR);
+          senderRole =
+            String(n.from_role || "").trim().toLowerCase() === "teacher"
+              ? "Teacher"
+              : String(n.from_role || "").trim().toLowerCase() === "student"
+                ? "Student"
+                : "Admin";
         }
       }
 
@@ -90,22 +104,30 @@ export function useNotificationsPage() {
         if (user) {
           avatar = resolveAvatarUrl(user.profile_image, DEFAULT_AVATAR);
           senderName = toDisplayName(user);
+          senderRole =
+            String(user.role || "").trim().toLowerCase() === "admin"
+              ? "Admin"
+              : String(user.role || "").trim().toLowerCase() === "teacher"
+                ? "Teacher"
+                : "Student";
         }
       }
 
-      const sender = {
+      const sender: MappedNotification["sender"] = {
         name: senderName,
         avatar,
-        id: senderId,
+        role: senderRole,
+        id: senderId ?? undefined,
       };
 
       return {
-        ...n,
-        avatar,
-        senderName,
+        id: String(n.id),
+        user_id: Number(n.user_id) || null,
         sender,
-        user: sender,
         type,
+        content,
+        time: String(n.created_at || ""),
+        isRead: Number(n.is_read) === 1,
       };
     });
   }, [rawNotifications, users]);
@@ -113,28 +135,24 @@ export function useNotificationsPage() {
   const notifications = useMemo(() => {
     const sorted = [...enrichedNotifications].sort(
       (a, b) =>
-        new Date(b.created_at || "").getTime() -
-        new Date(a.created_at || "").getTime(),
+        new Date(b.time || "").getTime() -
+        new Date(a.time || "").getTime(),
     );
 
     const query = searchQuery.toLowerCase().trim();
 
     return sorted.filter((n) => {
-      if (filter === "unread" && Number(n.is_read) !== 0) {
+      if (filter === "unread" && n.isRead) {
         return false;
       }
 
-      if (typeFilter === "replies" && n.type !== "reply") {
-        return false;
-      }
-
-      if (typeFilter === "messages" && n.type !== "message") {
+      if (typeFilter !== "any" && n.type !== typeFilter) {
         return false;
       }
 
       if (query) {
-        const messageMatch = n.message.toLowerCase().includes(query);
-        const senderMatch = n.senderName.toLowerCase().includes(query);
+        const messageMatch = n.content.toLowerCase().includes(query);
+        const senderMatch = n.sender.name.toLowerCase().includes(query);
         if (!messageMatch && !senderMatch) {
           return false;
         }
@@ -149,28 +167,36 @@ export function useNotificationsPage() {
     [enrichedNotifications],
   );
   const unreadCount = useMemo(
-    () => enrichedNotifications.filter((n) => Number(n.is_read) === 0).length,
+    () => enrichedNotifications.filter((n) => !n.isRead).length,
     [enrichedNotifications],
   );
 
   const markAsRead = useCallback(
-    async (id: number) => {
-      const notification = rawNotifications.find((n) => n.id === id);
+    async (id: string) => {
+      const notificationId = Number(id);
+      const notification = rawNotifications.find((n) => Number(n.id) === notificationId);
       if (!notification || Number(notification.is_read) === 1) return;
 
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: 1 } : n)),
+        prev.map((n) =>
+          Number(n.id) === notificationId ? { ...n, is_read: 1 } : n,
+        ),
       );
 
       try {
-        await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+        const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
           method: "PUT",
         });
+        if (!response.ok) {
+          throw new Error("Failed to mark notification as read");
+        }
       } catch (err) {
         console.error("Failed to mark notification as read:", err);
         // Revert state on failure
         setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, is_read: 0 } : n)),
+          prev.map((n) =>
+            Number(n.id) === notificationId ? { ...n, is_read: 0 } : n,
+          ),
         );
         setToast({ message: "Failed to mark as read", type: "error" });
       }
@@ -179,22 +205,25 @@ export function useNotificationsPage() {
   );
 
   const deleteNotification = useCallback(
-    async (id: number) => {
+    async (id: string) => {
+      const notificationId = Number(id);
       const originalNotifications = [...rawNotifications];
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setNotifications((prev) =>
+        prev.filter((n) => Number(n.id) !== notificationId),
+      );
 
       try {
-        const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
           method: "DELETE",
         });
         if (!response.ok) {
           throw new Error("Failed to delete notification");
         }
-      setToast({ message: "Notification deleted", type: "success" });
+        setToast({ message: "Notification deleted", type: "success" });
       } catch (err) {
         console.error("Failed to delete notification:", err);
         setNotifications(originalNotifications);
-      setToast({ message: "Failed to delete notification", type: "error" });
+        setToast({ message: "Failed to delete notification", type: "error" });
       }
     },
     [rawNotifications, setNotifications],
@@ -213,20 +242,19 @@ export function useNotificationsPage() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/notifications/user/${teacherId}/mark-all-as-read`,
+        `${API_BASE_URL}/notifications/user/${teacherId}/read-all`,
         {
           method: "PUT",
         },
       );
       if (!response.ok) {
-        // If bulk endpoint fails, try one by one (or just revert)
         throw new Error("Failed to mark all as read");
       }
-    setToast({ message: "All notifications marked as read", type: "success" });
+      setToast({ message: "All notifications marked as read", type: "success" });
     } catch (err) {
       console.error(err);
       setNotifications(originalNotifications);
-    setToast({ message: "Failed to mark all as read", type: "error" });
+      setToast({ message: "Failed to mark all as read", type: "error" });
     }
   }, [teacherId, rawNotifications, setNotifications]);
 
@@ -241,13 +269,14 @@ export function useNotificationsPage() {
     setNotifications((prev) => prev.filter((n) => Number(n.is_read) === 0));
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/notifications/user/${teacherId}/clear-read`,
-        {
-          method: "DELETE",
-        },
+      const responses = await Promise.all(
+        readIds.map((notificationId) =>
+          fetch(`${API_BASE_URL}/notifications/${notificationId}`, {
+            method: "DELETE",
+          }),
+        ),
       );
-      if (!response.ok) {
+      if (responses.some((response) => !response.ok)) {
         throw new Error("Failed to clear read notifications");
       }
       setToast({ message: "Read notifications cleared", type: "success" });
