@@ -5,7 +5,6 @@ import { formatScore } from '../../../lib/teacher/utils';
 import type { StudentRecord } from '../../../lib/teacher/types';
 
 type StudentTableProps = {
-  students: StudentRecord[];
   filteredStudents: StudentRecord[];
   selectedStudentId: number | null;
   unreadReplyCountByStudent: Record<number, number>;
