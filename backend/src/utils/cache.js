@@ -1,5 +1,15 @@
 const { redisClient, getIsRedisConnected } = require('../config/redis');
 
+// Cache Keys/Prefixes
+const CACHE_KEYS = {
+  USERS_ALL: 'users:all',
+  USER_PROFILE: 'user:profile:',
+  USER_BY_ID: 'user:id:',
+  SETTINGS_ALL: 'settings:all',
+  SETTINGS_CRITERIA: 'settings:criteria',
+  QUESTIONS_ALL: 'questions:all'
+};
+
 // In-memory map to store pending fetch promises
 const pendingRequests = new Map();
 
@@ -109,6 +119,7 @@ const delCachePattern = async (pattern) => {
 };
 
 module.exports = {
+  CACHE_KEYS,
   getOrSetCache,
   getCache,
   setCache,

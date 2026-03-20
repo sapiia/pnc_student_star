@@ -380,11 +380,7 @@ export default function AdminSettingsPage() {
       setIsLoadingCriteria(true);
 
       try {
-<<<<<<< HEAD
-        const [criteriaResponse, intervalResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse, rdiResponse] = await Promise.all([
-=======
-        const [criteriaResponse, intervalResponse, notificationRetentionResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse] = await Promise.all([
->>>>>>> origin/master
+        const [criteriaResponse, intervalResponse, notificationRetentionResponse, studentStartResponse, studentEditResponse, studentFeedbackResponse, studentHistoryResponse, studentExtensionResponse, studentHelpResponse, studentReminderResponse, studentMaxResponse, studentReflectionMaxResponse, teacherReviewResponse, teacherEditResponse, teacherProfileResponse, teacherMeetingResponse, teacherBulkMessageResponse, teacherExportResponse, teacherDeadlineResponse, teacherMaxResponse, teacherFeedbackMaxResponse, rdiResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/settings/evaluation-criteria`),
           fetch(`${API_BASE_URL}/settings/key/evaluation_interval_days`),
           fetch(`${API_BASE_URL}/settings/key/notification_auto_delete_days`),

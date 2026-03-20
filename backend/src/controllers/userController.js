@@ -9,18 +9,14 @@ const saltRounds = 10;
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { emitNotificationEvent } = require('../realtime');
-const { delCache, getOrSetCache } = require('../utils/cache');
-
-const USERS_ALL_CACHE_KEY = 'users:all';
-const USER_PROFILE_CACHE_PREFIX = 'user:profile:';
-const USER_BY_ID_CACHE_PREFIX = 'user:id:';
+const { delCache, getOrSetCache, CACHE_KEYS } = require('../utils/cache');
 
 const invalidateUserCache = async (userId) => {
   try {
-    const keys = [USERS_ALL_CACHE_KEY];
+    const keys = [CACHE_KEYS.USERS_ALL];
     if (userId) {
-      keys.push(`${USER_PROFILE_CACHE_PREFIX}${userId}`);
-      keys.push(`${USER_BY_ID_CACHE_PREFIX}${userId}`);
+      keys.push(`${CACHE_KEYS.USER_PROFILE}${userId}`);
+      keys.push(`${CACHE_KEYS.USER_BY_ID}${userId}`);
     }
     await delCache(keys);
   } catch (err) {
@@ -785,7 +781,7 @@ const getAllUsers = async (req, res) => {
 
     // Only use default cached results if no specific sorting is requested.
     if (!sortBy) {
-      const usersData = await getOrSetCache(USERS_ALL_CACHE_KEY, async () => {
+      const usersData = await getOrSetCache(CACHE_KEYS.USERS_ALL, async () => {
         const columns = await getUsersTableColumns();
         try {
           const [rows] = await db.query(`
@@ -855,7 +851,7 @@ const getAllUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   const userId = req.params.id;
-  const cacheKey = `${USER_BY_ID_CACHE_PREFIX}${userId}`;
+  const cacheKey = `${CACHE_KEYS.USER_BY_ID}${userId}`;
   try {
     const userData = await getOrSetCache(cacheKey, async () => {
       const columns = await getUsersTableColumns();
@@ -1430,7 +1426,7 @@ const getUserProfile = async (req, res) => {
     return res.status(400).json({ error: "Invalid user id." });
   }
 
-  const cacheKey = `${USER_PROFILE_CACHE_PREFIX}${userId}`;
+  const cacheKey = `${CACHE_KEYS.USER_PROFILE}${userId}`;
   try {
     const profileData = await getOrSetCache(cacheKey, async () => {
       const columns = await getUsersTableColumns();
