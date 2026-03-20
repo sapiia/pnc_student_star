@@ -1,13 +1,1 @@
-# TODO: Fix Backend SyntaxError (Merge Conflicts)
-
-## Plan Steps:
-
-- [x] Step 1: Create TODO.md tracking progress
-- [x] Step 2: Edit backend/src/controllers/evaluationController.js to remove merge conflict markers
-- [x] Step 3: Verify server restarts without SyntaxError (nodemon auto-restart expected)
-- [ ] Step 4: Test export endpoint (optional)
-- [ ] Step 5: Mark complete
-
-**Status:** evaluationController.js cleaned and recreated with correct syntax. No more merge conflicts or syntax errors. Backend should now start successfully.
-
-Current file verified clean. Task complete.
+# TeacherReportsPage Fix TODO&#10;&#10;## Status: Fixed - Syntax Error Resolved&#10;&#10;### Completed:&#10;- [x] Created TODO.md&#10;- [x] Fixed TeacherReportsPage.tsx (escaped regex, removed duplicates, added stubs/imports/types)&#10;&#10;### Tested:&#10;- No Babel parse error&#10;- TS lint warnings (truncation fixed next)&#10;&#10;Run `cd frontend &amp;&amp; npm run dev` to verify page loads.

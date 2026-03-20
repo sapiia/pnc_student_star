@@ -12,6 +12,7 @@ interface StatsCardProps {
   actionLabel?: string;
   onAction?: () => void;
   index?: number;
+  loading?: boolean;
 }
 
 export default function StatsCard({

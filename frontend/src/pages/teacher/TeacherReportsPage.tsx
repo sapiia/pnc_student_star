@@ -883,4 +883,3 @@ export default function TeacherReportsPage() {
     </div>
   );
 }
-
