@@ -2,12 +2,12 @@ const { redisClient, getIsRedisConnected } = require('../config/redis');
 
 // Cache Keys/Prefixes
 const CACHE_KEYS = {
-  USERS_ALL: 'users:all',
-  USER_PROFILE: 'user:profile:',
-  USER_BY_ID: 'user:id:',
-  SETTINGS_ALL: 'settings:all',
-  SETTINGS_CRITERIA: 'settings:criteria',
-  QUESTIONS_ALL: 'questions:all'
+  USERS_ALL: 'users:all', // All users list
+  USER_PROFILE: 'user:profile:', // Individual user profile data
+  USER_BY_ID: 'user:id:', // User details by ID
+  SETTINGS_ALL: 'settings:all', // All application settings
+  SETTINGS_CRITERIA: 'settings:criteria', // Evaluation criteria configuration
+  QUESTIONS_ALL: 'questions:all' // All evaluation questions
 };
 
 // In-memory map to store pending fetch promises
