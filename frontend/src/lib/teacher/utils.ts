@@ -431,6 +431,8 @@ export type CriteriaCriterion = {
   id?: number | string;
   name?: string;
   status?: string;
+  icon?: string | null;
+  color?: string | null;
 };
 
 export type EvaluationResponseWithKey = {
@@ -438,6 +440,7 @@ export type EvaluationResponseWithKey = {
   criterion_key: string;
   criterion_name?: string;
   criterion_icon?: string | null;
+  criterion_color?: string | null;
   star_value: number;
   reflection?: string;
   tip_snapshot?: string;
@@ -453,6 +456,68 @@ export type RadarDataResult = {
   maxValue: number;
 };
 
+export type CriteriaBreakdownItem = {
+  criterion_key: string;
+  criterion_name: string;
+  criterion_icon: string;
+  criterion_color: string;
+  star_value: number;
+  reflection: string;
+  tip_snapshot: string;
+};
+
+const getActiveCriteria = (globalCriteria: CriteriaCriterion[]) =>
+  globalCriteria.filter((criterion) => String(criterion.status).toLowerCase() === "active");
+
+const buildCriterionIdLookup = (criteria: CriteriaCriterion[]) => {
+  const lookup = new Map<string, string>();
+
+  criteria.forEach((criterion) => {
+    const criterionId = String(criterion.id || "").trim();
+    if (!criterionId) {
+      return;
+    }
+
+    const normalizedName = String(criterion.name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+(.)/g, (_, char: string) => char.toUpperCase())
+      .replace(/[^a-zA-Z0-9]/g, "");
+
+    if (normalizedName) {
+      lookup.set(normalizedName, criterionId);
+    }
+
+    lookup.set(criterionId, criterionId);
+  });
+
+  return lookup;
+};
+
+const findMatchingCriterionResponse = (
+  responses: EvaluationResponseWithKey[],
+  criterion: CriteriaCriterion,
+  criterionIdLookup: Map<string, string>,
+) => {
+  const criterionId = String(criterion.id || "").trim();
+  const criterionName = String(criterion.name || "")
+    .trim()
+    .toLowerCase();
+
+  return responses.find((response) => {
+    const responseKey = String(response.criterion_key || "").trim();
+    const responseId = String(response.criterion_id || "").trim();
+    const responseName = String(response.criterion_name || "")
+      .trim()
+      .toLowerCase();
+
+    return (
+      responseId === criterionId ||
+      criterionIdLookup.get(responseKey) === criterionId ||
+      responseName === criterionName
+    );
+  });
+};
+
 export const buildRadarData = (
   student: {
     latestEvaluation: {
@@ -463,9 +528,7 @@ export const buildRadarData = (
   globalCriteria: CriteriaCriterion[],
   globalRatingScale: number,
 ): RadarDataResult => {
-  const activeGlobal = globalCriteria.filter(
-    (c) => String(c.status).toLowerCase() === "active",
-  );
+  const activeGlobal = getActiveCriteria(globalCriteria);
 
   if (activeGlobal.length === 0) {
     if (!student?.latestEvaluation?.responses?.length)
@@ -483,17 +546,13 @@ export const buildRadarData = (
     };
   }
 
+  const criterionIdLookup = buildCriterionIdLookup(activeGlobal);
+
   const data = activeGlobal.map((criterion, index) => {
-    const response = (student?.latestEvaluation?.responses || []).find(
-      (r: EvaluationResponseWithKey) =>
-        String(r.criterion_id || r.criterion_key || "").trim() ===
-          String(criterion.id || "").trim() ||
-        String(r.criterion_name || "")
-          .trim()
-          .toLowerCase() ===
-          String(criterion.name || "")
-            .trim()
-            .toLowerCase(),
+    const response = findMatchingCriterionResponse(
+      student?.latestEvaluation?.responses || [],
+      criterion,
+      criterionIdLookup,
     );
 
     return {
@@ -503,6 +562,51 @@ export const buildRadarData = (
   });
 
   return { data, maxValue: globalRatingScale };
+};
+
+export const buildCriteriaBreakdown = (
+  evaluation: {
+    responses?: EvaluationResponseWithKey[];
+  } | null | undefined,
+  globalCriteria: CriteriaCriterion[],
+): CriteriaBreakdownItem[] => {
+  const responses = evaluation?.responses || [];
+  const activeGlobal = getActiveCriteria(globalCriteria);
+
+  if (activeGlobal.length === 0) {
+    return responses.map((response, index) => ({
+      criterion_key: String(response.criterion_id || response.criterion_key || `criterion-${index}`),
+      criterion_name: String(response.criterion_name || response.criterion_key || `Criterion ${index + 1}`),
+      criterion_icon: String(response.criterion_icon || "Star"),
+      criterion_color: String(
+        response.criterion_color ||
+          CRITERIA_COLOR_STYLES[index % CRITERIA_COLOR_STYLES.length].iconText.replace("text-", ""),
+      ),
+      star_value: Math.max(0, Number(response.star_value || 0)),
+      reflection: String(response.reflection || "").trim(),
+      tip_snapshot: String(response.tip_snapshot || "").trim(),
+    }));
+  }
+
+  const criterionIdLookup = buildCriterionIdLookup(activeGlobal);
+
+  return activeGlobal.map((criterion, index) => {
+    const response = findMatchingCriterionResponse(responses, criterion, criterionIdLookup);
+
+    return {
+      criterion_key: String(criterion.id || criterion.name || `criterion-${index}`),
+      criterion_name: String(criterion.name || `Criterion ${index + 1}`),
+      criterion_icon: String(response?.criterion_icon || criterion.icon || "Star"),
+      criterion_color: String(
+        response?.criterion_color ||
+          criterion.color ||
+          CRITERIA_COLOR_STYLES[index % CRITERIA_COLOR_STYLES.length].iconText.replace("text-", ""),
+      ),
+      star_value: response ? Math.max(0, Number(response.star_value || 0)) : 0,
+      reflection: String(response?.reflection || "").trim(),
+      tip_snapshot: String(response?.tip_snapshot || "").trim(),
+    };
+  });
 };
 
 export const getIcon = (iconName?: string | null, className = "w-5 h-5") => {

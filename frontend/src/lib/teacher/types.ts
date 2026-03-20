@@ -11,6 +11,7 @@ export interface ApiUser {
   email?: string | null;
   role?: string | null;
   class?: string | null;
+  generation?: string | null;
   gender?: string | null;
   student_id?: string | null;
   resolved_student_id?: string | null;
@@ -35,6 +36,8 @@ export interface EvaluationRecord {
   id: number;
   user_id?: number;
   average_score?: number;
+  period?: string;
+  criteria_count?: number;
   rating_scale?: number;
   submitted_at?: string;
   created_at?: string;
@@ -42,9 +45,11 @@ export interface EvaluationRecord {
 }
 
 export interface EvaluationResponse {
+  criterion_id?: number | string;
   criterion_key: string;
   criterion_name?: string;
   criterion_icon?: string | null;
+  criterion_color?: string | null;
   star_value: number;
   reflection?: string;
   tip_snapshot?: string;
@@ -59,6 +64,7 @@ export interface FeedbackRecord {
   created_at?: string;
   updated_at?: string;
   teacher_name?: string;
+  teacher_profile_image?: string | null;
 }
 
 export interface NotificationRecord {
