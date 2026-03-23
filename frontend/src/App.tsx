@@ -1,6 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Suspense } from 'react';
+import type { ReactNode } from 'react';
 import useScrollReveal from './hooks/useScrollReveal';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LandingPage from './pages/shared/LandingPage';
+import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
@@ -31,58 +35,226 @@ import AdminRecordsPage from './pages/admin/AdminRecordsPage';
 import AdminReportsPage from './pages/admin/AdminReportsPage';
 import AdminMessagesPage from './pages/admin/AdminMessagesPage';
 import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
+import ErrorBoundary from './components/common/ErrorBoundary';
+
+// Loading Spinner Component
+const LoadingSpinner = () => (
+  <div className="flex h-screen items-center justify-center bg-slate-50">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+  </div>
+);
+
+interface ProtectedRouteProps {
+  children: ReactNode;
+  allowedRoles?: string[];
+}
+
+const ProtectedRoute = ({ children, allowedRoles = [] }: ProtectedRouteProps) => {
+  const { user, loading } = useAuth();
+  const normalizedRole = String(user?.role || '').trim().toLowerCase();
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (allowedRoles.length > 0 && !allowedRoles.includes(normalizedRole)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <ErrorBoundary>{children}</ErrorBoundary>;
+};
+
+// ScrollRevealManager component (fixed duplicate)
+const ScrollRevealManager = () => {
+  const location = useLocation();
+  useScrollReveal([location.pathname]);
+  return null;
+};
 
 export default function App() {
   return (
     <Router>
-      <ScrollRevealManager />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/evaluate" element={<EvaluationFormPage />} />
-        <Route path="/results" element={<EvaluationResultPage />} />
-        <Route path="/history" element={<EvaluationHistoryPage />} />
-        <Route path="/help" element={<HelpCenterPage />} />
-        <Route path="/feedback" element={<FeedbackPage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/faq" element={<FAQPage />} />
-        <Route path="/messages" element={<MeetingPage />} />
-        <Route path="/meeting" element={<Navigate to="/messages" replace />} />
-        
-        {/* Teacher Portal Routes */}
-        <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
-        <Route path="/teacher/students" element={<TeacherStudentListPage />} />
-        <Route path="/teacher/students/:id" element={<TeacherStudentProfilePage />} />
-        <Route path="/teacher/reports" element={<TeacherReportsPage />} />
-        <Route path="/teacher/messages" element={<TeacherMessagesPage />} />
-        <Route path="/teacher/notifications" element={<TeacherNotificationsPage />} />
-        <Route path="/teacher/settings" element={<TeacherProfilePage />} />
-        <Route path="/teacher/attention" element={<TeacherAttentionStudentsPage />} />
+      <AuthProvider>
+        <ScrollRevealManager />
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            
+            {/* Student Routes */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <DashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/evaluate" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <EvaluationFormPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/results" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <EvaluationResultPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/history" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <EvaluationHistoryPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/help" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <HelpCenterPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/feedback" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <FeedbackPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/notifications" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <NotificationsPage />
+              </ProtectedRoute>
+            } />
+            
+            {/* Teacher Portal Routes */}
+            <Route path="/teacher" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <Navigate to="/teacher/dashboard" replace />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/dashboard" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherDashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/students" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherStudentListPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/students/:id" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherStudentProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/reports" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherReportsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/messages" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherMessagesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/notifications" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherNotificationsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/settings" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/teacher/attention" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherAttentionStudentsPage />
+              </ProtectedRoute>
+            } />
 
-        {/* Admin Portal Routes */}
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-        <Route path="/admin/users" element={<AdminUserManagementPage />} />
-        <Route path="/admin/students/:generation/:className" element={<AdminClassStudentsPage />} />
-        <Route path="/admin/teachers" element={<AdminTeacherRecordsPage />} />
-        <Route path="/admin/admins" element={<AdminRecordsPage />} />
-        <Route path="/admin/evaluations" element={<AdminDashboardPage />} />
-        <Route path="/admin/reports" element={<AdminReportsPage />} />
-        <Route path="/admin/messages" element={<AdminMessagesPage />} />
-        <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
-        <Route path="/admin/settings" element={<AdminSettingsPage />} />
-        
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+            {/* Admin Portal Routes */}
+            <Route path="/admin" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navigate to="/admin/dashboard" replace />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/dashboard" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/users" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminUserManagementPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/students/:generation/:className" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminClassStudentsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/teachers" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminTeacherRecordsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/admins" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminRecordsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/evaluations" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminDashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/reports" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminReportsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/messages" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminMessagesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/notifications" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminNotificationsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/settings" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminSettingsPage />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/faq" element={
+              <ProtectedRoute>
+                <FAQPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/messages" element={
+              <ProtectedRoute>
+                <MeetingPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/meeting" element={
+              <ProtectedRoute>
+                <Navigate to="/messages" replace />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </AuthProvider>
     </Router>
   );
 }
 
-function ScrollRevealManager() {
-  const location = useLocation();
-  useScrollReveal([location.pathname]);
-  return null;
-}

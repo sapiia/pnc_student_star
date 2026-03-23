@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const XLSX = require('xlsx');
@@ -16,8 +17,71 @@ const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const PASSWORD_RESET_SECRET = process.env.PASSWORD_RESET_SECRET || 'change-this-password-reset-secret';
 const PASSWORD_RESET_EXPIRES_MINUTES = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
+const getRedirectPathForRole = (role = '') => (
+  normalizeRole(role) === 'admin'
+    ? '/admin/dashboard'
+    : normalizeRole(role) === 'teacher'
+      ? '/teacher/dashboard'
+      : '/dashboard'
+);
+
+const buildAuthenticatedUser = (user = {}, columns = new Set()) => ({
+  id: user.id,
+  name: getDisplayNameFromUserRow(user) || user.email,
+  email: user.email,
+  profile_image: columns.has('profile_image')
+    ? ((user.profile_image || '').toString().trim() || null)
+    : null,
+  role: normalizeRole(user.role),
+  class: user.class || null,
+  student_id: columns.has('student_id')
+    ? (user.student_id || user.resolved_student_id || null)
+    : (user.student_id || user.resolved_student_id || null),
+  created_at: user.created_at,
+  updated_at: user.updated_at
+});
+
+const createAuthToken = (user = {}) => jwt.sign(
+  {
+    id: user.id,
+    email: user.email,
+    role: normalizeRole(user.role)
+  },
+  JWT_SECRET,
+  { expiresIn: JWT_EXPIRES_IN }
+);
+
+const buildAuthCookieOptions = () => ({
+  httpOnly: true,
+  secure: IS_PRODUCTION,
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/'
+});
+
+const sendAuthenticatedResponse = ({
+  res,
+  user,
+  columns,
+  status = 200,
+  message,
+  redirectPath
+}) => {
+  const token = createAuthToken(user);
+  res.cookie('token', token, buildAuthCookieOptions());
+
+  return res.status(status).json({
+    message,
+    user: buildAuthenticatedUser(user, columns),
+    redirectPath: redirectPath || getRedirectPathForRole(user.role),
+    token
+  });
+};
 
 const splitFullName = (fullName = '') => {
   const cleaned = fullName.toString().trim().replace(/\s+/g, ' ');
@@ -67,12 +131,12 @@ const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
   const isRegistered = hasIsRegistered
     ? Number(registrationValue || 0) === 1
     : (() => {
-        const createdAt = userRow.created_at ? new Date(userRow.created_at).getTime() : NaN;
-        const updatedAt = userRow.updated_at ? new Date(userRow.updated_at).getTime() : NaN;
-        if (Number.isNaN(createdAt) || Number.isNaN(updatedAt)) return true;
-        // Fallback heuristic: unchanged row after invite likely means registration not completed yet.
-        return updatedAt - createdAt > 1000;
-      })();
+      const createdAt = userRow.created_at ? new Date(userRow.created_at).getTime() : NaN;
+      const updatedAt = userRow.updated_at ? new Date(userRow.updated_at).getTime() : NaN;
+      if (Number.isNaN(createdAt) || Number.isNaN(updatedAt)) return true;
+      // Fallback heuristic: unchanged row after invite likely means registration not completed yet.
+      return updatedAt - createdAt > 1000;
+    })();
 
   const accountStatus = isDeleted
     ? 'deleted'
@@ -894,10 +958,10 @@ const getAllUsers = async (req, res) => {
   try {
     const { sortBy, sortOrder } = req.query;
     const columns = await getUsersTableColumns();
-    
+
     // Build ORDER BY clause based on sortBy parameter
     let orderByClause = 'ORDER BY u.created_at DESC';
-    
+
     if (sortBy === 'generation') {
       const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
       // Try to extract generation from class field or use generation column directly
@@ -967,6 +1031,51 @@ const getUserById = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+// Get the currently authenticated user
+const getCurrentUser = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const columns = await getUsersTableColumns();
+
+    try {
+      const [rows] = await db.query(`
+        SELECT
+          u.*,
+          COALESCE(NULLIF(u.student_id, ''), s.student_no) AS resolved_student_id
+        FROM users u
+        LEFT JOIN students s ON s.user_id = u.id
+        WHERE u.id = ?
+      `, [userId]);
+
+        if (rows.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.json({
+          user: normalizeUserStatusForResponse(rows[0], columns)
+        });
+      } catch (_err) {
+        const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [userId]);
+
+        if (rows.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.json({
+          user: normalizeUserStatusForResponse(rows[0], columns)
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to get current user." });
   }
 };
 
@@ -1075,33 +1184,33 @@ const updateUser = async (req, res) => {
       const newStudentId = normalizedStudentId || null;
       const newGender = gender || null;
       const newGeneration = normalizedGeneration || null;
-      
+
       if (oldUser.class_name !== newClass) changes.push(`Class: ${newClass || 'None'}`);
       if (oldUser.student_id !== newStudentId) changes.push(`Student ID: ${newStudentId || 'None'}`);
       if (oldUser.gender !== newGender) changes.push(`Gender: ${newGender || 'None'}`);
       if (oldUser.generation !== newGeneration) changes.push(`Generation: ${newGeneration || 'None'}`);
-      
+
       if (changes.length > 0) {
         // Notify the updated user (e.g. the student)
         const updateMsg = `Admin updated your profile: ${changes.join(', ')}.`;
         const nId = await Notification.create({ user_id: userId, message: updateMsg, is_read: 0 });
         const [nRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [nId]);
-        
+
         if (nRows[0]) {
           emitNotificationEvent({ action: 'created', notification: nRows[0] });
         }
 
         // Output to all teachers if the updated user is a student
         if (normalizedRole === 'student') {
-           const [teacherRows] = await db.query("SELECT id FROM users WHERE role = 'teacher'");
-           const oldName = `${oldUser.first_name || ''} ${oldUser.last_name || ''}`.trim() || oldUser.email;
-           const newName = name || oldName;
-           const teacherMsg = `Admin updated profile for student ${newName} (${normalizedStudentId}): ${changes.join(', ')}.`;
-           for (const tRow of teacherRows) {
-               const tnId = await Notification.create({ user_id: tRow.id, message: teacherMsg, is_read: 0 });
-               const [tnRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [tnId]);
-               if (tnRows[0]) emitNotificationEvent({ action: 'created', notification: tnRows[0] });
-           }
+          const [teacherRows] = await db.query("SELECT id FROM users WHERE role = 'teacher'");
+          const oldName = `${oldUser.first_name || ''} ${oldUser.last_name || ''}`.trim() || oldUser.email;
+          const newName = name || oldName;
+          const teacherMsg = `Admin updated profile for student ${newName} (${normalizedStudentId}): ${changes.join(', ')}.`;
+          for (const tRow of teacherRows) {
+            const tnId = await Notification.create({ user_id: tRow.id, message: teacherMsg, is_read: 0 });
+            const [tnRows] = await db.query("SELECT id, user_id, message, is_read, created_at FROM notifications WHERE id = ?", [tnId]);
+            if (tnRows[0]) emitNotificationEvent({ action: 'created', notification: tnRows[0] });
+          }
         }
       }
     }
@@ -1466,38 +1575,24 @@ const completeInviteRegistration = async (req, res) => {
       userId = result.insertId;
     }
 
-    const redirectPath = role === 'admin'
-      ? '/admin/dashboard'
-      : role === 'teacher'
-        ? '/teacher/dashboard'
-        : '/dashboard';
+      const [userRows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
+      const user = userRows[0] || null;
+      const columns = await getUsersTableColumns();
+      if (!user) {
+        return res.status(500).json({ error: "Failed to load registered user." });
+      }
 
-    const [userRows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
-    const user = userRows[0] || null;
-    const columns = await getUsersTableColumns();
-    const normalizedRole = normalizeRole(role);
-    const fallbackName = user ? [user.first_name, user.last_name].filter(Boolean).join(' ').trim() : '';
-    const responseName = user ? (fallbackName || user.email) : payload.name || payload.email;
-
-    return res.status(201).json({
-      message: "Registration completed successfully.",
-      userId,
-      user: user ? {
-        id: user.id,
-        name: responseName,
-        email: user.email,
-        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
-        role: normalizedRole,
-        class: user.class,
-        student_id: user.student_id || null,
-        created_at: user.created_at,
-        updated_at: user.updated_at
-      } : null,
-      redirectPath
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message || "Failed to complete registration." });
+      return sendAuthenticatedResponse({
+        res,
+        user,
+        columns,
+        status: 201,
+        message: "Registration completed successfully.",
+        redirectPath: getRedirectPathForRole(role)
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: err.message || "Failed to complete registration." });
   }
 };
 
@@ -1810,7 +1905,7 @@ const updateUserProfile = async (req, res) => {
 // Update profile image for a specific user
 const updateUserProfileImage = async (req, res) => {
   const userId = Number(req.params.id);
-  
+
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(400).json({ error: "Invalid user id." });
   }
@@ -1968,34 +2063,22 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
-    const redirectPath = normalizedRole === 'admin'
-      ? '/admin/dashboard'
-      : normalizedRole === 'teacher'
-        ? '/teacher/dashboard'
-        : '/dashboard';
+      return sendAuthenticatedResponse({
+        res,
+        user,
+        columns,
+        message: "Login successful.",
+        redirectPath: getRedirectPathForRole(normalizedRole)
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: err.message || "Failed to login." });
+    }
+  };
 
-    const fallbackName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
-    const resolvedName = fallbackName || user.email;
-
-    return res.json({
-      message: "Login successful.",
-      user: {
-        id: user.id,
-        name: resolvedName,
-        email: user.email,
-        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
-        role: normalizedRole,
-        class: user.class,
-        student_id: user.student_id || null,
-        created_at: user.created_at,
-        updated_at: user.updated_at
-      },
-      redirectPath
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message || "Failed to login." });
-  }
+const logoutUser = async (_req, res) => {
+  res.clearCookie('token', buildAuthCookieOptions());
+  return res.json({ message: "Logout successful." });
 };
 
 // Enable/disable user account
@@ -2286,6 +2369,8 @@ const getStudentsByClass = async (req, res) => {
 
 // Get all students for teacher
 const getTeacherStudents = async (req, res) => {
+  console.log(`[userController.getTeacherStudents] teacherId param:`, req.params.teacherId);
+
   try {
     const teacherId = req.params.teacherId || req.user?.id;
     const students = await User.getTeacherStudents(teacherId);
@@ -2338,9 +2423,10 @@ const updateClassNameForStudents = async (req, res) => {
   }
 };
 
-module.exports = {
+const userController = {
   getAllUsers,
   getUserById,
+  getCurrentUser,
   getUserProfile,
   createUser,
   updateUser,
@@ -2358,6 +2444,7 @@ module.exports = {
   setUserActive,
   setGenerationActive,
   loginUser,
+  logoutUser,
   inviteUser,
   inviteUsersBulk,
   validateUsersBulkInvite,
@@ -2369,3 +2456,7 @@ module.exports = {
   getTeacherStudents,
   updateClassNameForStudents
 };
+
+module.exports = userController;
+
+

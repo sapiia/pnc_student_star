@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import {
   DEFAULT_AVATAR,
-  getTeacherIdFromStorage,
-  getTeacherNameFromStorage,
+  getStoredAuthUser,
   resolveAvatarUrl,
-} from '../lib/teacher/utils';
+  toDisplayName,
+} from "../lib/teacher/utils";
 
 type UseTeacherIdentityOptions = {
   defaultName?: string;
@@ -15,15 +16,16 @@ type TeacherIdentity = {
   teacherId: number | null;
   teacherName: string;
   teacherAvatar: string;
+  isLoading: boolean;
 };
 
 const resolveTeacherAvatar = (teacherId: number | null, fallback: string) => {
   let nextAvatar = fallback;
   try {
-    const raw = localStorage.getItem('auth_user');
+    const raw = localStorage.getItem("auth_user");
     if (raw) {
       const authUser = JSON.parse(raw);
-      const resolvedPhoto = String(authUser?.profile_image || '').trim();
+      const resolvedPhoto = String(authUser?.profile_image || "").trim();
       if (resolvedPhoto) {
         return resolveAvatarUrl(resolvedPhoto, fallback);
       }
@@ -40,44 +42,85 @@ const resolveTeacherAvatar = (teacherId: number | null, fallback: string) => {
   return nextAvatar;
 };
 
-export function useTeacherIdentity(options: UseTeacherIdentityOptions = {}): TeacherIdentity {
-  const { defaultName = 'Teacher', defaultAvatar = DEFAULT_AVATAR } = options;
+const getStoredTeacherIdentity = (
+  defaultAvatar: string,
+): Omit<TeacherIdentity, "isLoading"> | null => {
+  const authUser = getStoredAuthUser();
+  if (
+    !authUser ||
+    String(authUser.role || "").trim().toLowerCase() !== "teacher"
+  ) {
+    return null;
+  }
+
+  return {
+    teacherId: authUser.id,
+    teacherName: toDisplayName(authUser),
+    teacherAvatar: resolveTeacherAvatar(authUser.id, defaultAvatar),
+  };
+};
+
+export function useTeacherIdentity(
+  options: UseTeacherIdentityOptions = {},
+): TeacherIdentity {
+  const { user, loading: authLoading } = useAuth();
+  const { defaultName = "Teacher", defaultAvatar = DEFAULT_AVATAR } = options;
   const [teacherId, setTeacherId] = useState<number | null>(null);
   const [teacherName, setTeacherName] = useState(defaultName);
   const [teacherAvatar, setTeacherAvatar] = useState(defaultAvatar);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const resolvedTeacherId = getTeacherIdFromStorage();
-    setTeacherId(resolvedTeacherId);
-    const resolvedTeacherName = getTeacherNameFromStorage();
-    const displayName =
-      resolvedTeacherName && (resolvedTeacherName !== 'Teacher' || defaultName === 'Teacher')
-        ? resolvedTeacherName
-        : defaultName;
-    setTeacherName(displayName);
-    setTeacherAvatar(resolveTeacherAvatar(resolvedTeacherId, defaultAvatar));
-  }, [defaultAvatar, defaultName]);
+    if (user && user.role === "teacher") {
+      setTeacherId(user.id);
+      setTeacherName(toDisplayName(user as any));
+      setTeacherAvatar(resolveAvatarUrl(user.profile_image, defaultAvatar));
+      setIsLoading(false);
+      return;
+    }
+
+    const storedTeacher = getStoredTeacherIdentity(defaultAvatar);
+    if (storedTeacher) {
+      setTeacherId(storedTeacher.teacherId);
+      setTeacherName(storedTeacher.teacherName);
+      setTeacherAvatar(storedTeacher.teacherAvatar);
+      setIsLoading(false);
+    } else if (authLoading) {
+      setIsLoading(true);
+    } else {
+      setTeacherId(null);
+      setTeacherName(defaultName);
+      setTeacherAvatar(defaultAvatar);
+      setIsLoading(false);
+    }
+  }, [user, authLoading, defaultAvatar, defaultName]);
 
   useEffect(() => {
     const refreshIdentity = () => {
-      const resolvedTeacherId = getTeacherIdFromStorage();
-      setTeacherId(resolvedTeacherId);
-      const resolvedTeacherName = getTeacherNameFromStorage();
-      const displayName =
-        resolvedTeacherName && (resolvedTeacherName !== 'Teacher' || defaultName === 'Teacher')
-          ? resolvedTeacherName
-          : defaultName;
-      setTeacherName(displayName);
-      setTeacherAvatar(resolveTeacherAvatar(resolvedTeacherId, defaultAvatar));
+      if (user && user.role === "teacher") {
+        setTeacherId(user.id);
+        setTeacherName(toDisplayName(user as any));
+        setTeacherAvatar(resolveAvatarUrl(user.profile_image, defaultAvatar));
+        setIsLoading(false);
+        return;
+      }
+
+      const storedTeacher = getStoredTeacherIdentity(defaultAvatar);
+      if (storedTeacher) {
+        setTeacherId(storedTeacher.teacherId);
+        setTeacherName(storedTeacher.teacherName);
+        setTeacherAvatar(storedTeacher.teacherAvatar);
+        setIsLoading(false);
+      }
     };
 
-    window.addEventListener('profile-updated', refreshIdentity);
-    window.addEventListener('profile-photo-updated', refreshIdentity);
+    window.addEventListener("profile-updated", refreshIdentity);
+    window.addEventListener("profile-photo-updated", refreshIdentity);
     return () => {
-      window.removeEventListener('profile-updated', refreshIdentity);
-      window.removeEventListener('profile-photo-updated', refreshIdentity);
+      window.removeEventListener("profile-updated", refreshIdentity);
+      window.removeEventListener("profile-photo-updated", refreshIdentity);
     };
-  }, [defaultAvatar, defaultName]);
+  }, [defaultAvatar, defaultName, user]);
 
-  return { teacherId, teacherName, teacherAvatar };
+  return { teacherId, teacherName, teacherAvatar, isLoading };
 }

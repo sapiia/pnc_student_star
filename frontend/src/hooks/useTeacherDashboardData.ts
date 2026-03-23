@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useTeacherIdentity } from "./useTeacherIdentity";
 import {
   API_BASE_URL,
   DEFAULT_AVATAR,
@@ -12,7 +11,6 @@ import {
   normalizeGender,
   resolveAvatarUrl,
 } from "../lib/teacher/utils";
-import type { GenderOption } from "../lib/teacher/types";
 
 export interface StudentData {
   id: number;
@@ -34,8 +32,9 @@ interface UseTeacherDashboardDataReturn {
   refetch: () => Promise<void>;
 }
 
-export function useTeacherDashboardData(): UseTeacherDashboardDataReturn {
-  const { teacherId } = useTeacherIdentity();
+export function useTeacherDashboardData(
+  teacherId: number | null,
+): UseTeacherDashboardDataReturn {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +42,7 @@ export function useTeacherDashboardData(): UseTeacherDashboardDataReturn {
   const loadDashboardData = useCallback(async () => {
     if (!teacherId) {
       setStudents([]);
+      setEvaluations([]);
       setLoading(false);
       return;
     }
@@ -156,6 +156,7 @@ export function useTeacherDashboardData(): UseTeacherDashboardDataReturn {
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
       setStudents([]);
+      setEvaluations([]);
     } finally {
       setLoading(false);
     }

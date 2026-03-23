@@ -6,6 +6,7 @@ const path = require('path');
 const {
   getAllUsers,
   getUserById,
+  getCurrentUser,
   getUserProfile,
   createUser,
   updateUser,
@@ -23,6 +24,7 @@ const {
   setUserActive,
   setGenerationActive,
   loginUser,
+  logoutUser,
   inviteUser,
   inviteUsersBulk,
   validateUsersBulkInvite,
@@ -67,6 +69,9 @@ router.get('/', getAllUsers);
 // PATCH /api/users/generation/:generation/active - Enable/disable all students in a generation
 router.patch('/generation/:generation/active', setGenerationActive);
 
+// GET /api/users/me - Get current authenticated user
+router.get('/me', require('../middleware/auth'), getCurrentUser);
+
 // GET /api/users/:id - Get user by ID
 router.get('/:id', getUserById);
 
@@ -78,6 +83,9 @@ router.post('/', createUser);
 
 // POST /api/users/login - Login user
 router.post('/login', loginUser);
+
+// POST /api/users/logout - Logout user
+router.post('/logout', logoutUser);
 
 // POST /api/users/password-reset/request - Send password reset email
 router.post('/password-reset/request', requestPasswordReset);
@@ -117,22 +125,22 @@ router.patch(
   '/:id/profile-image',
   (req, res, next) => {
     console.log('📤 Upload started for user:', req.params.id);
-    
+
     profileImageUpload.single('image')(req, res, (err) => {
       if (err) {
         console.error('❌ Multer error:', err);
         return res.status(400).json({ error: err.message || 'Failed to upload image.' });
       }
-      
+
       if (!req.file) {
         console.log('❌ No file received');
         return res.status(400).json({ error: 'No file uploaded.' });
       }
-      
+
       console.log('✅ File saved:', req.file.filename);
       console.log('✅ File path:', req.file.path);
       console.log('✅ File size:', req.file.size);
-      
+
       next();
     });
   },

@@ -70,10 +70,10 @@ class User {
     try {
       const { name, email, password, role, class_name } = userData;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
-      
+
       const sql = "INSERT INTO users (name, email, password, role, class) VALUES (?, ?, ?, ?, ?)";
       const [result] = await db.query(sql, [name, email, hashedPassword, role, class_name]);
-      
+
       return result.insertId;
     } catch (error) {
       throw error;
@@ -86,7 +86,7 @@ class User {
       const { name, email, role, class_name } = userData;
       const sql = "UPDATE users SET name = ?, email = ?, role = ?, class = ? WHERE id = ?";
       const [result] = await db.query(sql, [name, email, role, class_name, id]);
-      
+
       return result.affectedRows > 0;
     } catch (error) {
       throw error;
@@ -200,6 +200,8 @@ class User {
 
   // Get all students for teacher (all classes teacher has access to)
   static async getTeacherStudents(teacherId) {
+    console.log(`[User.getTeacherStudents] Called with teacherId:`, teacherId, '(type:', typeof teacherId, ')');
+
     try {
       const { hasIsActive, hasIsDeleted } = await getUserLifecycleColumnFlags();
       const filters = ["role = 'student'"];
@@ -213,7 +215,7 @@ class User {
       }
 
       const query = `
-        SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
+        SELECT id, role, first_name, last_name, email, class, student_id, gender, profile_image
         FROM users 
         WHERE ${filters.join('\n        AND ')}
         ORDER BY class, first_name, last_name

@@ -1,25 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
-import type { InvitePayload } from '../../components/auth/register/types';
+import { useEffect, useRef, useState } from "react";
+import type { InvitePayload } from "../../components/auth/register/types";
+import { useAuth } from "../../contexts/AuthContext";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
 
 const buildSeededNames = (inviteData: InvitePayload) => {
-  const firstName = (inviteData.firstName || '').trim();
-  const lastName = (inviteData.lastName || '').trim();
+  const firstName = (inviteData.firstName || "").trim();
+  const lastName = (inviteData.lastName || "").trim();
 
   if (firstName || lastName) {
     return { firstName, lastName };
   }
 
-  const fullName = (inviteData.name || '').trim();
+  const fullName = (inviteData.name || "").trim();
   if (!fullName) {
-    return { firstName: '', lastName: '' };
+    return { firstName: "", lastName: "" };
   }
 
   const parts = fullName.split(/\s+/);
   return {
-    firstName: parts[0] || '',
-    lastName: parts.slice(1).join(' ')
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
   };
 };
 
@@ -30,16 +32,17 @@ type UseRegisterPageOptions = {
 
 export default function useRegisterPage({
   inviteToken,
-  onRegistered
+  onRegistered,
 }: UseRegisterPageOptions) {
+  const { register } = useAuth();
   const [inviteData, setInviteData] = useState(null as InvitePayload | null);
   const [loadingInvite, setLoadingInvite] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -48,25 +51,27 @@ export default function useRegisterPage({
   useEffect(() => {
     const validateInvite = async () => {
       if (!inviteToken) {
-        setError('Missing invite token. Please open the registration link from your email.');
+        setError(
+          "Missing invite token. Please open the registration link from your email.",
+        );
         setLoadingInvite(false);
         return;
       }
 
       try {
         const response = await fetch(
-          `${API_BASE_URL}/users/invite/validate?token=${encodeURIComponent(inviteToken)}`
+          `${API_BASE_URL}/users/invite/validate?token=${encodeURIComponent(inviteToken)}`,
         );
         const data = await response.json();
 
         if (!response.ok) {
-          setError(data.error || 'Invalid or expired invite link.');
+          setError(data.error || "Invalid or expired invite link.");
           return;
         }
 
         setInviteData(data);
       } catch (_error) {
-        setError('Failed to validate invite link.');
+        setError("Failed to validate invite link.");
       } finally {
         setLoadingInvite(false);
       }
@@ -94,11 +99,11 @@ export default function useRegisterPage({
   }, []);
 
   const handleSubmit = async () => {
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
 
     if (!inviteData) {
-      setError('Invite data is missing.');
+      setError("Invite data is missing.");
       return;
     }
 
@@ -106,55 +111,44 @@ export default function useRegisterPage({
     const normalizedLastName = lastName.trim();
 
     if (!normalizedFirstName) {
-      setError('First name is required.');
+      setError("First name is required.");
       return;
     }
 
     if (!normalizedLastName) {
-      setError('Last name is required.');
+      setError("Last name is required.");
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError("Passwords do not match.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/invite/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: inviteToken,
-          name: `${normalizedFirstName} ${normalizedLastName}`.trim(),
-          password
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'Failed to complete registration.');
-        return;
-      }
-
-      if (data.user) {
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-      }
-
-      setSuccess('Registration completed. Redirecting...');
-
-      const redirectPath = data.redirectPath || '/dashboard';
-      redirectTimerRef.current = window.setTimeout(() => onRegistered(redirectPath), 1200);
-    } catch (_error) {
-      setError('Failed to complete registration.');
+      setSuccess("Registration completed. Redirecting...");
+      const redirectPath = await register(
+        inviteToken,
+        `${normalizedFirstName} ${normalizedLastName}`.trim(),
+        password,
+      );
+      redirectTimerRef.current = window.setTimeout(
+        () => onRegistered(redirectPath),
+        1200,
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to complete registration.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -179,6 +173,6 @@ export default function useRegisterPage({
     togglePasswordVisibility: () => setShowPassword((current) => !current),
     toggleConfirmPasswordVisibility: () =>
       setShowConfirmPassword((current) => !current),
-    handleSubmit
+    handleSubmit,
   };
 }

@@ -46,7 +46,7 @@ export default function StudentTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {loading ? (
+{loading ? (
               <tr>
                 <td colSpan={7} className="px-6 py-20 text-center text-sm font-bold text-slate-400">
                   <div className="flex flex-col items-center gap-2">
@@ -58,7 +58,7 @@ export default function StudentTable({
             ) : paginatedStudents.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-20 text-center text-sm font-bold text-slate-400">
-                  No students matching your search criteria.
+                  {students.length === 0 ? 'No students assigned yet. Contact administrator.' : 'No students matching your search criteria.'}
                 </td>
               </tr>
             ) : (

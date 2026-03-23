@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 interface StatsCardProps {
@@ -13,6 +13,7 @@ interface StatsCardProps {
   onAction?: () => void;
   index?: number;
   loading?: boolean;
+  key?: string;
 }
 
 export default function StatsCard({
@@ -39,16 +40,16 @@ export default function StatsCard({
         <div className={cn("p-2 rounded-xl", bg, color)}>
           <Icon className="w-6 h-6" />
         </div>
-        {actionLabel && onAction ? (
-          <button
-            onClick={onAction}
-            className="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:text-white hover:border-rose-500 hover:bg-rose-500 transition-all shadow-sm pressable"
-          >
-            {actionLabel}
-          </button>
-        ) : (
-          <span className={cn("text-xs font-bold", color)}>{trend}</span>
-        )}
+{actionLabel && onAction ? (
+  <button
+    onClick={onAction}
+    className="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:text-white hover:border-rose-500 hover:bg-rose-500 transition-all shadow-sm"
+  >
+    {actionLabel}
+  </button>
+) : (
+  <span className={cn("text-xs font-bold", color)}>{trend}</span>
+)} 
       </div>
       <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
       <h3 className="text-2xl font-black text-slate-900">

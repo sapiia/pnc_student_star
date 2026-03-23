@@ -8,11 +8,14 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import BrandLogo, { PNLogoMark } from '../../components/ui/BrandLogo';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { login, loading: authLoading } = useAuth();
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -21,14 +24,12 @@ export default function LandingPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-
   // Smooth animation presets for consistent, fluid transitions
   const smoothTransition = { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };
   const quickTransition = { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] as const };
   const springTransition = { type: "spring" as const, stiffness: 300, damping: 30 };
 
-  const handleSupportSubmit = (e: FormEvent) => {
+  const handleSupportSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     // Simulate API call
@@ -42,34 +43,16 @@ export default function LandingPage() {
     }, 1500);
   };
 
-  const handleLoginSubmit = async (e: FormEvent) => {
+  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoginError('');
     setIsLoggingIn(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          password
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setLoginError(data.error || 'Login failed.');
-        return;
-      }
-
-      if (data.user) {
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-      }
-
-      navigate(data.redirectPath || '/dashboard');
-    } catch (_error) {
-      setLoginError('Unable to connect to server.');
+      const redirectPath = await login(email.trim().toLowerCase(), password);
+      navigate(redirectPath);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Unable to connect to server.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -188,10 +171,10 @@ export default function LandingPage() {
                 )}
                 <button 
                   type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-70 pressable"
+                  disabled={isLoggingIn || authLoading}
+                  className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 pressable"
                 >
-                  {isLoggingIn ? 'Logging in...' : 'Login to Account'}
+                  {isLoggingIn || authLoading ? 'Logging in...' : 'Login to Account'}
                 </button>
               </form>
             </div>

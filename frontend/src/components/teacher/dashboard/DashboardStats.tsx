@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { AlertCircle, Star, TrendingUp } from 'lucide-react';
 import StatsCard from '../StatsCard';
 import type { StudentData } from '../../../hooks/useTeacherDashboardData';

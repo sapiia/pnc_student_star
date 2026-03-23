@@ -33,6 +33,11 @@ export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 export const DEFAULT_AVATAR =
   "http://localhost:3001/uploads/logo/star_gmail_logo.jpg";
 
+type StoredAuthUser = ApiUser & {
+  id?: number | string | null;
+  role?: string | null;
+};
+
 // ============ Name Formatting ============
 
 export const toDisplayName = (user: ApiUser): string => {
@@ -45,6 +50,35 @@ export const toDisplayName = (user: ApiUser): string => {
     fullName ||
     String(user.email || "Student").trim()
   );
+};
+
+export const getStoredAuthUser = (): (ApiUser & { id: number }) | null => {
+  try {
+    const raw = localStorage.getItem("auth_user");
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as StoredAuthUser;
+    const id = Number(parsed?.id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+
+    return {
+      ...parsed,
+      id,
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const getTeacherIdFromStorage = (): number | null => {
+  const authUser = getStoredAuthUser();
+  if (!authUser) return null;
+
+  if (String(authUser.role || "").trim().toLowerCase() !== "teacher") {
+    return null;
+  }
+
+  return authUser.id;
 };
 
 // ============ Gender Helpers ============
@@ -258,40 +292,7 @@ export const toContactType = (
   return "Student";
 };
 
-// ============ Teacher ID Helper ============
 
-export const getTeacherIdFromStorage = (): number | null => {
-  try {
-    const raw = localStorage.getItem("auth_user");
-    if (!raw) return null;
-    const authUser = JSON.parse(raw);
-    const resolvedTeacherId = Number(authUser?.id);
-    if (Number.isInteger(resolvedTeacherId) && resolvedTeacherId > 0) {
-      return resolvedTeacherId;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-export const getTeacherNameFromStorage = (): string => {
-  try {
-    const raw = localStorage.getItem("auth_user");
-    if (!raw) return "Teacher";
-    const authUser = JSON.parse(raw);
-    return (
-      String(authUser?.name || "").trim() ||
-      [authUser?.first_name, authUser?.last_name]
-        .filter(Boolean)
-        .join(" ")
-        .trim() ||
-      "Teacher"
-    );
-  } catch {
-    return "Teacher";
-  }
-};
 
 // ============ Local Storage Helpers ============
 
@@ -467,7 +468,9 @@ export type CriteriaBreakdownItem = {
 };
 
 const getActiveCriteria = (globalCriteria: CriteriaCriterion[]) =>
-  globalCriteria.filter((criterion) => String(criterion.status).toLowerCase() === "active");
+  globalCriteria.filter(
+    (criterion) => String(criterion.status).toLowerCase() === "active",
+  );
 
 const buildCriterionIdLookup = (criteria: CriteriaCriterion[]) => {
   const lookup = new Map<string, string>();
@@ -565,9 +568,12 @@ export const buildRadarData = (
 };
 
 export const buildCriteriaBreakdown = (
-  evaluation: {
-    responses?: EvaluationResponseWithKey[];
-  } | null | undefined,
+  evaluation:
+    | {
+        responses?: EvaluationResponseWithKey[];
+      }
+    | null
+    | undefined,
   globalCriteria: CriteriaCriterion[],
 ): CriteriaBreakdownItem[] => {
   const responses = evaluation?.responses || [];
@@ -575,12 +581,20 @@ export const buildCriteriaBreakdown = (
 
   if (activeGlobal.length === 0) {
     return responses.map((response, index) => ({
-      criterion_key: String(response.criterion_id || response.criterion_key || `criterion-${index}`),
-      criterion_name: String(response.criterion_name || response.criterion_key || `Criterion ${index + 1}`),
+      criterion_key: String(
+        response.criterion_id || response.criterion_key || `criterion-${index}`,
+      ),
+      criterion_name: String(
+        response.criterion_name ||
+          response.criterion_key ||
+          `Criterion ${index + 1}`,
+      ),
       criterion_icon: String(response.criterion_icon || "Star"),
       criterion_color: String(
         response.criterion_color ||
-          CRITERIA_COLOR_STYLES[index % CRITERIA_COLOR_STYLES.length].iconText.replace("text-", ""),
+          CRITERIA_COLOR_STYLES[
+            index % CRITERIA_COLOR_STYLES.length
+          ].iconText.replace("text-", ""),
       ),
       star_value: Math.max(0, Number(response.star_value || 0)),
       reflection: String(response.reflection || "").trim(),
@@ -591,16 +605,26 @@ export const buildCriteriaBreakdown = (
   const criterionIdLookup = buildCriterionIdLookup(activeGlobal);
 
   return activeGlobal.map((criterion, index) => {
-    const response = findMatchingCriterionResponse(responses, criterion, criterionIdLookup);
+    const response = findMatchingCriterionResponse(
+      responses,
+      criterion,
+      criterionIdLookup,
+    );
 
     return {
-      criterion_key: String(criterion.id || criterion.name || `criterion-${index}`),
+      criterion_key: String(
+        criterion.id || criterion.name || `criterion-${index}`,
+      ),
       criterion_name: String(criterion.name || `Criterion ${index + 1}`),
-      criterion_icon: String(response?.criterion_icon || criterion.icon || "Star"),
+      criterion_icon: String(
+        response?.criterion_icon || criterion.icon || "Star",
+      ),
       criterion_color: String(
         response?.criterion_color ||
           criterion.color ||
-          CRITERIA_COLOR_STYLES[index % CRITERIA_COLOR_STYLES.length].iconText.replace("text-", ""),
+          CRITERIA_COLOR_STYLES[
+            index % CRITERIA_COLOR_STYLES.length
+          ].iconText.replace("text-", ""),
       ),
       star_value: response ? Math.max(0, Number(response.star_value || 0)) : 0,
       reflection: String(response?.reflection || "").trim(),
