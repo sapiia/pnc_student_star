@@ -2,6 +2,7 @@
 import { LayoutDashboard, FileText, MessageSquare, Bell, Settings, User, HelpCircle, Info } from 'lucide-react';
 import { useSidebarData } from '../../../../hooks/useSidebarData';
 import BaseSidebar from '../BaseSidebar';
+import { DEFAULT_AVATAR } from '../../../../lib/api';
 
 interface SidebarProps { className?: string; }
 
@@ -29,7 +30,7 @@ export default function Sidebar({ className }: SidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole={studentId ? `Student ID: ${studentId}` : 'Student'}
-      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
+      defaultPhoto={DEFAULT_AVATAR}
       isSettingsEnabled={true}
       settingsItems={settingsItems}
       settingsPath="/profile"

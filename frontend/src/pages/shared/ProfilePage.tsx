@@ -13,6 +13,7 @@ import Sidebar from '../../components/layout/sidebar/student/Sidebar';
 import StudentMobileNav from '../../components/common/StudentMobileNav';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 type AuthUser = {
   id: number;
@@ -64,7 +65,7 @@ export default function ProfilePage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
+    photoUrl: DEFAULT_AVATAR
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -352,7 +353,7 @@ export default function ProfilePage() {
                 <div className="p-4 md:p-8 flex flex-col md:flex-row gap-8 md:gap-12">
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-24 md:size-32 rounded-full overflow-hidden border-4 border-slate-50 shadow-inner shrink-0 bg-slate-100">
-                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'} alt={profileForm.fullName || 'Student'} className="w-full h-full object-cover" />
+                      <img src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : DEFAULT_AVATAR} alt={profileForm.fullName || 'Student'} className="w-full h-full object-cover" />
                     </div>
                     <input
                       ref={photoInputRef}

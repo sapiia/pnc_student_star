@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
@@ -85,7 +86,7 @@ export default function AdminTeacherRecordsPage() {
                 status: Number(u.is_deleted) === 1 ? 'Deleted' : (Number(u.is_disable) === 1 ? 'Inactive' : 'Active'),
                 department: u.department || 'Teaching Staff',
                 specialization: u.specialization || 'General',
-                profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                profileImage: String(u.profile_image || '').trim() || DEFAULT_AVATAR,
                 joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A',
                 phone: u.phone || 'N/A',
                 gender

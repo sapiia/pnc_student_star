@@ -23,6 +23,7 @@ import AdminMobileNav from '../../components/common/AdminMobileNav';
 import RadarChart from '../../components/ui/RadarChart';
 import { cn } from '../../lib/utils';
 import { CRITERIA } from '../../constants';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
@@ -203,7 +204,7 @@ export default function AdminClassStudentsPage() {
               gender: genderLower === 'male' ? 'M' : (genderLower === 'female' ? 'F' : 'N/A'),
               gpa: 'N/A', // Will be updated on detail view if needed or can keep N/A in table
               attendance: 'N/A',
-              profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+              profileImage: String(u.profile_image || '').trim() || DEFAULT_AVATAR,
               studentIdAt: u.student_id || u.resolved_student_id || 'N/A',
               scores: new Array(CRITERIA.length).fill(0) 
             };
@@ -346,7 +347,7 @@ export default function AdminClassStudentsPage() {
                 gender: genderLower === 'male' ? 'M' : (genderLower === 'female' ? 'F' : 'N/A'),
                 gpa: 'N/A',
                 attendance: 'N/A',
-                profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                profileImage: String(u.profile_image || '').trim() || DEFAULT_AVATAR,
                 studentIdAt: u.student_id || u.resolved_student_id || 'N/A',
                 scores: new Array(CRITERIA.length).fill(0)
               };

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DEFAULT_AVATAR } from '../lib/api';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
@@ -9,7 +10,7 @@ export function useSidebarData() {
   const [authUserId, setAuthUserId] = useState<number | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
+  const [profilePhoto, setProfilePhoto] = useState(DEFAULT_AVATAR);
 
   // Load profile identity
   useEffect(() => {

@@ -24,6 +24,7 @@ import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 // Helper function to extract generation from user data
 const normalizeClassLabel = (value: string) =>
@@ -211,7 +212,7 @@ export default function AdminDashboardPage() {
                 name: resolvedName,
                 email: apiUser.email,
                 role, group, status,
-                profileImage: String(apiUser.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                profileImage: String(apiUser.profile_image || '').trim() || DEFAULT_AVATAR,
                 initials: resolvedName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0,2)
              };
           });

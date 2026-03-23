@@ -6,6 +6,7 @@ import Sidebar from '../../components/layout/sidebar/student/Sidebar';
 import StudentMobileNav from '../../components/common/StudentMobileNav';
 import { cn } from '../../lib/utils';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../../lib/realtime';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 type NotificationItem = {
   id: number;
@@ -31,7 +32,7 @@ type NotificationDetail = {
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-const FALLBACK_AVATAR = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+const FALLBACK_AVATAR = DEFAULT_AVATAR;
 
 const formatDateTime = (value?: string) => {
   const date = new Date(String(value || ''));

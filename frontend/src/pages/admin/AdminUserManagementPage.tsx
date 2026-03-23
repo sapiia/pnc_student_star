@@ -21,6 +21,7 @@ import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
 import RadarChart from '../../components/ui/RadarChart';
 import React, { useEffect, useState, useMemo } from 'react';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 type UserRole = 'Student' | 'Teacher' | 'Admin';
 type UserStatus = 'Active' | 'Inactive' | 'Pending' | 'Deleted';
@@ -227,7 +228,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     status,
     initials,
     color: randomColor,
-    profileImage: String(apiUser.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+    profileImage: String(apiUser.profile_image || '').trim() || DEFAULT_AVATAR,
     studentId,
     gender: apiUser.gender === 'male' || apiUser.gender === 'female' ? apiUser.gender as Gender : undefined,
     generation: apiUser.generation || undefined,

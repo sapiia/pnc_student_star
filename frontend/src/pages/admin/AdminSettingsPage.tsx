@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 import React, { useEffect, useRef, useState } from 'react';
 
 const INITIAL_CRITERIA = [
@@ -256,7 +257,7 @@ export default function AdminSettingsPage() {
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    photoUrl: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'
+    photoUrl: DEFAULT_AVATAR
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
   const filteredCriterionIconOptions = CRITERION_ICON_OPTIONS.filter((option) => {
@@ -640,7 +641,7 @@ export default function AdminSettingsPage() {
 
         const savedPhoto = String(data.profile_image || authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+          || DEFAULT_AVATAR;
         const resolvedFirstName = String(data.first_name || '').trim();
         const resolvedLastName = String(data.last_name || '').trim();
         const fallbackName = splitNameParts(String(data.name || authUser.name || ''));
@@ -656,7 +657,7 @@ export default function AdminSettingsPage() {
       } catch (error) {
         const fallbackPhoto = String(authUser.profile_image || '').trim()
           || localStorage.getItem(`profile_photo_${authUser.id}`)
-          || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+          || DEFAULT_AVATAR;
         const fallbackName = splitNameParts(authUser.name || '');
         setProfileForm((prev) => ({
           ...prev,
@@ -2117,7 +2118,7 @@ export default function AdminSettingsPage() {
                   <div className="flex flex-col items-center gap-4">
                     <div className="size-32 rounded-3xl overflow-hidden border-4 border-slate-50 shadow-inner relative group">
                       <img
-                        src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
+                        src={profileForm.photoUrl ? `${profileForm.photoUrl}?t=${photoTimestamp}` : DEFAULT_AVATAR}
                         alt={`${profileForm.firstName} ${profileForm.lastName}`.trim() || 'Admin'}
                       />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">

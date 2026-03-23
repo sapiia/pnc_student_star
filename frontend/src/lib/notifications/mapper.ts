@@ -1,3 +1,5 @@
+import { DEFAULT_AVATAR } from '../api';
+
 type NotificationType = 'message' | 'alert' | 'system';
 
 export type MappedNotification = {
@@ -24,7 +26,7 @@ type TeacherFeedbackPayload = {
   text?: string;
 };
 
-const FALLBACK_AVATAR = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+const FALLBACK_AVATAR = DEFAULT_AVATAR;
 
 const parseTeacherFeedback = (raw: string): TeacherFeedbackPayload | null => {
   const text = String(raw || '').trim();
