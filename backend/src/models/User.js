@@ -1,6 +1,29 @@
 const db = require('../config/database');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
+let userLifecycleColumnFlagsCache = null;
+
+const getUserLifecycleColumnFlags = async () => {
+  if (userLifecycleColumnFlagsCache) return userLifecycleColumnFlagsCache;
+
+  const [rows] = await db.query(
+    `
+      SELECT COLUMN_NAME
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'users'
+        AND COLUMN_NAME IN ('is_active', 'is_deleted')
+    `
+  );
+
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  userLifecycleColumnFlagsCache = {
+    hasIsActive: columns.has('is_active'),
+    hasIsDeleted: columns.has('is_deleted')
+  };
+
+  return userLifecycleColumnFlagsCache;
+};
 
 class User {
   // Find all users
@@ -147,15 +170,28 @@ class User {
   // Get students by class
   static async getStudentsByClass(className) {
     try {
-      const [rows] = await db.query(`
+      const { hasIsActive, hasIsDeleted } = await getUserLifecycleColumnFlags();
+      const filters = [
+        "role = 'student'",
+        'class = ?'
+      ];
+
+      if (hasIsActive) {
+        filters.push('is_active = 1');
+      }
+
+      if (hasIsDeleted) {
+        filters.push('is_deleted = 0');
+      }
+
+      const query = `
         SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
         FROM users 
-        WHERE role = 'student' 
-        AND class = ?
-        AND is_active = 1
-        AND is_deleted = 0
+        WHERE ${filters.join('\n        AND ')}
         ORDER BY first_name, last_name
-      `, [className]);
+      `;
+
+      const [rows] = await db.query(query, [className]);
       return rows;
     } catch (error) {
       throw error;
@@ -165,14 +201,25 @@ class User {
   // Get all students for teacher (all classes teacher has access to)
   static async getTeacherStudents(teacherId) {
     try {
-      const [rows] = await db.query(`
+      const { hasIsActive, hasIsDeleted } = await getUserLifecycleColumnFlags();
+      const filters = ["role = 'student'"];
+
+      if (hasIsActive) {
+        filters.push('is_active = 1');
+      }
+
+      if (hasIsDeleted) {
+        filters.push('is_deleted = 0');
+      }
+
+      const query = `
         SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
         FROM users 
-        WHERE role = 'student' 
-        AND is_active = 1
-        AND is_deleted = 0
+        WHERE ${filters.join('\n        AND ')}
         ORDER BY class, first_name, last_name
-      `);
+      `;
+
+      const [rows] = await db.query(query);
       return rows;
     } catch (error) {
       throw error;

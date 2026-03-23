@@ -3,6 +3,7 @@ import useScrollReveal from './hooks/useScrollReveal';
 import LandingPage from './pages/shared/LandingPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import DashboardPage from './pages/student/DashboardPage';
 import EvaluationFormPage from './pages/student/EvaluationFormPage';
 import EvaluationResultPage from './pages/student/EvaluationResultPage';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/evaluate" element={<EvaluationFormPage />} />
         <Route path="/results" element={<EvaluationResultPage />} />

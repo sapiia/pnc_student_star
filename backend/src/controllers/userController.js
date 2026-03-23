@@ -13,6 +13,8 @@ const { emitNotificationEvent } = require('../realtime');
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
+const PASSWORD_RESET_SECRET = process.env.PASSWORD_RESET_SECRET || 'change-this-password-reset-secret';
+const PASSWORD_RESET_EXPIRES_MINUTES = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || 30);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
@@ -247,16 +249,16 @@ const updateUserFlexibleById = async ({
   await db.query(sql, values);
 };
 
-const createInviteToken = (payload) => {
+const createSignedToken = (payload, secret) => {
   const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', INVITE_SECRET)
+    .createHmac('sha256', secret)
     .update(payloadBase64)
     .digest('base64url');
   return `${payloadBase64}.${signature}`;
 };
 
-const verifyInviteToken = (token = '') => {
+const verifySignedToken = (token = '', secret) => {
   const parts = token.split('.');
   if (parts.length !== 2) {
     return null;
@@ -264,7 +266,7 @@ const verifyInviteToken = (token = '') => {
 
   const [payloadBase64, signature] = parts;
   const expectedSignature = crypto
-    .createHmac('sha256', INVITE_SECRET)
+    .createHmac('sha256', secret)
     .update(payloadBase64)
     .digest('base64url');
 
@@ -284,6 +286,136 @@ const verifyInviteToken = (token = '') => {
   } catch (error) {
     return null;
   }
+};
+
+const createInviteToken = (payload) => createSignedToken(payload, INVITE_SECRET);
+
+const verifyInviteToken = (token = '') => verifySignedToken(token, INVITE_SECRET);
+
+const buildPasswordResetFingerprint = (user = {}) =>
+  crypto
+    .createHash('sha256')
+    .update(
+      [
+        user.id || '',
+        user.email || '',
+        user.password || '',
+        user.updated_at ? new Date(user.updated_at).toISOString() : ''
+      ].join('|')
+    )
+    .digest('hex');
+
+const createPasswordResetToken = (user) =>
+  createSignedToken(
+    {
+      purpose: 'password_reset',
+      userId: user.id,
+      email: user.email,
+      fingerprint: buildPasswordResetFingerprint(user),
+      exp: Date.now() + PASSWORD_RESET_EXPIRES_MINUTES * 60 * 1000
+    },
+    PASSWORD_RESET_SECRET
+  );
+
+const verifyPasswordResetToken = (token = '') => {
+  const payload = verifySignedToken(token, PASSWORD_RESET_SECRET);
+  if (!payload || payload.purpose !== 'password_reset') {
+    return null;
+  }
+  return payload;
+};
+
+const getPasswordResetUser = async (payload = {}) => {
+  const columns = await getUsersTableColumns();
+  const hasIsDeleted = columns.has('is_deleted');
+  const selectSql = hasIsDeleted
+    ? "SELECT id, email, password, role, updated_at, is_deleted FROM users WHERE id = ? AND email = ? LIMIT 1"
+    : "SELECT id, email, password, role, updated_at FROM users WHERE id = ? AND email = ? LIMIT 1";
+  const [rows] = await db.query(selectSql, [payload.userId, payload.email]);
+
+  if (!rows.length) {
+    return { user: null, columns };
+  }
+
+  const user = rows[0];
+  if (hasIsDeleted && Number(user.is_deleted || 0) === 1) {
+    return { user: null, columns };
+  }
+
+  if ((payload.fingerprint || '') !== buildPasswordResetFingerprint(user)) {
+    return { user: null, columns };
+  }
+
+  return { user, columns };
+};
+
+const buildPasswordResetEmailArtifacts = (user, token) => {
+  const resetLink = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`;
+  const loginLink = `${FRONTEND_URL}/`;
+  const displayName = getDisplayNameFromUserRow(user) || toFallbackNameFromEmail(user.email) || 'there';
+  const logoAttachment = {
+    filename: 'star_gmail_logo.jpg',
+    path: path.join(__dirname, '../uploads/logo/star_gmail_logo.jpg'),
+    cid: 'star_gmail_logo'
+  };
+
+  const text = [
+    'PNC Student Star Password Reset',
+    '',
+    `Hello ${displayName},`,
+    '',
+    'We received a request to reset your password.',
+    'Use the link below to choose a new password:',
+    resetLink,
+    '',
+    `This link will expire in ${PASSWORD_RESET_EXPIRES_MINUTES} minutes.`,
+    'If you did not request a password reset, you can ignore this email.',
+    '',
+    'Login page:',
+    loginLink,
+    '',
+    'Best regards,',
+    'PNC Student Star Team'
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
+      <div style="text-align: center; margin-bottom: 25px;">
+        <img src="cid:star_gmail_logo" style="width: 84px; height: 84px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="PNC Student Star Logo" />
+      </div>
+      <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Reset Your Password</h2>
+      <p>Hello ${displayName},</p>
+      <p>We received a request to reset your <strong>PNC Student Star</strong> password.</p>
+      <div style="margin: 25px 0; text-align: center;">
+        <a href="${resetLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Reset Password</a>
+      </div>
+      <p style="color: #64748b; font-size: 0.875rem;">This link will expire in ${PASSWORD_RESET_EXPIRES_MINUTES} minutes.</p>
+      <p style="color: #64748b; font-size: 0.875rem;">If you did not request this reset, you can safely ignore this email.</p>
+      <p style="margin-top: 20px;">You can also return to the login page at <a href="${loginLink}">${loginLink}</a>.</p>
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="color: #64748b; font-size: 0.875rem;">Best regards,<br /><strong>PNC Student Star Team</strong></p>
+    </div>
+  `;
+
+  return {
+    emailMessage: {
+      to: user.email,
+      subject: 'PNC Student Star Password Reset',
+      text,
+      html,
+      attachments: [logoAttachment]
+    },
+    preview: {
+      to: user.email,
+      from: process.env.SMTP_FROM || ADMIN_INVITER_EMAIL,
+      subject: 'PNC Student Star Password Reset',
+      text,
+      html,
+      resetLink,
+      loginLink,
+      attachments: [logoAttachment]
+    }
+  };
 };
 
 const createEmailTransporter = () => {
@@ -1369,6 +1501,137 @@ const completeInviteRegistration = async (req, res) => {
   }
 };
 
+const requestPasswordReset = async (req, res) => {
+  const email = (req.body.email || '').toString().trim().toLowerCase();
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Invalid email format." });
+  }
+
+  try {
+    const transportInfo = createEmailTransporter();
+    if (!transportInfo.isConfigured || !transportInfo.transporter) {
+      return res.status(503).json({ error: "Email service is not configured." });
+    }
+
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+    const selectColumns = ['id', 'email', 'password', 'role', 'updated_at'];
+
+    if (columns.has('name')) {
+      selectColumns.push('name');
+    }
+    if (columns.has('first_name')) {
+      selectColumns.push('first_name');
+    }
+    if (columns.has('last_name')) {
+      selectColumns.push('last_name');
+    }
+    if (hasIsDeleted) {
+      selectColumns.push('is_deleted');
+    }
+
+    const querySql = `SELECT ${selectColumns.join(', ')} FROM users WHERE email = ? LIMIT 1`;
+    const [rows] = await db.query(querySql, [email]);
+
+    if (!rows.length || (hasIsDeleted && Number(rows[0].is_deleted || 0) === 1)) {
+      return res.json({
+        message: "If an account with that email exists, a reset link has been sent."
+      });
+    }
+
+    const user = rows[0];
+    const token = createPasswordResetToken(user);
+    const artifacts = buildPasswordResetEmailArtifacts(user, token);
+
+    await transportInfo.transporter.sendMail({
+      from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
+      replyTo: ADMIN_INVITER_EMAIL,
+      to: artifacts.emailMessage.to,
+      subject: artifacts.emailMessage.subject,
+      text: artifacts.emailMessage.text,
+      html: artifacts.emailMessage.html,
+      attachments: artifacts.emailMessage.attachments
+    });
+
+    return res.json({
+      message: "If an account with that email exists, a reset link has been sent."
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to send password reset email." });
+  }
+};
+
+const validatePasswordReset = async (req, res) => {
+  const token = (req.query.token || '').toString();
+  const payload = verifyPasswordResetToken(token);
+
+  if (!payload) {
+    return res.status(400).json({ error: "Invalid or expired reset link." });
+  }
+
+  try {
+    const { user } = await getPasswordResetUser(payload);
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset link." });
+    }
+
+    return res.json({
+      email: user.email,
+      expiresAt: payload.exp
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to validate reset link." });
+  }
+};
+
+const completePasswordReset = async (req, res) => {
+  const token = (req.body.token || '').toString();
+  const newPassword = (req.body.password || '').toString();
+  const payload = verifyPasswordResetToken(token);
+
+  if (!payload) {
+    return res.status(400).json({ error: "Invalid or expired reset link." });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters." });
+  }
+
+  try {
+    const { user } = await getPasswordResetUser(payload);
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset link." });
+    }
+
+    const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(user.password || '');
+    const matchesCurrentPassword = isBcryptHash
+      ? await bcrypt.compare(newPassword, user.password)
+      : user.password === newPassword;
+
+    if (matchesCurrentPassword) {
+      return res.status(400).json({ error: "New password must be different from your current password." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    await db.query(
+      "UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
+      [hashedPassword, user.id]
+    );
+
+    return res.json({ message: "Password reset successfully." });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to reset password." });
+  }
+};
+
 // Get profile for a specific user
 const getUserProfile = async (req, res) => {
   const userId = Number(req.params.id);
@@ -2084,6 +2347,9 @@ module.exports = {
   updateUserProfile,
   updateUserProfileImage,
   changeUserPassword,
+  requestPasswordReset,
+  validatePasswordReset,
+  completePasswordReset,
   deleteUser,
   hardDeleteUser,
   deleteAllUsers,

@@ -12,6 +12,9 @@ const {
   updateUserProfile,
   updateUserProfileImage,
   changeUserPassword,
+  requestPasswordReset,
+  validatePasswordReset,
+  completePasswordReset,
   deleteUser,
   hardDeleteUser,
   deleteAllUsers,
@@ -75,6 +78,15 @@ router.post('/', createUser);
 
 // POST /api/users/login - Login user
 router.post('/login', loginUser);
+
+// POST /api/users/password-reset/request - Send password reset email
+router.post('/password-reset/request', requestPasswordReset);
+
+// GET /api/users/password-reset/validate - Validate password reset token
+router.get('/password-reset/validate', validatePasswordReset);
+
+// POST /api/users/password-reset/complete - Complete password reset
+router.post('/password-reset/complete', completePasswordReset);
 
 // POST /api/users/invite - Send user invite email
 router.post('/invite', inviteUser);

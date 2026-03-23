@@ -65,6 +65,17 @@ DB_PASSWORD=your_password
 DB_NAME=student_star_db
 PORT=3000
 API_BASE_URL=http://localhost:3000/api
+FRONTEND_URL=http://localhost:3000
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_smtp_username
+SMTP_PASS=your_smtp_password_or_app_password
+SMTP_FROM="PNC Student Star <no-reply@example.com>"
+INVITE_SECRET=change-this-invite-secret
+INVITE_EXPIRES_HOURS=72
+PASSWORD_RESET_SECRET=change-this-password-reset-secret
+PASSWORD_RESET_EXPIRES_MINUTES=30
 ```
 
 ## Available Scripts
@@ -82,6 +93,9 @@ API_BASE_URL=http://localhost:3000/api
 - `GET /api/users` - Get all users
 - `GET /api/users/:id` - Get user by ID
 - `POST /api/users` - Create new user
+- `POST /api/users/password-reset/request` - Send password reset email
+- `GET /api/users/password-reset/validate` - Validate password reset token
+- `POST /api/users/password-reset/complete` - Reset password with token
 - `PUT /api/users/:id` - Update user
 - `DELETE /api/users/:id` - Delete user
 
