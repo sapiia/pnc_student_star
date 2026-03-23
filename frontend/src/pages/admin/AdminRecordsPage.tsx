@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
@@ -79,7 +80,7 @@ export default function AdminRecordsPage() {
                 status: Number(u.is_deleted) === 1 ? 'Deleted' : (Number(u.is_disable) === 1 ? 'Inactive' : 'Active'),
                 role: u.admin_role || 'System Administrator',
                 accessLevel: u.access_level || 'Full Access',
-                profileImage: String(u.profile_image || '').trim() || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+                profileImage: String(u.profile_image || '').trim() || DEFAULT_AVATAR,
                 joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A',
                 phone: u.phone || 'N/A',
                 lastLogin: u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'

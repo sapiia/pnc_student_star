@@ -10,6 +10,13 @@ import type {
 } from "./types";
 
 import {
+  API_BASE_URL,
+  API_ORIGIN,
+  DEFAULT_AVATAR,
+  resolveAvatarUrl,
+} from "../api";
+
+import {
   Home,
   Brain,
   Briefcase,
@@ -24,14 +31,7 @@ import {
 } from "lucide-react";
 import { createElement } from "react";
 
-// API Base URL
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
-export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
-
-// Default avatar
-export const DEFAULT_AVATAR =
-  "http://localhost:3001/uploads/logo/star_gmail_logo.jpg";
+export { API_BASE_URL, API_ORIGIN, DEFAULT_AVATAR, resolveAvatarUrl };
 
 // ============ Name Formatting ============
 
@@ -178,23 +178,6 @@ export const formatDateTime = (value?: string): string => {
 };
 
 // ============ Avatar Helpers ============
-
-export const resolveAvatarUrl = (
-  value: string | null | undefined,
-  fallback: string = DEFAULT_AVATAR,
-): string => {
-  const raw = String(value || "").trim();
-  if (!raw) return fallback;
-  if (
-    /^https?:\/\//i.test(raw) ||
-    raw.startsWith("data:") ||
-    raw.startsWith("blob:")
-  ) {
-    return raw;
-  }
-  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
-  return `${API_ORIGIN}${normalizedPath}`;
-};
 
 // ============ Notification Parsing ============
 

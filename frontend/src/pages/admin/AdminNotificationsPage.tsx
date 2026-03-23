@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import { cn } from '../../lib/utils';
 import { API_BASE_URL } from '../../lib/teacher/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 type NotificationType = 'message' | 'alert' | 'system';
 
@@ -32,7 +33,7 @@ type Notification = {
   isRead: boolean;
 };
 
-const FALLBACK_AVATAR = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg';
+const FALLBACK_AVATAR = DEFAULT_AVATAR;
 
 export default function AdminNotificationsPage() {
   const navigate = useNavigate();

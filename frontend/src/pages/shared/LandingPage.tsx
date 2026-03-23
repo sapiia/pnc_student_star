@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, FormEvent } from 'react';
 import BrandLogo, { PNLogoMark } from '../../components/ui/BrandLogo';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -129,7 +130,7 @@ export default function LandingPage() {
                   <div 
                     key={i}
                     className="w-10 h-10 rounded-full border-2 border-white bg-slate-200 bg-cover"
-                    style={{ backgroundImage: `url(http://localhost:3001/uploads/logo/star_gmail_logo.jpg)` }}
+                    style={{ backgroundImage: `url(${DEFAULT_AVATAR})` }}
                   />
                 ))}
               </div>

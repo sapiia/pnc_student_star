@@ -13,6 +13,7 @@ import {
 import AdminSidebar from "../../components/layout/sidebar/admin/AdminSidebar";
 import AdminMobileNav from "../../components/common/AdminMobileNav";
 import { cn } from "../../lib/utils";
+import { DEFAULT_AVATAR } from "../../lib/api";
 import {
   getRealtimeSocket,
   type NotificationRealtimePayload,
@@ -130,9 +131,7 @@ export default function AdminMessagesPage() {
   const navigate = useNavigate();
   const [adminId, setAdminId] = useState<number | null>(null);
   const [adminName, setAdminName] = useState("Administrator");
-  const [adminAvatar, setAdminAvatar] = useState(
-    "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
-  );
+  const [adminAvatar, setAdminAvatar] = useState(DEFAULT_AVATAR);
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(
@@ -186,9 +185,7 @@ export default function AdminMessagesPage() {
         if (savedPhoto) {
           setAdminAvatar(savedPhoto);
         } else {
-          setAdminAvatar(
-            "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
-          );
+          setAdminAvatar(DEFAULT_AVATAR);
         }
       }
     } catch {
@@ -371,9 +368,7 @@ export default function AdminMessagesPage() {
           name: toDisplayName(user),
           role: toAdminRoleLabel(String(user.role || "")),
           type: toContactType(String(user.role || "")),
-          avatar:
-            String(user.profile_image || "").trim() ||
-            "http://localhost:3001/uploads/logo/star_gmail_logo.jpg",
+          avatar: String(user.profile_image || "").trim() || DEFAULT_AVATAR,
           lastMessage,
           timestamp: contactMessages[0]?.notification?.created_at,
           unreadCount,

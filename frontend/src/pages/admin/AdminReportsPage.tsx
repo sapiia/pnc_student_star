@@ -48,6 +48,7 @@ import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import RadarChart from '../../components/ui/RadarChart';
 import { cn } from '../../lib/utils';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 import { CRITERIA } from '../../constants';
 
@@ -1150,7 +1151,7 @@ export default function AdminReportsPage() {
                               <div className="flex items-center gap-3">
                                 <div className="size-10 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
                                   <img
-                                    src={teacher.profileImage || 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg'}
+                                    src={teacher.profileImage || DEFAULT_AVATAR}
                                     alt={teacher.name}
                                     className="w-full h-full object-cover"
                                   />
