@@ -1,8 +1,11 @@
 const axios = require('axios');
 
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api';
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: process.env.API_BASE_URL || 'http://localhost:3000/api',
+  baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -114,7 +117,7 @@ export const settingAPI = {
 
 // Health check
 export const healthAPI = {
-  check: () => api.get('/health', { baseURL: process.env.API_BASE_URL || 'http://localhost:3000' }),
+  check: () => api.get('/health', { baseURL: API_ORIGIN }),
 };
 
 export default api;
