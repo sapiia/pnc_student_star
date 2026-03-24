@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const path = require('path');
+const fs = require('fs');
 const XLSX = require('xlsx');
 const saltRounds = 10;
 const Notification = require('../notification/notification.model');
@@ -17,6 +18,27 @@ const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
+
+const resolveProfileImageFilePath = (profileImageUrl = '') => {
+  const rawValue = (profileImageUrl || '').toString().trim();
+  if (!rawValue) return null;
+
+  let pathname = rawValue;
+  if (/^https?:\/\//i.test(rawValue)) {
+    try {
+      pathname = new URL(rawValue).pathname;
+    } catch (error) {
+      pathname = rawValue;
+    }
+  }
+
+  if (!pathname.startsWith('/uploads/profiles/')) {
+    return null;
+  }
+
+  const relativePath = pathname.replace(/^\/uploads\//, '');
+  return path.join(uploadsDir, relativePath);
+};
 
 const splitFullName = (fullName = '') => {
   const cleaned = fullName.toString().trim().replace(/\s+/g, ' ');
@@ -1564,8 +1586,8 @@ const updateUserProfileImage = async (req, res) => {
 
     const hasIsDeleted = columns.has('is_deleted');
     const userCheckSql = hasIsDeleted
-      ? "SELECT id, is_deleted FROM users WHERE id = ? LIMIT 1"
-      : "SELECT id FROM users WHERE id = ? LIMIT 1";
+      ? "SELECT id, is_deleted, profile_image FROM users WHERE id = ? LIMIT 1"
+      : "SELECT id, profile_image FROM users WHERE id = ? LIMIT 1";
     const [existingRows] = await db.query(userCheckSql, [userId]);
     if (!existingRows.length) {
       return res.status(404).json({ error: "User not found." });
@@ -1573,6 +1595,9 @@ const updateUserProfileImage = async (req, res) => {
     if (hasIsDeleted && Number(existingRows[0].is_deleted || 0) === 1) {
       return res.status(409).json({ error: "Cannot update profile image for a deleted user." });
     }
+
+    const previousProfileImage = (existingRows[0].profile_image || '').toString().trim() || null;
+    const previousProfileImagePath = resolveProfileImageFilePath(previousProfileImage);
 
     const relativePath = `/uploads/profiles/${req.file.filename}`;
     const publicUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
@@ -1584,6 +1609,15 @@ const updateUserProfileImage = async (req, res) => {
 
     const [rows] = await db.query("SELECT * FROM users WHERE id = ? LIMIT 1", [userId]);
     const user = rows[0];
+
+    // Remove old profile image after successful update (ignore missing files).
+    if (previousProfileImagePath && previousProfileImagePath !== req.file.path) {
+      fs.promises.unlink(previousProfileImagePath).catch((error) => {
+        if (error?.code !== 'ENOENT') {
+          console.warn('Failed to remove old profile image:', error.message || error);
+        }
+      });
+    }
 
     return res.json({
       message: "Profile image updated successfully.",
@@ -1863,6 +1897,13 @@ const deleteUser = async (req, res) => {
 
   try {
     const columns = await getUsersTableColumns();
+    const profileImageRowSql = columns.has('profile_image')
+      ? "SELECT profile_image FROM users WHERE id = ? LIMIT 1"
+      : "SELECT NULL AS profile_image FROM users WHERE id = ? LIMIT 1";
+    const [profileRows] = await db.query(profileImageRowSql, [userId]);
+    const previousProfileImage = (profileRows[0]?.profile_image || '').toString().trim() || null;
+    const previousProfileImagePath = resolveProfileImageFilePath(previousProfileImage);
+
     const hasIsDeleted = columns.has('is_deleted');
     const hasIsActive = columns.has('is_active');
     const hasIsDisable = columns.has('is_disable');
@@ -1906,6 +1947,14 @@ const deleteUser = async (req, res) => {
       return res.status(409).json({ error: "User is already disabled." });
     }
 
+    if (previousProfileImagePath) {
+      fs.promises.unlink(previousProfileImagePath).catch((error) => {
+        if (error?.code !== 'ENOENT') {
+          console.warn('Failed to remove profile image on delete:', error.message || error);
+        }
+      });
+    }
+
     return res.json({ message: "User deleted (archived) successfully." });
   } catch (err) {
     console.error(err);
@@ -1921,9 +1970,16 @@ const hardDeleteUser = async (req, res) => {
   }
 
   try {
+    const columns = await getUsersTableColumns();
+    const profileImageRowSql = columns.has('profile_image')
+      ? "SELECT profile_image, role FROM users WHERE id = ? LIMIT 1"
+      : "SELECT NULL AS profile_image, role FROM users WHERE id = ? LIMIT 1";
+    const [profileRows] = await db.query(profileImageRowSql, [userId]);
+    const previousProfileImage = (profileRows[0]?.profile_image || '').toString().trim() || null;
+    const previousProfileImagePath = resolveProfileImageFilePath(previousProfileImage);
+
     // Prevent hard-deleting the only admin? (Optional safety)
-    const [userRow] = await db.query("SELECT role FROM users WHERE id = ?", [userId]);
-    if (userRow.length > 0 && userRow[0].role === 'admin') {
+    if (profileRows.length > 0 && profileRows[0].role === 'admin') {
       const [admins] = await db.query("SELECT id FROM users WHERE role = 'admin'");
       if (admins.length <= 1) {
         return res.status(403).json({ error: "Cannot delete the only administrative account." });
@@ -1933,6 +1989,14 @@ const hardDeleteUser = async (req, res) => {
     const [result] = await db.query("DELETE FROM users WHERE id = ?", [userId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "User not found." });
+    }
+
+    if (previousProfileImagePath) {
+      fs.promises.unlink(previousProfileImagePath).catch((error) => {
+        if (error?.code !== 'ENOENT') {
+          console.warn('Failed to remove profile image on hard delete:', error.message || error);
+        }
+      });
     }
 
     return res.json({ message: "User permanently deleted from database." });
