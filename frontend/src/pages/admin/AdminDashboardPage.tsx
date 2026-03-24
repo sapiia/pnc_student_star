@@ -69,35 +69,6 @@ const extractGeneration = (user: any) => {
   return 'Unknown Gen';
 };
 
-const STUDENT_STATS = {
-  total: '1,349',
-  gen2026: {
-    total: 620,
-    classes: [
-      { name: 'WEB A', count: 155 },
-      { name: 'WEB B', count: 155 },
-      { name: 'MOBILE A', count: 155 },
-      { name: 'MOBILE B', count: 155 },
-    ]
-  },
-  gen2027: {
-    total: 101,
-    classes: [
-      { name: 'Class A', count: 26 },
-      { name: 'Class B', count: 25 },
-      { name: 'Class C', count: 25 },
-      { name: 'Class D', count: 25 },
-    ]
-  }
-};
-
-const RECENT_USERS = [
-  { id: 101, name: 'Amin Pisal', email: 'amin.pisal@pnc.edu', role: 'Student', group: 'Gen 2027 - Class A', status: 'Active', initials: 'AP', color: 'bg-blue-100 text-blue-700' },
-  { id: 127, name: 'Ang Thyda', email: 'ang.thyda@pnc.edu', role: 'Student', group: 'Gen 2027 - Class B', status: 'Active', initials: 'AT', color: 'bg-indigo-100 text-indigo-700' },
-  { id: 2, name: 'Jane Smith', email: 'jane.smith@pnc.edu', role: 'Teacher', group: 'Science Dept', status: 'Active', initials: 'JS', color: 'bg-purple-100 text-purple-700' },
-  { id: 152, name: 'Chhoun Sakraech', email: 'chhoun.sakraech@pnc.edu', role: 'Student', group: 'Gen 2027 - Class C', status: 'Active', initials: 'CS', color: 'bg-emerald-100 text-emerald-700' },
-];
-
 const SYSTEM_ACTIVITY = [
   { id: 1, type: 'success', message: 'Evaluation period opened', time: '2 hours ago', icon: CheckCircle2 },
   { id: 2, type: 'info', message: '24 new student accounts created', time: '5 hours ago', icon: Users },

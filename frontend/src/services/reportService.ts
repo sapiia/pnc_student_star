@@ -1,5 +1,5 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://pnc-student-star.onrender.com';
 
 export interface OverviewStats {
   avgStudentScore: number;
