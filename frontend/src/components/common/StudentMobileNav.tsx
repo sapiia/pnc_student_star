@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import BrandLogo, { PNLogoMark } from '../ui/BrandLogo';
+import { DEFAULT_AVATAR } from '../../lib/api';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Home', path: '/dashboard' },
@@ -43,7 +44,7 @@ export default function StudentMobileNav() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [profileName, setProfileName] = useState('Student');
-  const [profilePhoto, setProfilePhoto] = useState('http://localhost:3001/uploads/logo/star_gmail_logo.jpg');
+  const [profilePhoto, setProfilePhoto] = useState(DEFAULT_AVATAR);
   const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
   const [studentId, setStudentId] = useState('');
 
@@ -218,7 +219,7 @@ export default function StudentMobileNav() {
                   }}
                 >
                   <div className="size-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white shadow-sm">
-                    <img alt={profileName} src={profilePhoto ? `${profilePhoto}?t=${photoTimestamp}` : profilePhoto} className="w-full h-full object-cover" />
+                    <img alt={profileName} src={profilePhoto ? `${profilePhoto}?t=${photoTimestamp}` : DEFAULT_AVATAR} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-black text-slate-900 truncate">{profileName}</p>

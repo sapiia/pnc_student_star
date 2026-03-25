@@ -42,13 +42,6 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const generateRequestInit = (credentials: RequestCredentials = 'include'): RequestInit => ({
-  credentials,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
 const getStoredUser = (): User | null => {
   try {
     const raw = localStorage.getItem(AUTH_USER_STORAGE_KEY);
@@ -58,6 +51,31 @@ const getStoredUser = (): User | null => {
   } catch {
     return null;
   }
+};
+
+const getStoredToken = (): string => (
+  localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+  || localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY)
+  || ''
+);
+
+const generateRequestInit = (
+  credentials: RequestCredentials = 'include',
+  includeAuthToken = true,
+): RequestInit => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const token = includeAuthToken ? getStoredToken() : '';
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return {
+    credentials,
+    headers,
+  };
 };
 
 const persistAuthState = (nextUser: User | null, token?: string) => {
@@ -137,7 +155,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const login = async (email: string, password: string) => {
     const response = await fetch(`${API_BASE_URL}/users/login`, {
-      ...generateRequestInit(),
+      ...generateRequestInit('include', false),
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -161,7 +179,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const register = async (token: string, name: string, password: string) => {
     const response = await fetch(`${API_BASE_URL}/users/invite/complete`, {
-      ...generateRequestInit(),
+      ...generateRequestInit('include', false),
       method: 'POST',
       body: JSON.stringify({ token, name, password }),
     });
