@@ -1,9 +1,4 @@
-<<<<<<< HEAD:backend/src/controllers/userController.js
-const redisClient = require('../config/redis');
-const db = require('../config/database');
-=======
 const db = require('../../config/database');
->>>>>>> e50e2c770a5c55e523530447ea2bb6c6066fc2ec:backend/src/modules/user/user.controller.js
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');

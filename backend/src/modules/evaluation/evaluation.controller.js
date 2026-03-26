@@ -1,9 +1,4 @@
-<<<<<<< HEAD:backend/src/controllers/evaluationController.js
-const Evaluation = require('../models/Evaluation');
-const redisClient = require('../config/redis');
-=======
 const Evaluation = require('./evaluation.model');
->>>>>>> e50e2c770a5c55e523530447ea2bb6c6066fc2ec:backend/src/modules/evaluation/evaluation.controller.js
 const XLSX = require('xlsx');
 
 const getAllEvaluations = async (req, res) => {

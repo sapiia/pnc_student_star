@@ -3,50 +3,19 @@ const axios = require('axios');
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api';
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
-// Create axios instance with base configuration
 const api = axios.create({
-<<<<<<< HEAD
   baseURL: API_BASE_URL,
-=======
-  baseURL: process.env.API_BASE_URL || 'https://pnc-student-star.vercel.app/api',
->>>>>>> e50e2c770a5c55e523530447ea2bb6c6066fc2ec
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add auth token if available
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+api.interceptors.request.use((config) => config, (error) => Promise.reject(error));
 
-// Response interceptor to handle common errors
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+api.interceptors.response.use((response) => response, (error) => Promise.reject(error));
 
-// User API methods
-export const userAPI = {
+const userAPI = {
   getAll: () => api.get('/users'),
   getById: (id) => api.get(`/users/${id}`),
   create: (userData) => api.post('/users', userData),
@@ -54,8 +23,7 @@ export const userAPI = {
   delete: (id) => api.delete(`/users/${id}`),
 };
 
-// Evaluation API methods
-export const evaluationAPI = {
+const evaluationAPI = {
   getAll: () => api.get('/evaluations'),
   getById: (id) => api.get(`/evaluations/${id}`),
   getByUserId: (userId) => api.get(`/evaluations/user/${userId}`),
@@ -64,8 +32,7 @@ export const evaluationAPI = {
   delete: (id) => api.delete(`/evaluations/${id}`),
 };
 
-// Feedback API methods
-export const feedbackAPI = {
+const feedbackAPI = {
   getAll: () => api.get('/feedbacks'),
   getById: (id) => api.get(`/feedbacks/${id}`),
   getByStudentId: (studentId) => api.get(`/feedbacks/student/${studentId}`),
@@ -75,8 +42,7 @@ export const feedbackAPI = {
   delete: (id) => api.delete(`/feedbacks/${id}`),
 };
 
-// Meeting Schedule API methods
-export const meetingAPI = {
+const meetingAPI = {
   getAll: () => api.get('/meetings'),
   getById: (id) => api.get(`/meetings/${id}`),
   getByStudentId: (studentId) => api.get(`/meetings/student/${studentId}`),
@@ -85,8 +51,7 @@ export const meetingAPI = {
   delete: (id) => api.delete(`/meetings/${id}`),
 };
 
-// Notification API methods
-export const notificationAPI = {
+const notificationAPI = {
   getAll: () => api.get('/notifications'),
   getById: (id) => api.get(`/notifications/${id}`),
   getByUserId: (userId) => api.get(`/notifications/user/${userId}`),
@@ -98,8 +63,7 @@ export const notificationAPI = {
   delete: (id) => api.delete(`/notifications/${id}`),
 };
 
-// Question API methods
-export const questionAPI = {
+const questionAPI = {
   getAll: () => api.get('/questions'),
   getById: (id) => api.get(`/questions/${id}`),
   create: (questionData) => api.post('/questions', questionData),
@@ -107,8 +71,7 @@ export const questionAPI = {
   delete: (id) => api.delete(`/questions/${id}`),
 };
 
-// Settings API methods
-export const settingAPI = {
+const settingAPI = {
   getAll: () => api.get('/settings'),
   getById: (id) => api.get(`/settings/${id}`),
   getByKey: (key) => api.get(`/settings/key/${key}`),
@@ -119,9 +82,20 @@ export const settingAPI = {
   deleteByKey: (key) => api.delete(`/settings/key/${key}`),
 };
 
-// Health check
-export const healthAPI = {
+const healthAPI = {
   check: () => api.get('/health', { baseURL: API_ORIGIN }),
 };
 
-export default api;
+module.exports = {
+  api,
+  API_BASE_URL,
+  API_ORIGIN,
+  userAPI,
+  evaluationAPI,
+  feedbackAPI,
+  meetingAPI,
+  notificationAPI,
+  questionAPI,
+  settingAPI,
+  healthAPI,
+};

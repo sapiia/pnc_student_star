@@ -12,7 +12,7 @@ server.listen(PORT, () => {
 });
 
 
-const redisClient = require("./config/redis");
+const redisClient = require("../config/redis");
 
 app.get("/redis-test", async (req, res) => {
 
