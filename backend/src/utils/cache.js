@@ -7,7 +7,11 @@ const CACHE_KEYS = {
   USER_BY_ID: 'user:id:', // User details by ID
   SETTINGS_ALL: 'settings:all', // All application settings
   SETTINGS_CRITERIA: 'settings:criteria', // Evaluation criteria configuration
-  QUESTIONS_ALL: 'questions:all' // All evaluation questions
+  QUESTIONS_ALL: 'questions:all', // All evaluation questions
+  NOTIFICATION_BY_ID: 'notification:id:', // Individual notification
+  NOTIFICATIONS_USER: 'notifications:user:', // All notifications for a user
+  NOTIFICATIONS_UNREAD: 'notifications:unread:user:', // Unread notifications for a user
+  NOTIFICATIONS_THREAD: 'notifications:thread:' // Student-teacher reply thread
 };
 
 // In-memory map to store pending fetch promises
