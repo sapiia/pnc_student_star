@@ -3,230 +3,56 @@ import {
   ArrowLeft, 
   Search, 
   Filter, 
-  Eye, 
-  Trash2, 
+  Download, 
   UserPlus,
-  Download,
-  Mail,
-  MapPin,
-  Calendar,
-  Briefcase,
-  Plus,
-  Minus,
   CheckCircle2,
-  Pencil,
-  GraduationCap
+  Trash2
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminSidebar from '../../components/layout/sidebar/admin/AdminSidebar';
 import AdminMobileNav from '../../components/common/AdminMobileNav';
 import { cn } from '../../lib/utils';
-import { DEFAULT_AVATAR } from '../../lib/api';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-
-interface TeacherRecord {
-  id: number;
-  name: string;
-  email: string;
-  status: 'Active' | 'Inactive' | 'Deleted' | 'Pending';
-  department: string;
-  specialization: string;
-  profileImage: string;
-  joinDate: string;
-  phone?: string;
-  gender?: string;
-}
+import AdminTeacherRecordsTable from '../../components/admin/teacher/AdminTeacherRecordsTable';
+import AdminTeacherDetailPanel from '../../components/admin/teacher/AdminTeacherDetailPanel';
+import AdminTeacherConfirmModal from '../../components/admin/teacher/AdminTeacherConfirmModal';
+import AdminTeacherEditModal from '../../components/admin/teacher/AdminTeacherEditModal';
+import { useAdminTeacherRecordsPage } from '../../components/admin/teacher/useAdminTeacherRecordsPage';
+import type { TeacherRecord, TeacherConfirmAction, TeacherEditFormData, TeacherToast } from '../../components/admin/teacher/adminTeacherRecords.types';
+import { API_BASE_URL } from '../../lib/api';
 
 export default function AdminTeacherRecordsPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeacher, setSelectedTeacher] = useState<TeacherRecord | null>(null);
-  const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
-  const [selectedGender, setSelectedGender] = useState<'All' | 'Male' | 'Female' | 'Other'>('All');
-  
-  // Confirmation action flow
-  const [confirmAction, setConfirmAction] = useState<{
-    kind: 'delete' | 'hard-delete' | 'toggle-active' | 'disable-all' | 'hard-delete-all';
-    teacher?: TeacherRecord;
-    shouldEnable?: boolean;
-  } | null>(null);
+  const {
+    filteredTeachers,
+    searchQuery, 
+    setSearchQuery,
+    selectedGender, 
+    setSelectedGender,
+    selectedTeacher,
+    isLoading,
+    confirmAction,
+    editTeacher,
+    editFormData,
+    isActionSubmitting,
+    isUpdating,
+    toast,
+    closeConfirm,
+    closeEditModal,
+    executeConfirmedAction,
+    openEditModal,
+    requestToggleStatus: onToggleStatus,
+    requestHardDelete: onHardDelete,
+    requestDisableAll,
+    requestHardDeleteAll,
+    saveEdit,
+    setSelected,
+    updateEditField,
+  } = useAdminTeacherRecordsPage();
 
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'warning'>('success');
-  
-  // Edit teacher modal
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState<Partial<TeacherRecord>>({});
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  useEffect(() => {
-    const fetchTeachers = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/users`);
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          const teacherList = data
-            .filter((u: any) => u.role.toLowerCase() === 'teacher')
-            .map((u: any) => {
-              const genderLower = String(u.gender || '').toLowerCase();
-              const gender =
-                genderLower === 'male' ? 'Male' :
-                genderLower === 'female' ? 'Female' :
-                genderLower === 'other' ? 'Other' :
-                'Other';
-              return {
-                id: u.id,
-                name: (u.name || '').trim() || [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Teacher',
-                email: u.email,
-                status: Number(u.is_deleted) === 1 ? 'Deleted' : (Number(u.is_disable) === 1 ? 'Inactive' : 'Active'),
-                department: u.department || 'Teaching Staff',
-                specialization: u.specialization || 'General',
-                profileImage: String(u.profile_image || '').trim() || DEFAULT_AVATAR,
-                joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A',
-                phone: u.phone || 'N/A',
-                gender
-              };
-            });
-          setTeachers(teacherList);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchTeachers();
-  }, []);
-
-  const executeConfirmedAction = async () => {
-    if (!confirmAction) return;
-    setIsActionSubmitting(true);
-
-    try {
-      if (confirmAction.kind === 'toggle-active' && confirmAction.teacher) {
-        const { teacher, shouldEnable } = confirmAction;
-        const response = await fetch(`${API_BASE_URL}/users/${teacher.id}/active`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ is_active: shouldEnable })
-        });
-        if (response.ok) {
-          setTeachers((prev) => prev.map((t) => t.id === teacher.id ? { ...t, status: shouldEnable ? 'Active' : 'Inactive' } : t));
-          setSuccessMessage(shouldEnable ? `Enabled ${teacher.name}` : `Disabled ${teacher.name}`);
-          setToastType('success');
-        } else {
-          alert('Failed to update status.');
-        }
-      } else if (confirmAction.kind === 'hard-delete' && confirmAction.teacher) {
-        const { teacher } = confirmAction;
-        const response = await fetch(`${API_BASE_URL}/users/${teacher.id}/hard`, { method: 'DELETE' });
-        if (response.ok) {
-          setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
-          if (selectedTeacher?.id === teacher.id) setSelectedTeacher(null);
-          setSuccessMessage(`Permanently deleted ${teacher.name}`);
-          setToastType('warning');
-        } else {
-          alert('Failed to permanently delete teacher.');
-        }
-      } else if (confirmAction.kind === 'delete' && confirmAction.teacher) {
-        const { teacher } = confirmAction;
-        const response = await fetch(`${API_BASE_URL}/users/${teacher.id}`, { method: 'DELETE' });
-        if (response.ok) {
-          setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
-          if (selectedTeacher?.id === teacher.id) setSelectedTeacher(null);
-          setSuccessMessage(`Deleted ${teacher.name}`);
-          setToastType('warning');
-        } else {
-          alert('Failed to delete teacher.');
-        }
-      } else if (confirmAction.kind === 'disable-all') {
-        const response = await fetch(`${API_BASE_URL}/users/active`, { method: 'PATCH' });
-        if (response.ok) {
-          setTeachers((prev) => prev.map((t) => ({ ...t, status: 'Inactive' })));
-          setSuccessMessage('All teachers disabled.');
-          setToastType('warning');
-        } else {
-          alert('Failed to disable all.');
-        }
-      } else if (confirmAction.kind === 'hard-delete-all') {
-        const response = await fetch(`${API_BASE_URL}/users/hard-delete`, { method: 'DELETE' });
-        if (response.ok) {
-          setTeachers([]);
-          setSelectedTeacher(null);
-          setSuccessMessage('Batch deletion complete.');
-          setToastType('warning');
-        } else {
-          alert('Batch deletion failed.');
-        }
-      }
-
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2500);
-      setConfirmAction(null);
-    } catch (err) {
-      console.error(err);
-      alert('Communication error.');
-    } finally {
-      setIsActionSubmitting(false);
-    }
+  const requestDelete = (teacher: TeacherRecord) => {
+    // Note: 'delete' action not in hook, map to hard-delete or adjust API
+    onHardDelete(teacher);
   };
-
-  const handleEditTeacher = (teacher: TeacherRecord) => {
-    setEditFormData({ ...teacher });
-    setIsEditModalOpen(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!selectedTeacher) return;
-    
-    setIsUpdating(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/users/${selectedTeacher.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editFormData.name,
-          email: editFormData.email,
-          department: editFormData.department,
-          specialization: editFormData.specialization,
-          phone: editFormData.phone
-        })
-      });
-
-      if (response.ok) {
-        setTeachers((prev) => prev.map((t) => 
-          t.id === selectedTeacher.id ? { ...t, ...editFormData } as TeacherRecord : t
-        ));
-        setSelectedTeacher((prev) => prev ? { ...prev, ...editFormData } as TeacherRecord : null);
-        setSuccessMessage(`Updated ${editFormData.name}`);
-        setToastType('success');
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2500);
-        setIsEditModalOpen(false);
-      } else {
-        alert('Failed to update teacher.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Communication error.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const filteredTeachers = teachers.filter(t => {
-    const matchesSearch =
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.department.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGender = selectedGender === 'All' || (t.gender || 'Other') === selectedGender;
-    return matchesSearch && matchesGender;
-  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -237,28 +63,29 @@ export default function AdminTeacherRecordsPage() {
 
         {/* Success Toast */}
         <AnimatePresence>
-          {showSuccess && (
+          {toast && (
             <motion.div 
               initial={{ opacity: 0, y: -20, x: '-50%' }}
               animate={{ opacity: 1, y: 20, x: '-50%' }}
               exit={{ opacity: 0, y: -20, x: '-50%' }}
               className={cn(
                 "fixed top-0 left-1/2 z-[100] text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-bold",
-                toastType === 'success' ? 'bg-emerald-600' : 'bg-amber-600'
+                toast.type === 'success' ? 'bg-emerald-600' : 'bg-amber-600'
               )}
             >
               <CheckCircle2 className="w-5 h-5" />
-              {successMessage}
+              {toast.message}
             </motion.div>
           )}
         </AnimatePresence>
-        
+
         {/* Header */}
         <header className="h-auto min-h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-10 px-4 md:px-8 py-3 md:py-0 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
+              aria-label="Back to dashboard"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -269,22 +96,22 @@ export default function AdminTeacherRecordsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2 text-slate-400 hover:text-primary transition-colors">
+            <button className="p-2 text-slate-400 hover:text-primary transition-colors" aria-label="Download report" title="Download">
               <Download className="w-5 h-5" />
             </button>
             
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setConfirmAction({ kind: 'disable-all' })}
-                disabled={isActionSubmitting || teachers.every(t => t.status === 'Inactive' || t.status === 'Deleted')}
+                onClick={requestDisableAll}
+                disabled={isActionSubmitting}
                 className="bg-amber-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 disabled:opacity-60"
                 title="Disable All Teachers"
               >
                 Disable All
               </button>
               <button
-                onClick={() => setConfirmAction({ kind: 'hard-delete-all' })}
-                disabled={isActionSubmitting || teachers.length === 0}
+                onClick={requestHardDeleteAll}
+                disabled={isActionSubmitting}
                 className="bg-slate-900 text-white p-2 rounded-xl hover:bg-black transition-all shadow-lg shadow-black/20 disabled:opacity-60"
                 title="Delete All Teachers"
               >
@@ -295,6 +122,7 @@ export default function AdminTeacherRecordsPage() {
             <button 
               onClick={() => navigate('/admin/users', { state: { openInvite: true, prefillRole: 'teacher' } })}
               className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
+              title="Add new teacher"
             >
               <UserPlus className="w-4 h-4" />
               Add Teacher
@@ -303,7 +131,7 @@ export default function AdminTeacherRecordsPage() {
         </header>
 
         <div className="flex-1 overflow-hidden flex">
-          {/* Main Content Area */}
+          {/* Main Content */}
           <div className="flex-1 flex flex-col overflow-hidden p-4 md:p-8">
             <div className="max-w-6xl mx-auto w-full space-y-6 flex flex-col h-full">
               {/* Search & Filter */}
@@ -312,7 +140,7 @@ export default function AdminTeacherRecordsPage() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input 
                     type="text" 
-                    placeholder="Search teachers..." 
+                    placeholder="Search teachers by name, email or department" 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
@@ -322,8 +150,9 @@ export default function AdminTeacherRecordsPage() {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gender</label>
                   <select
                     value={selectedGender}
-                    onChange={(e) => setSelectedGender(e.target.value as 'All' | 'Male' | 'Female' | 'Other')}
+                    onChange={(e) => setSelectedGender(e.target.value as any)}
                     className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20"
+                    aria-label="Filter by gender"
                   >
                     <option value="All">All</option>
                     <option value="Male">Male</option>
@@ -331,359 +160,49 @@ export default function AdminTeacherRecordsPage() {
                     <option value="Other">Other</option>
                   </select>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
+                <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all" aria-label="More filters" title="More filters">
                   <Filter className="w-4 h-4" />
                   Filter
                 </button>
               </div>
 
-              {/* Table */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
-                <div className="overflow-y-auto flex-1">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-100">
-                      <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <th className="px-6 py-4">Teacher</th>
-                        <th className="px-6 py-4 hidden md:table-cell">Department</th>
-                        <th className="px-6 py-4 hidden md:table-cell">Specialization</th>
-                        <th className="px-6 py-4 hidden sm:table-cell text-center">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredTeachers.map((teacher) => (
-                        <tr 
-                          key={teacher.id} 
-                          onClick={() => setSelectedTeacher(teacher)}
-                          className={cn(
-                            "hover:bg-slate-50 transition-colors group cursor-pointer",
-                            selectedTeacher?.id === teacher.id ? "bg-primary/5" : ""
-                          )}
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="size-10 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100 shadow-sm">
-                                <img src={teacher.profileImage} alt={teacher.name} className="w-full h-full object-cover" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-black text-slate-900">{teacher.name}</p>
-                                <p className="text-[10px] font-bold text-slate-400">{teacher.email}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 hidden md:table-cell">
-                            <span className="text-xs font-bold text-slate-600">{teacher.department}</span>
-                          </td>
-                          <td className="px-6 py-4 hidden md:table-cell">
-                            <span className="text-xs font-bold text-slate-600">{teacher.specialization}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={cn(
-                              "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                              teacher.status === 'Active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
-                            )}>
-                              {teacher.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setSelectedTeacher(teacher); }}
-                                className="p-2 text-slate-400 hover:text-primary transition-colors hover:bg-primary/5 rounded-lg"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleEditTeacher(teacher); }}
-                                className="p-2 text-slate-400 hover:text-primary transition-colors hover:bg-primary/5 rounded-lg"
-                                title="Edit Teacher"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setConfirmAction({ kind: 'toggle-active', teacher, shouldEnable: teacher.status !== 'Active' }); }}
-                                className={cn(
-                                  "p-2 transition-colors rounded-lg",
-                                  teacher.status === 'Active' ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"
-                                )}
-                                title={teacher.status === 'Active' ? 'Disable Teacher' : 'Enable Teacher'}
-                              >
-                                {teacher.status === 'Active' ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                              </button>
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); setConfirmAction({ kind: 'hard-delete', teacher }); }}
-                                className="p-2 text-slate-400 hover:text-rose-500 transition-colors hover:bg-rose-50 rounded-lg"
-                                title="Delete Teacher"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    Showing {filteredTeachers.length} teachers
-                  </p>
-                </div>
-              </div>
+              <AdminTeacherRecordsTable
+                teachers={filteredTeachers}
+                selectedTeacherId={selectedTeacher?.id || null}
+                isLoading={isLoading}
+                onSelectTeacher={setSelected}
+                onEdit={openEditModal}
+                onToggleStatus={onToggleStatus}
+                onHardDelete={onHardDelete}
+              />
             </div>
           </div>
 
-          {/* Detail Panel */}
-          <AnimatePresence>
-            {selectedTeacher && (
-              <motion.div 
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                className="w-full md:w-96 bg-white border-l border-slate-200 shadow-2xl flex flex-col shrink-0 relative z-20 fixed md:static inset-0 md:inset-auto"
-              >
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="font-black text-slate-900">Teacher Details</h3>
-                  <button 
-                    onClick={() => setSelectedTeacher(null)}
-                    className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
-                  >
-                    <ArrowLeft className="w-4 h-4 rotate-180" />
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                  {/* Profile Header */}
-                  <div className="text-center">
-                    <div className="size-24 rounded-3xl overflow-hidden shrink-0 border border-slate-200 bg-slate-100 mx-auto mb-4 shadow-md">
-                      <img src={selectedTeacher.profileImage} alt={selectedTeacher.name} className="w-full h-full object-cover" />
-                    </div>
-                    <h4 className="text-xl font-black text-slate-900">{selectedTeacher.name}</h4>
-                    <p className="text-xs font-bold text-purple-600 uppercase tracking-widest mt-1 leading-none">{selectedTeacher.department}</p>
-                  </div>
-
-                  {/* Info Grid */}
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-3 text-slate-400 mb-1">
-                        <Mail className="w-3 h-3" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Email Address</span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-900">{selectedTeacher.email}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-3 text-slate-400 mb-1">
-                        <Briefcase className="w-3 h-3" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Specialization</span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-900">{selectedTeacher.specialization}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-3 text-slate-400 mb-1">
-                        <Calendar className="w-3 h-3" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Join Date</span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-900">{selectedTeacher.joinDate}</p>
-                    </div>
-                    <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-3 text-slate-400 mb-1">
-                        <MapPin className="w-3 h-3" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Phone</span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-900">{selectedTeacher.phone}</p>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="pt-6 border-t border-slate-100 flex gap-3">
-                    <button 
-                      onClick={() => handleEditTeacher(selectedTeacher)}
-                      className="flex-1 py-4 bg-primary/10 text-primary font-black rounded-xl text-xs uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Edit Teacher
-                    </button>
-                    <button 
-                      onClick={() => setConfirmAction({ kind: 'hard-delete', teacher: selectedTeacher })}
-                      className="flex-1 py-4 bg-rose-50 text-rose-600 font-black rounded-xl text-xs uppercase tracking-widest hover:bg-rose-100 transition-all flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <AdminTeacherDetailPanel
+            teacher={selectedTeacher}
+            onClose={() => setSelected(null)}
+            onEdit={openEditModal}
+            onHardDelete={onHardDelete}
+          />
         </div>
 
-        {/* Confirmation Modal */}
-        <AnimatePresence>
-          {confirmAction && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => !isActionSubmitting && setConfirmAction(null)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 14 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 14 }}
-                className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
-              >
-                <div className={cn(
-                  "size-16 rounded-2xl flex items-center justify-center mb-6",
-                  confirmAction.kind.includes('delete') ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"
-                )}>
-                   {confirmAction.kind.includes('delete') ? <Trash2 className="w-8 h-8" /> : (confirmAction.shouldEnable ? <Plus className="w-8 h-8" /> : <Minus className="w-8 h-8" />)}
-                </div>
-                
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                  {confirmAction.kind === 'delete' ? 'Delete Teacher?'
-                    : confirmAction.kind === 'hard-delete' ? 'Permanent Removal?'
-                    : confirmAction.kind === 'disable-all' ? 'Disable All Teachers?'
-                    : confirmAction.kind === 'hard-delete-all' ? 'Permanent Cleanup?'
-                    : confirmAction.shouldEnable ? 'Enable Teacher?' : 'Disable Teacher?'}
-                </h3>
-                
-                <p className="mt-3 text-sm text-slate-600 font-bold leading-relaxed">
-                  {confirmAction.kind === 'delete' ? `Delete "${confirmAction.teacher?.name}"? Record will be archived.`
-                    : confirmAction.kind === 'hard-delete' ? `EXTREME ACTION: Permanently remove "${confirmAction.teacher?.name}"? This cannot be undone.`
-                    : confirmAction.kind === 'disable-all' ? 'Are you sure you want to disable all teachers?'
-                    : confirmAction.kind === 'hard-delete-all' ? 'EXTREME ACTION: Permanently delete all teachers? All data will be lost forever.'
-                    : confirmAction.shouldEnable ? `Enable "${confirmAction.teacher?.name}"? They will regain access.`
-                    : `Disable "${confirmAction.teacher?.name}"? They will lose access to the platform.`}
-                </p>
+        <AdminTeacherConfirmModal
+          action={confirmAction}
+          isSubmitting={isActionSubmitting}
+          onConfirm={executeConfirmedAction}
+          onCancel={closeConfirm}
+        />
 
-                <div className="mt-8 flex gap-3">
-                  <button
-                    onClick={() => setConfirmAction(null)}
-                    disabled={isActionSubmitting}
-                    className="flex-1 py-3 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={executeConfirmedAction}
-                    disabled={isActionSubmitting}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg disabled:opacity-60",
-                      confirmAction.kind.includes('delete') ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
-                    )}
-                  >
-                    {isActionSubmitting ? 'Processing...' : 'Confirm'}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* Edit Teacher Modal */}
-        <AnimatePresence>
-          {isEditModalOpen && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => !isUpdating && setIsEditModalOpen(false)}
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 14 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 14 }}
-                className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-8"
-              >
-                <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
-                  <GraduationCap className="w-8 h-8" />
-                </div>
-                
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                  Edit Teacher
-                </h3>
-                
-                <p className="mt-3 text-sm text-slate-600 font-bold leading-relaxed">
-                  Update teacher information and department details.
-                </p>
-
-                <div className="mt-6 space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.name || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={editFormData.email || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Department
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.department || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Specialization
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.specialization || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, specialization: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 focus:ring-2 focus:ring-primary/20 rounded-xl text-sm transition-all outline-none shadow-sm"
-                      disabled={isUpdating}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-8 flex gap-3">
-                  <button
-                    onClick={() => setIsEditModalOpen(false)}
-                    disabled={isUpdating}
-                    className="flex-1 py-3 rounded-xl border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveEdit}
-                    disabled={isUpdating || !editFormData.name || !editFormData.email}
-                    className="flex-1 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg bg-primary hover:bg-primary/90 shadow-primary/20 disabled:opacity-60"
-                  >
-                    {isUpdating ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        <AdminTeacherEditModal
+          teacher={editTeacher}
+          formData={editFormData}
+          isUpdating={isUpdating}
+          onClose={closeEditModal}
+          onFieldChange={updateEditField}
+          onSave={saveEdit}
+        />
       </main>
     </div>
   );
 }
+

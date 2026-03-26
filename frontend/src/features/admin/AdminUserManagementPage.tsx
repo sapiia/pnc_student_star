@@ -2092,5 +2092,3 @@ export default function AdminUserManagementPage() {
     </div>
   );
 }
-
-
