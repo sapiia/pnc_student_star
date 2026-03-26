@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, LogOut, AlertCircle, Settings } from 'lucide
 import { cn } from '../../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import BrandLogo, { PNLogoMark } from '../../ui/BrandLogo';
+import { DEFAULT_AVATAR } from '../../../lib/api';
 
 interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -33,7 +34,7 @@ export default function BaseSidebar({
   profileName,
   profilePhoto,
   profileRole,
-  defaultPhoto = 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg',
+  defaultPhoto = DEFAULT_AVATAR,
   isSettingsEnabled = false,
   settingsItems = [],
   onSettingsClick,

@@ -1,13 +1,14 @@
 import { LayoutDashboard, Users, Calendar, BarChart3, Settings, MessageSquare, User, HelpCircle, Info, Bell } from 'lucide-react';
 import BaseSidebar from '../BaseSidebar';
 import { useProfileData } from '../../../../hooks/useProfileData';
+import { DEFAULT_AVATAR } from '../../../../lib/api';
 
 interface AdminSidebarProps {
   className?: string;
 }
 
 export default function AdminSidebar({ className }: AdminSidebarProps) {
-  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Administrator', defaultPhoto: 'http://localhost:3001/uploads/logo/star_gmail_logo.jpg' });
+  const { profileName, profilePhoto } = useProfileData({ defaultName: 'Administrator', defaultPhoto: DEFAULT_AVATAR });
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
@@ -31,7 +32,7 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
       profileName={profileName}
       profilePhoto={profilePhoto}
       profileRole="System Admin"
-      defaultPhoto="http://localhost:3001/uploads/logo/star_gmail_logo.jpg"
+      defaultPhoto={DEFAULT_AVATAR}
       isSettingsEnabled={false}
       settingsItems={settingsItems}
       settingsPath="/admin/settings"

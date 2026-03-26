@@ -5,7 +5,11 @@ const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 // Create axios instance with base configuration
 const api = axios.create({
+<<<<<<< HEAD
   baseURL: API_BASE_URL,
+=======
+  baseURL: process.env.API_BASE_URL || 'https://pnc-student-star.vercel.app/api',
+>>>>>>> e50e2c770a5c55e523530447ea2bb6c6066fc2ec
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
