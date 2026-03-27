@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { DEFAULT_AVATAR } from '../lib/api';
 import { getRealtimeSocket, type NotificationRealtimePayload } from '../lib/realtime';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 
 export function useSidebarData() {
   const [profileName, setProfileName] = useState('Student');

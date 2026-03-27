@@ -153,7 +153,7 @@ const defaultNewUser = {
   status: 'Active' as UserStatus
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 const DEFAULT_MAJOR_OPTIONS = ['SNA', 'WEB DEV'];
 const DEFAULT_CLASS_OPTIONS = ['WEB A', 'WEB B'];
 const USERS_PER_PAGE = 15;

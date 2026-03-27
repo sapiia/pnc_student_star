@@ -71,7 +71,7 @@ type CriterionDetail = {
   tip: string;
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 
 const STATUS_CARD_STYLES = [
   { color: 'text-blue-600', bgColor: 'bg-blue-100' },

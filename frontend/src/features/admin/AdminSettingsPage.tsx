@@ -49,7 +49,7 @@ const INITIAL_CRITERIA = [
   { id: 'CRIT-008', icon: 'ð ï¸', name: 'Life Skill', description: 'Practical skills including time management, problem-solving, and self-sufficiency.', status: 'Active' },
 ];
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 const CRITERION_ICON_OPTIONS = [
   { value: 'Sparkles', label: 'Sparkles' },
   { value: 'Home', label: 'Home' },

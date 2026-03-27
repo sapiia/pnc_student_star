@@ -49,7 +49,7 @@ export default function StudentMobileNav() {
   const [studentId, setStudentId] = useState('');
 
   useEffect(() => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
     const loadProfileIdentity = async () => {
       try {
         const raw = localStorage.getItem('auth_user');

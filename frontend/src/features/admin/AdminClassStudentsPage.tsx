@@ -25,7 +25,7 @@ import { cn } from '../../lib/utils';
 import { CRITERIA } from '../../constants';
 import { DEFAULT_AVATAR } from '../../lib/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 
 const extractGeneration = (user: any) => {
   const genValue = String(user.generation || '').trim();

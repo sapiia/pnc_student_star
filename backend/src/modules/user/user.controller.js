@@ -12,7 +12,7 @@ const { emitNotificationEvent } = require('../../app/realtime');
 const { uploadsDir } = require('../../config/paths');
 
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://127.0.0.1:5173';
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';

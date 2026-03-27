@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://127.0.0.1:3001/api';
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 const api = axios.create({

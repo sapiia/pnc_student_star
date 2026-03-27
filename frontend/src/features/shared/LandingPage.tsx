@@ -22,7 +22,7 @@ export default function LandingPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api';
 
   // Smooth animation presets for consistent, fluid transitions
   const smoothTransition = { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const };

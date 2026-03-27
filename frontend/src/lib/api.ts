@@ -1,5 +1,5 @@
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api";
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:3001/api";
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 export const DEFAULT_AVATAR = `${API_ORIGIN}/uploads/logo/star_gmail_logo.jpg`;
 
