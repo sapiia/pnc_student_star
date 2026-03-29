@@ -3,7 +3,7 @@ const db = require('../../config/database');
 class Setting {
   static async findAll() {
     try {
-      const [rows] = await db.query("SELECT * FROM settings ORDER BY `key`");
+      const [rows] = await db.query('SELECT * FROM settings ORDER BY "key"');
       return rows;
     } catch (error) {
       throw error;
@@ -21,7 +21,7 @@ class Setting {
 
   static async findByKey(key) {
     try {
-      const [rows] = await db.query("SELECT * FROM settings WHERE `key` = ?", [key]);
+      const [rows] = await db.query('SELECT * FROM settings WHERE "key" = ?', [key]);
       return rows[0] || null;
     } catch (error) {
       throw error;
@@ -32,7 +32,7 @@ class Setting {
     try {
       const { key, value } = settingData;
       
-      const sql = "INSERT INTO settings (`key`, `value`) VALUES (?, ?)";
+      const sql = 'INSERT INTO settings ("key", "value") VALUES (?, ?)';
       const [result] = await db.query(sql, [key, value]);
       return result.insertId;
     } catch (error) {
@@ -44,7 +44,7 @@ class Setting {
     try {
       const { key, value } = settingData;
       
-      const sql = "UPDATE settings SET `key` = ?, `value` = ? WHERE id = ?";
+      const sql = 'UPDATE settings SET "key" = ?, "value" = ? WHERE id = ?';
       const [result] = await db.query(sql, [key, value, id]);
       
       return result.affectedRows > 0;
@@ -57,9 +57,9 @@ class Setting {
     try {
       const [result] = await db.query(
         `
-          INSERT INTO settings (\`key\`, \`value\`)
+          INSERT INTO settings ("key", "value")
           VALUES (?, ?)
-          ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+          ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value"
         `,
         [key, value]
       );
@@ -80,7 +80,7 @@ class Setting {
 
   static async deleteByKey(key) {
     try {
-      const [result] = await db.query("DELETE FROM settings WHERE `key` = ?", [key]);
+      const [result] = await db.query('DELETE FROM settings WHERE "key" = ?', [key]);
       return result.affectedRows > 0;
     } catch (error) {
       throw error;

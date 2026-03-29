@@ -15,7 +15,7 @@ const getUsersTableColumns = async () => {
 const getNotificationRetentionDays = async () => {
   try {
     const [rows] = await db.query(
-      "SELECT `value` FROM settings WHERE `key` = 'notification_auto_delete_days' LIMIT 1"
+      'SELECT "value" FROM settings WHERE "key" = \'notification_auto_delete_days\' LIMIT 1'
     );
     const parsed = Number(rows?.[0]?.value);
     if (!Number.isFinite(parsed)) return 7;
@@ -29,7 +29,7 @@ const purgeExpiredNotifications = async () => {
   const retentionDays = await getNotificationRetentionDays();
   if (!Number.isFinite(retentionDays) || retentionDays <= 0) return;
   await db.query(
-    'DELETE FROM notifications WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+    'DELETE FROM notifications WHERE created_at < NOW() - (? * INTERVAL \'1 day\')',
     [retentionDays]
   );
 };

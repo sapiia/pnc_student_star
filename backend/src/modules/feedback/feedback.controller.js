@@ -12,7 +12,7 @@ const toQuarterLabel = (period = '') => {
 const getFeedbackCharacterLimit = async () => {
   try {
     const [rows] = await db.query(
-      "SELECT `value` FROM settings WHERE `key` = 'teacher_max_feedback_characters' LIMIT 1"
+      'SELECT "value" FROM settings WHERE "key" = \'teacher_max_feedback_characters\' LIMIT 1'
     );
     const parsed = Number(rows?.[0]?.value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1000;
@@ -24,7 +24,7 @@ const getFeedbackCharacterLimit = async () => {
 const getTeacherMaxAssignedStudents = async () => {
   try {
     const [rows] = await db.query(
-      "SELECT `value` FROM settings WHERE `key` = 'teacher_max_assigned_students' LIMIT 1"
+      'SELECT "value" FROM settings WHERE "key" = \'teacher_max_assigned_students\' LIMIT 1'
     );
     const parsed = Number(rows?.[0]?.value);
     if (!Number.isFinite(parsed)) return 30;
@@ -37,7 +37,7 @@ const getTeacherMaxAssignedStudents = async () => {
 const canStudentViewTeacherFeedback = async () => {
   try {
     const [rows] = await db.query(
-      "SELECT `value` FROM settings WHERE `key` = 'student_can_view_teacher_feedback' LIMIT 1"
+      'SELECT "value" FROM settings WHERE "key" = \'student_can_view_teacher_feedback\' LIMIT 1'
     );
     const normalized = String(rows?.[0]?.value || 'true').trim().toLowerCase();
     return normalized !== 'false' && normalized !== '0';
@@ -169,7 +169,7 @@ const createFeedback = async (req, res) => {
         `
           SELECT 
             COUNT(DISTINCT student_id) AS total,
-            SUM(student_id = ?) AS existing
+            SUM(CASE WHEN student_id = ? THEN 1 ELSE 0 END) AS existing
           FROM feedbacks
           WHERE teacher_id = ?
         `,

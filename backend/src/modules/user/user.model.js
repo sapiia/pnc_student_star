@@ -2,6 +2,11 @@ const db = require('../../config/database');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
+const getUsersTableColumns = async () => {
+  const [rows] = await db.query('SHOW COLUMNS FROM users');
+  return new Set(rows.map((row) => String(row.Field || '').trim()));
+};
+
 class User {
   // Find all users
   static async findAll() {
@@ -147,13 +152,15 @@ class User {
   // Get students by class
   static async getStudentsByClass(className) {
     try {
+      const columns = await getUsersTableColumns();
+      let where = "role = 'student' AND class = ?";
+      if (columns.has('is_active')) where += ' AND is_active = 1';
+      if (columns.has('is_deleted')) where += ' AND is_deleted = 0';
+
       const [rows] = await db.query(`
         SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
-        FROM users 
-        WHERE role = 'student' 
-        AND class = ?
-        AND is_active = 1
-        AND is_deleted = 0
+        FROM users
+        WHERE ${where}
         ORDER BY first_name, last_name
       `, [className]);
       return rows;
@@ -165,12 +172,15 @@ class User {
   // Get all students for teacher (all classes teacher has access to)
   static async getTeacherStudents(teacherId) {
     try {
+      const columns = await getUsersTableColumns();
+      let where = "role = 'student'";
+      if (columns.has('is_active')) where += ' AND is_active = 1';
+      if (columns.has('is_deleted')) where += ' AND is_deleted = 0';
+
       const [rows] = await db.query(`
         SELECT id, first_name, last_name, email, class, student_id, gender, profile_image
-        FROM users 
-        WHERE role = 'student' 
-        AND is_active = 1
-        AND is_deleted = 0
+        FROM users
+        WHERE ${where}
         ORDER BY class, first_name, last_name
       `);
       return rows;

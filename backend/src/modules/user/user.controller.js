@@ -793,10 +793,10 @@ const getAllUsers = async (req, res) => {
       const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
       // Try to extract generation from class field or use generation column directly
       if (columns.has('generation')) {
-        orderByClause = `ORDER BY CAST(u.generation AS UNSIGNED) ${order}, u.created_at DESC`;
+        orderByClause = `ORDER BY CAST(NULLIF(u.generation, '') AS INTEGER) ${order}, u.created_at DESC`;
       } else {
         // Fallback: try to extract from class field (e.g., "Gen 2026 - WEB A")
-        orderByClause = `ORDER BY CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.class, 'Gen ', -1), ' ', 1) AS UNSIGNED) ${order}, u.created_at DESC`;
+        orderByClause = `ORDER BY CAST(NULLIF(split_part(split_part(u.class, 'Gen ', 2), ' ', 1), '') AS INTEGER) ${order}, u.created_at DESC`;
       }
     } else if (sortBy === 'name') {
       const order = sortOrder === 'desc' ? 'DESC' : 'ASC';
@@ -1524,11 +1524,11 @@ const updateUserProfile = async (req, res) => {
     const departmentKey = `profile_department_${userId}`;
     if (department) {
       await db.query(
-        "INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), updated_at = CURRENT_TIMESTAMP()",
+        'INSERT INTO settings ("key", "value") VALUES (?, ?) ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", updated_at = CURRENT_TIMESTAMP',
         [departmentKey, department]
       );
     } else {
-      await db.query("DELETE FROM settings WHERE `key` = ?", [departmentKey]);
+      await db.query('DELETE FROM settings WHERE "key" = ?', [departmentKey]);
     }
 
     const [rows] = await db.query(`
