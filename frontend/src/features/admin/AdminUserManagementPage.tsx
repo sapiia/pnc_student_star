@@ -794,6 +794,57 @@ export default function AdminUserManagementPage() {
     }
   };
 
+  const activeEvaluation = useMemo(() => {
+    if (!profileEvaluations.length) return null;
+    const match = profileEvaluations.find((item) => item.id === selectedEvaluationId);
+    return match || profileEvaluations[0];
+  }, [profileEvaluations, selectedEvaluationId]);
+
+  const findCriterionScore = (criterion: any, evaluation: any) => {
+    const responses = Array.isArray(evaluation?.responses) ? evaluation.responses : [];
+    const response = responses.find((r: any) =>
+      String(r.criterion_id || '').trim() === String(criterion.id || '').trim() ||
+      String(r.criterion_key || '').trim() === String(criterion.id || criterion.key || '').trim() ||
+      String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
+    );
+    return response ? Number(response.star_value || 0) : 0;
+  };
+
+  const radarChartData = useMemo(() => {
+    if (!activeEvaluation) return [];
+
+    const activeCriteria = globalCriteria
+      .filter((c) => String(c.status || '').toLowerCase() === 'active');
+
+    if (activeCriteria.length > 0) {
+      return activeCriteria.map((criterion: any, idx: number) => ({
+        subject: String(criterion.name || `Criterion ${idx + 1}`),
+        score: findCriterionScore(criterion, activeEvaluation)
+      }));
+    }
+
+    // Fallback: derive criteria from the evaluation itself so admins still see a chart
+    const responses = Array.isArray(activeEvaluation.responses) ? activeEvaluation.responses : [];
+    const seen = new Set<string>();
+    return responses.map((response: any, idx: number) => {
+      const key = String(response.criterion_key || response.criterion_id || response.criterion_name || idx);
+      const subject = String(response.criterion_name || key || `Criterion ${idx + 1}`);
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return {
+        subject,
+        score: Number(response.star_value || 0)
+      };
+    }).filter(Boolean) as { subject: string; score: number; }[];
+  }, [activeEvaluation, globalCriteria]);
+
+  const radarMaxValue = useMemo(() => {
+    const fromSettings = Number(globalRatingScale || 0);
+    if (fromSettings > 0) return fromSettings;
+    const fromEvaluation = Number(activeEvaluation?.rating_scale || 0);
+    return fromEvaluation > 0 ? fromEvaluation : 5;
+  }, [globalRatingScale, activeEvaluation]);
+
   const toggleUserActive = (user: UserRecord) => {
     if (user.status === 'Deleted') return;
     if (isSelfUser(user.id)) {
@@ -1989,22 +2040,9 @@ export default function AdminUserManagementPage() {
                          {profileEvaluations.length > 0 ? (
                            <div className="bg-slate-50 rounded-3xl p-6 h-[320px] border border-slate-100 shadow-inner flex items-center justify-center relative overflow-hidden">
                               <RadarChart
-                                 data={globalCriteria
-                                   .filter(c => String(c.status).toLowerCase() === 'active')
-                                   .map((criterion, idx) => {
-                                     const activeEvaluation = profileEvaluations.find((item) => item.id === selectedEvaluationId) || profileEvaluations[0];
-                                     const response = (activeEvaluation?.responses || []).find((r: any) =>
-                                       String(r.criterion_id || r.criterion_key || '').trim() === String(criterion.id || '').trim() ||
-                                       String(r.criterion_name || '').trim().toLowerCase() === String(criterion.name || '').trim().toLowerCase()
-                                     );
-                                     return {
-                                       subject: String(criterion.name || `Criterion ${idx + 1}`),
-                                       score: response ? Number(response.star_value || 0) : 0
-                                     };
-                                   })
-                                 }
+                                 data={radarChartData}
                                  dataKeys={[ { key: 'score', name: 'Performance', color: '#5d5fef', fill: '#5d5fef' } ]}
-                                 maxValue={globalRatingScale}
+                                 maxValue={radarMaxValue}
                                />
                            </div>
                          ) : (
