@@ -144,6 +144,7 @@ export default function DashboardPage() {
 
   const currentStatusCriteria = useMemo(() => {
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
+    const latest = latestEvaluation;
 
     // Create a mapping from criterion key to CRIT-XXX ID for matching
     const keyToIdMap = new Map<string, string>();
@@ -159,12 +160,12 @@ export default function DashboardPage() {
       }
     });
 
-    return activeGlobal.map((criterion, index) => {
+    const buildFromGlobal = activeGlobal.map((criterion, index) => {
       const criterionId = String(criterion.id || '');
       const criterionName = String(criterion.name || '').trim().toLowerCase();
 
       // Try to find a matching response using multiple strategies
-      const response = (latestEvaluation?.responses || []).find(r => {
+      const response = (latest?.responses || []).find(r => {
         const responseKey = String(r.criterion_key || '').trim();
         const responseId = String(r.criterion_id || '').trim();
         const responseName = String(r.criterion_name || '').trim().toLowerCase();
@@ -185,6 +186,21 @@ export default function DashboardPage() {
         ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
       };
     });
+
+    // Fallback: if no active global criteria or no matches, derive directly from latest evaluation responses
+    if (buildFromGlobal.length === 0 && latest?.responses?.length) {
+      return latest.responses.map((r: any, index: number) => ({
+        key: String(r.criterion_id || r.criterion_key || index),
+        label: String(r.criterion_name || r.criterion_key || `Criterion ${index + 1}`),
+        icon: String(r.criterion_icon || 'Star'),
+        score: Number(r.star_value || 0),
+        reflection: String(r.reflection || '').trim(),
+        tip: String(r.tip_snapshot || '').trim(),
+        ...STATUS_CARD_STYLES[index % STATUS_CARD_STYLES.length],
+      }));
+    }
+
+    return buildFromGlobal;
   }, [globalCriteria, latestEvaluation]);
 
   const historicalComparison = useMemo(() => {
@@ -200,7 +216,7 @@ export default function DashboardPage() {
       ? [sortedEvaluations[0]]
       : sortedEvaluations.slice(-2);
 
-    const maxValue = globalRatingScale;
+    const maxValue = globalRatingScale || Number(comparedEvaluations[0]?.rating_scale || 5);
     const activeGlobal = globalCriteria.filter(c => String(c.status).toLowerCase() === 'active');
 
     // Create a mapping from criterion key to CRIT-XXX ID for matching
@@ -217,7 +233,33 @@ export default function DashboardPage() {
       }
     });
 
-    const data = activeGlobal.map((criterion, index) => {
+    const baseCriteria = activeGlobal.length > 0
+      ? activeGlobal.map((criterion, index) => ({
+          id: String(criterion.id || ''),
+          name: String(criterion.name || `Criterion ${index + 1}`),
+          icon: String(criterion.icon || 'Star'),
+          idx: index,
+        }))
+      : Array.from(
+          new Set(
+            comparedEvaluations.flatMap((evaluation) =>
+              (evaluation.responses || []).map((r: any) => String(r.criterion_key || r.criterion_id || r.criterion_name || ''))
+            )
+          )
+        ).map((key, idx) => {
+          const sampleResponse = comparedEvaluations
+            .map((e) => (e.responses || []).find((r: any) =>
+              String(r.criterion_key || r.criterion_id || r.criterion_name || '') === key))
+            .find(Boolean);
+          return {
+            id: key,
+            name: String(sampleResponse?.criterion_name || key || `Criterion ${idx + 1}`),
+            icon: String(sampleResponse?.criterion_icon || 'Star'),
+            idx,
+          };
+        });
+
+    const data = baseCriteria.map((criterion, index) => {
       const row: Record<string, string | number> = {
         subject: String(criterion.name || `Criterion ${index + 1}`),
       };
@@ -239,7 +281,8 @@ export default function DashboardPage() {
 
           // Match by: criterion_id directly, criterion_key mapping, or name
           return responseId === criterionId ||
-                 keyToIdMap.get(responseKey) === criterionId ||
+                 (criterionId && keyToIdMap.get(responseKey) === criterionId) ||
+                 (!criterionId && responseKey === criterion.id) ||
                  responseName === criterionName;
         });
         row[chartKey] = response ? Math.max(0, Number(response.star_value || 0)) : 0;

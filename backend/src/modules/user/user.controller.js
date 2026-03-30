@@ -330,6 +330,7 @@ const createEmailTransporter = () => {
       host: SMTP_HOST,
       port: Number(SMTP_PORT),
       secure: SMTP_SECURE === 'true',
+      family: 4, // force IPv4 to avoid IPv6 ENETUNREACH on restricted hosts
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS
@@ -1984,6 +1985,34 @@ const hardDeleteUser = async (req, res) => {
       if (admins.length <= 1) {
         return res.status(403).json({ error: "Cannot delete the only administrative account." });
       }
+    }
+
+    // Clean up dependent records to satisfy foreign key constraints
+    // 1) Gather evaluation ids for this user
+    const [evaluationRows] = await db.query(
+      "SELECT id FROM evaluations WHERE user_id = ?",
+      [userId]
+    );
+    const evaluationIds = evaluationRows.map((row) => row.id);
+
+    if (evaluationIds.length > 0) {
+      const placeholders = evaluationIds.map(() => '?').join(', ');
+      // Delete feedbacks linked to those evaluations
+      await db.query(`DELETE FROM feedbacks WHERE evaluation_id IN (${placeholders})`, evaluationIds);
+      // Delete evaluation responses
+      await db.query(`DELETE FROM evaluation_responses WHERE evaluation_id IN (${placeholders})`, evaluationIds);
+      // Delete evaluations
+      await db.query(`DELETE FROM evaluations WHERE id IN (${placeholders})`, evaluationIds);
+    }
+
+    // Remove feedbacks where this user is teacher or student
+    await db.query("DELETE FROM feedbacks WHERE teacher_id = ? OR student_id = ?", [userId, userId]);
+
+    // Remove notifications for this user (best-effort; table may not exist in older schemas)
+    try {
+      await db.query("DELETE FROM notifications WHERE user_id = ?", [userId]);
+    } catch (err) {
+      console.warn('Skipping notifications cleanup on hard delete:', err.message || err);
     }
 
     const [result] = await db.query("DELETE FROM users WHERE id = ?", [userId]);

@@ -1,4 +1,5 @@
 const db = require('../../config/database');
+const Setting = require('./setting.model');
 
 const DEFAULT_RATING_SCALE = 5;
 const DEFAULT_CRITERIA = [
@@ -131,6 +132,9 @@ const DEFAULT_CRITERIA = [
 ];
 
 const ensureTables = async () => {
+  if (typeof Setting.ensureSettingsTable === 'function') {
+    await Setting.ensureSettingsTable();
+  }
   await db.query(`
     DO $$
     BEGIN
