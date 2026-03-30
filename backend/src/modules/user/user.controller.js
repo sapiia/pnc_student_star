@@ -330,7 +330,9 @@ const createEmailTransporter = () => {
       host: SMTP_HOST,
       port: Number(SMTP_PORT),
       secure: SMTP_SECURE === 'true',
-      family: 4, // force IPv4 to avoid IPv6 ENETUNREACH on restricted hosts
+      // Force IPv4 to avoid ENETUNREACH on hosts that block IPv6 (common on cloud PaaS)
+      family: 4,
+      tls: { family: 4 },
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS
