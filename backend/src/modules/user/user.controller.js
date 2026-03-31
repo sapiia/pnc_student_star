@@ -18,6 +18,10 @@ const FRONTEND_URL = process.env.FRONTEND_URL
     : 'http://localhost:3000');
 const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || process.env.API_BASE_URL || process.env.APP_URL || '').toString().trim();
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
+const INVITE_SECRET_FALLBACK = process.env.INVITE_SECRET_FALLBACK || 'change-this-invite-secret';
+const inviteSecrets = Array.from(new Set(
+  [INVITE_SECRET, INVITE_SECRET_FALLBACK, 'change-this-invite-secret'].filter(Boolean)
+));
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
 const FORCE_HTTPS_HOSTS = ['pnc-student-star.onrender.com'];
@@ -329,15 +333,20 @@ const verifyInviteToken = (token = '') => {
   }
 
   const [payloadBase64, signature] = parts;
-  const expectedSignature = crypto
-    .createHmac('sha256', INVITE_SECRET)
-    .update(payloadBase64)
-    .digest('base64url');
 
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expectedSignature);
+  const matchesAnySecret = inviteSecrets.some((secret) => {
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(payloadBase64)
+      .digest('base64url');
 
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expectedSignature);
+
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+
+  if (!matchesAnySecret) {
     return null;
   }
 
