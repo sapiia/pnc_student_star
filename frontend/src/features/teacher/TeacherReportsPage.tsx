@@ -141,51 +141,62 @@ export default function TeacherReportsPage() {
 
   // Fetch data on mount
   useEffect(() => {
-    if (!teacherId) return;
-
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
 
         const authHeaders = buildAuthHeaders();
+        const fetchOptions: RequestInit = { credentials: 'include', headers: { ...authHeaders } };
+        const teacherPath = teacherId ? `${API_BASE_URL}/users/teachers/students/${teacherId}` : null;
 
         // Fetch users (students) and evaluations
-        const [usersRes, evalRes, criteriaRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`, { headers: { ...authHeaders } }),
-          fetch(`${API_BASE_URL}/evaluations`, { headers: { ...authHeaders } }),
-          fetch(`${API_BASE_URL}/settings/evaluation-criteria`, { headers: { ...authHeaders } }),
+        const [allUsersRes, teacherUsersRes, evalRes, criteriaRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/users`, fetchOptions),
+          teacherPath ? fetch(teacherPath, fetchOptions) : Promise.resolve(null),
+          fetch(`${API_BASE_URL}/evaluations`, fetchOptions),
+          fetch(`${API_BASE_URL}/settings/evaluation-criteria`, fetchOptions),
         ]);
 
-        let usersData: any[] = [];
-        if (usersRes.ok) {
-          usersData = await usersRes.json();
-        } else {
-          const fallbackRes = await fetch(`${API_BASE_URL}/users`, { headers: { ...authHeaders } });
-          usersData = await fallbackRes.json();
-        }
-        const evalData = await evalRes.json();
+        const readUsers = async (res: Response | null) => {
+          if (!res) return [];
+          if (!res.ok) return [];
+          const body = await res.json().catch(() => []);
+          if (Array.isArray(body)) return body;
+          if (Array.isArray((body as any)?.data)) return (body as any).data;
+          if (Array.isArray((body as any)?.users)) return (body as any).users;
+          if (Array.isArray((body as any)?.students)) return (body as any).students;
+          return [];
+        };
+
+        const allUsers = await readUsers(allUsersRes);
+        const teacherUsers = await readUsers(teacherUsersRes);
+        const usersData = (teacherUsers.length > 0 ? teacherUsers : allUsers) as any[];
+
+        const evalBody = await evalRes.json().catch(() => []);
+        const evalData = Array.isArray(evalBody) ? evalBody : Array.isArray((evalBody as any)?.data) ? (evalBody as any).data : [];
         const criteriaData = await criteriaRes.json().catch(() => ({}));
 
-        if (Array.isArray(usersData)) {
-          const mappedStudents: StudentData[] = usersData
-            .filter((u: any) => String(u.role || '').toLowerCase() === 'student')
-            .map((u: any) => ({
-              id: Number(u.id),
-              name: toDisplayName(u),
-              email: String(u.email || '').trim(),
-              student_id: String(u.student_id || u.resolved_student_id || '').trim() || `STU-${u.id}`,
-              className: String(u.class || '').trim(),
-              generation: u.generation ? String(u.generation) : undefined,
-              gender: normalizeGender(u.gender),
-            }));
+        const mappedStudents: StudentData[] = Array.isArray(usersData)
+          ? usersData
+              .filter((u: any) => {
+                const role = String(u.role || '').toLowerCase();
+                const hasStudentId = Boolean(u.student_id || u.resolved_student_id);
+                return role === 'student' || (!role && hasStudentId);
+              })
+              .map((u: any) => ({
+                id: Number(u.id),
+                name: toDisplayName(u),
+                email: String(u.email || '').trim(),
+                student_id: String(u.student_id || u.resolved_student_id || '').trim() || `STU-${u.id}`,
+                className: String(u.class || '').trim(),
+                generation: u.generation ? String(u.generation) : undefined,
+                gender: normalizeGender(u.gender),
+              }))
+          : [];
 
-          setStudents(mappedStudents);
-        }
-
-        if (Array.isArray(evalData)) {
-          setEvaluations(evalData);
-        }
+        setStudents(mappedStudents);
+        setEvaluations(evalData);
 
         const activeCriteria = Array.isArray(criteriaData?.criteria)
           ? criteriaData.criteria.filter((c: any) => String(c.status || '').toLowerCase() === 'active')

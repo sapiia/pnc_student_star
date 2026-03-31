@@ -41,28 +41,39 @@ export default function TeacherAttentionStudentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
+  const [loadError, setLoadError] = useState('');
   const { teacherId } = useTeacherIdentity();
   const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
   const loadDashboardData = useCallback(async () => {
-    if (!teacherId) {
-      setStudents([]);
-      setIsLoading(false);
-      return;
-    }
     setIsLoading(true);
+    setLoadError('');
     try {
-      const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
-        fetch(`${API_BASE_URL}/evaluations`)
+      const fetchOptions: RequestInit = { credentials: 'include' };
+
+      const [allUsersRes, teacherUsersRes, evaluationsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/users`, fetchOptions),
+        teacherId ? fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`, fetchOptions) : Promise.resolve(null),
+        fetch(`${API_BASE_URL}/evaluations`, fetchOptions)
       ]);
 
-      let usersData = [];
-      if (usersResponse.ok) {
-        usersData = await usersResponse.json().catch(() => []);
-      } else {
-        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
-        usersData = await fallbackResponse.json().catch(() => []);
+      const readUsers = async (res: Response | null) => {
+        if (!res) return [];
+        if (!res.ok) return [];
+        const body = await res.json().catch(() => []);
+        if (Array.isArray(body)) return body;
+        if (Array.isArray((body as any)?.data)) return (body as any).data;
+        if (Array.isArray((body as any)?.users)) return (body as any).users;
+        if (Array.isArray((body as any)?.students)) return (body as any).students;
+        return [];
+      };
+
+      const allUsers = await readUsers(allUsersRes);
+      const teacherUsers = await readUsers(teacherUsersRes);
+      const usersData = (teacherUsers.length > 0 ? teacherUsers : allUsers) as any[];
+
+      if (!usersData || usersData.length === 0) {
+        throw new Error('No students returned from the server.');
       }
 
       const evaluationsData = evaluationsResponse.ok
@@ -72,7 +83,11 @@ export default function TeacherAttentionStudentsPage() {
       const studentIdSet = new Set(
         Array.isArray(usersData)
           ? usersData
-              .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+              .filter((user) => {
+                const role = String(user.role || '').trim().toLowerCase();
+                const hasStudentId = Boolean(user.student_id || user.resolved_student_id);
+                return role === 'student' || (!role && hasStudentId);
+              })
               .map((user) => Number(user.id))
               .filter((id) => Number.isInteger(id) && id > 0)
           : []
@@ -97,7 +112,11 @@ export default function TeacherAttentionStudentsPage() {
 
       const mappedStudents: StudentData[] = Array.isArray(usersData)
         ? (usersData as any[])
-            .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+            .filter((user) => {
+              const role = String(user.role || '').trim().toLowerCase();
+              const hasStudentId = Boolean(user.student_id || user.resolved_student_id);
+              return role === 'student' || (!role && hasStudentId);
+            })
             .map((user) => {
               const latestEvaluation = latestEvaluationByUser.get(Number(user.id)) || null;
               const averageScore = latestEvaluation && Number.isFinite(Number(latestEvaluation.average_score))
@@ -131,6 +150,12 @@ export default function TeacherAttentionStudentsPage() {
       setStudents(mappedStudents);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      setLoadError(
+        error instanceof Error
+          ? error.message || 'Unable to load students needing attention.'
+          : 'Unable to load students needing attention.'
+      );
+      setStudents([]);
     } finally {
       setIsLoading(false);
     }
@@ -167,6 +192,21 @@ export default function TeacherAttentionStudentsPage() {
           <p className="text-[10px] md:text-xs text-slate-500 font-bold truncate">Students requiring immediate support.</p>
         </div>
       </div>
+
+      {loadError && (
+        <div className="mx-4 md:mx-8 mt-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium px-4 py-3 rounded-xl shadow-sm flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>{loadError}</span>
+          </div>
+          <button
+            onClick={() => void loadDashboardData()}
+            className="text-xs font-bold text-rose-600 hover:text-rose-700 underline underline-offset-4"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-2 md:gap-4 ml-2">
         <div className="relative flex-1 sm:flex-none hidden sm:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

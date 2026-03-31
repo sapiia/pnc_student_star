@@ -9,9 +9,26 @@ export const resolveAvatarUrl = (
 ): string => {
   const raw = String(value || "").trim();
   if (!raw) return fallback;
-  if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
-    return raw;
+
+  // If absolute URL but points to localhost, rewrite to production origin to avoid mixed content
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const isLocal =
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1' ||
+        url.hostname.endsWith('.local');
+      if (isLocal) {
+        const normalizedPath = url.pathname.startsWith('/') ? url.pathname : `/${url.pathname}`;
+        return `${API_ORIGIN}${normalizedPath}`;
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
   }
+
+  // Relative path
   const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
   return `${API_ORIGIN}${normalizedPath}`;
 };

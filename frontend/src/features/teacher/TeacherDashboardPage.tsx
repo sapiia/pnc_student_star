@@ -60,28 +60,39 @@ export default function TeacherDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [students, setStudents] = useState<StudentData[]>([]);
   const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState<string>('');
   const { teacherId } = useTeacherIdentity();
   const { unreadCount: unreadNotificationCount } = useTeacherNotifications(teacherId);
 
-  const loadDashboardData = useCallback(async () => {
-    if (!teacherId) {
-      setStudents([]);
-      setIsLoading(false);
-      return;
-    }
+  const loadDashboardData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
+    setLoadError('');
     try {
-      const [usersResponse, evaluationsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`),
-        fetch(`${API_BASE_URL}/evaluations`)
+      const fetchOptions: RequestInit = { signal, credentials: 'include' };
+
+      const [allUsersRes, teacherUsersRes, evaluationsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/users`, fetchOptions),
+        teacherId ? fetch(`${API_BASE_URL}/users/teachers/students/${teacherId}`, fetchOptions) : Promise.resolve(null),
+        fetch(`${API_BASE_URL}/evaluations`, fetchOptions)
       ]);
 
-      let usersData = [];
-      if (usersResponse.ok) {
-        usersData = await usersResponse.json().catch(() => []);
-      } else {
-        const fallbackResponse = await fetch(`${API_BASE_URL}/users`);
-        usersData = await fallbackResponse.json().catch(() => []);
+      const readUsers = async (res: Response | null) => {
+        if (!res) return [];
+        if (!res.ok) return [];
+        const body = await res.json().catch(() => []);
+        if (Array.isArray(body)) return body;
+        if (Array.isArray((body as any)?.data)) return (body as any).data;
+        if (Array.isArray((body as any)?.users)) return (body as any).users;
+        if (Array.isArray((body as any)?.students)) return (body as any).students;
+        return [];
+      };
+
+      const allUsers = await readUsers(allUsersRes);
+      const teacherUsers = await readUsers(teacherUsersRes);
+      const usersData = (teacherUsers.length > 0 ? teacherUsers : allUsers) as any[];
+
+      if (!usersData || usersData.length === 0) {
+        throw new Error('No students returned from the server.');
       }
 
       const evaluationsData = evaluationsResponse.ok
@@ -92,7 +103,11 @@ export default function TeacherDashboardPage() {
       const studentIdSet = new Set(
         Array.isArray(usersData)
           ? usersData
-              .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+              .filter((user) => {
+                const role = String(user.role || '').trim().toLowerCase();
+                const hasStudentId = Boolean(user.student_id || user.resolved_student_id);
+                return role === 'student' || (!role && hasStudentId);
+              })
               .map((user) => Number(user.id))
               .filter((id) => Number.isInteger(id) && id > 0)
           : []
@@ -117,7 +132,11 @@ export default function TeacherDashboardPage() {
 
       const mappedStudents: StudentData[] = Array.isArray(usersData)
         ? (usersData as any[])
-            .filter((user) => String(user.role || '').trim().toLowerCase() === 'student')
+            .filter((user) => {
+              const role = String(user.role || '').trim().toLowerCase();
+              const hasStudentId = Boolean(user.student_id || user.resolved_student_id);
+              return role === 'student' || (!role && hasStudentId);
+            })
             .map((user) => {
               const latestEvaluation = latestEvaluationByUser.get(Number(user.id)) || null;
               const averageScore = latestEvaluation && Number.isFinite(Number(latestEvaluation.average_score))
@@ -147,14 +166,24 @@ export default function TeacherDashboardPage() {
 
       setStudents(mappedStudents);
     } catch (error) {
+      if ((error as any)?.name === 'AbortError') return;
       console.error('Failed to load dashboard data:', error);
+      setLoadError(
+        error instanceof Error
+          ? error.message || 'Unable to load dashboard data.'
+          : 'Unable to load dashboard data.'
+      );
+      setStudents([]);
+      setEvaluations([]);
     } finally {
       setIsLoading(false);
     }
   }, [teacherId]);
 
   useEffect(() => {
-    void loadDashboardData();
+    const controller = new AbortController();
+    void loadDashboardData(controller.signal);
+    return () => controller.abort();
   }, [loadDashboardData]);
 
   const gens = useMemo(
@@ -229,14 +258,20 @@ export default function TeacherDashboardPage() {
       filteredStudentIds.has(Number(evaluation.user_id))
     );
 
-    const avgScore = scopedEvaluations.length > 0
+    const avgScoreFromEvaluations = scopedEvaluations.length > 0
       ? scopedEvaluations.reduce((sum, evaluation) => sum + Number(evaluation.average_score || 0), 0) / scopedEvaluations.length
-      : 0;
+      : null;
+
+    const ratedStudents = filteredStudents.filter(s => s.rating !== null);
+    const avgScoreFromStudents = ratedStudents.length > 0
+      ? ratedStudents.reduce((sum, s) => sum + Number(s.rating || 0), 0) / ratedStudents.length
+      : null;
+
+    const avgScore = avgScoreFromEvaluations ?? avgScoreFromStudents ?? 0;
 
     const evaluatedStudents = new Set(scopedEvaluations.map((evaluation) => Number(evaluation.user_id))).size;
     const evalRate = filteredStudents.length > 0 ? (evaluatedStudents / filteredStudents.length) * 100 : 0;
 
-    const ratedStudents = filteredStudents.filter(s => s.rating !== null);
     const needsAttentionCount = ratedStudents.filter(s => (s.rating as number) < 2.5).length;
 
     return [
@@ -273,6 +308,21 @@ export default function TeacherDashboardPage() {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="space-y-6 md:space-y-8 max-w-[1600px] mx-auto">
+            {loadError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium px-4 py-3 rounded-xl shadow-sm flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>{loadError}</span>
+                </div>
+                <button
+                  onClick={() => void loadDashboardData()}
+                  className="text-xs font-bold text-rose-600 hover:text-rose-700 underline underline-offset-4"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
             {/* Stats Grid */}
             <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4 lg:gap-6">
               {isLoading ? (
@@ -373,7 +423,7 @@ export default function TeacherDashboardPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col leading-tight">
-                              <span className="text-xs font-bold text-slate-900">{student.generation || '—'}</span>
+                              <span className="text-xs font-bold text-slate-900">{student.generation || '--'}</span>
                               <span className="text-[10px] text-slate-500">{student.class || 'Unassigned'}</span>
                             </div>
                           </td>
