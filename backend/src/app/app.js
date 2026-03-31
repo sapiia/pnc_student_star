@@ -14,16 +14,35 @@ const {
 
 const app = express();
 
-const allowedOrigins = [
+const allowedOrigins = new Set([
   process.env.FRONTEND_URL || 'http://localhost:3000',
-  'https://pnc-student-star.vercel.app'
-];
+  'https://pnc-student-star.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+]);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    // Allow any vercel.app preview for this project
+    if (url.hostname.endsWith('.vercel.app')) return true;
+    return false;
+  } catch (_err) {
+    return false;
+  }
+};
+
+// Respect X-Forwarded-* headers when running behind Render/other proxies
+// so req.protocol reflects the original HTTPS request and generated URLs stay secure.
+app.set('trust proxy', 1);
 
 // Middleware to parse JSON bodies and form data
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true

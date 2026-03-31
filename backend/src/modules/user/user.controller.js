@@ -12,12 +12,52 @@ const { emitNotificationEvent } = require('../../app/realtime');
 const { uploadsDir } = require('../../config/paths');
 
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL
+  || (process.env.NODE_ENV === 'production'
+    ? 'https://pnc-student-star.vercel.app'
+    : 'http://localhost:3000');
+const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || process.env.API_BASE_URL || process.env.APP_URL || '').toString().trim();
 const INVITE_SECRET = process.env.INVITE_SECRET || 'change-this-invite-secret';
 const INVITE_EXPIRES_HOURS = Number(process.env.INVITE_EXPIRES_HOURS || 72);
 const ADMIN_INVITER_EMAIL = process.env.ADMIN_INVITER_EMAIL || 'moeurnsophy55@gmail.com';
+const FORCE_HTTPS_HOSTS = ['pnc-student-star.onrender.com'];
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
+
+const getRequestProtocol = (req) => {
+  const forwardedProto = (req?.headers?.['x-forwarded-proto'] || '').toString().split(',')[0].trim();
+  if (forwardedProto) return forwardedProto;
+  return (req?.protocol || 'http').replace(':', '');
+};
+
+const buildPublicUrl = (req, relativePath = '') => {
+  const baseFromEnv = PUBLIC_API_URL ? PUBLIC_API_URL.replace(/\/+$/, '') : '';
+  const host = req?.get ? (req.get('host') || '') : '';
+  const fallbackBase = host ? `${getRequestProtocol(req)}://${host}` : '';
+  const baseUrl = baseFromEnv || fallbackBase;
+  return `${baseUrl}${relativePath}`;
+};
+
+const ensureHttpsProfileImage = (urlString = '') => {
+  const raw = (urlString || '').toString().trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw, PUBLIC_API_URL || undefined);
+    if (FORCE_HTTPS_HOSTS.includes(parsed.hostname.toLowerCase()) && parsed.protocol === 'http:') {
+      parsed.protocol = 'https:';
+    }
+    return parsed.toString();
+  } catch (_err) {
+    for (const host of FORCE_HTTPS_HOSTS) {
+      const pattern = new RegExp(`^http://${host.replace(/\./g, '\\.')}`, 'i');
+      if (pattern.test(raw)) {
+        return raw.replace(/^http:/i, 'https:');
+      }
+    }
+    return raw;
+  }
+};
 
 const resolveProfileImageFilePath = (profileImageUrl = '') => {
   const rawValue = (profileImageUrl || '').toString().trim();
@@ -103,8 +143,11 @@ const normalizeUserStatusForResponse = (userRow = {}, columns = new Set()) => {
         ? 'inactive'
         : 'active';
 
+  const normalizedProfileImage = ensureHttpsProfileImage(userRow.profile_image);
+
   return {
     ...userRow,
+    profile_image: normalizedProfileImage,
     is_disable: isDisabled ? 1 : 0,
     is_deleted: isDeleted ? 1 : 0,
     is_registered: isRegistered ? 1 : 0,
@@ -315,7 +358,8 @@ const createEmailTransporter = () => {
     SMTP_PORT = '587',
     SMTP_USER,
     SMTP_PASS,
-    SMTP_SECURE = 'false'
+    SMTP_SECURE = 'false',
+    SMTP_TIMEOUT_MS = '10000'
   } = process.env;
 
   if (!SMTP_USER || !SMTP_PASS) {
@@ -330,6 +374,9 @@ const createEmailTransporter = () => {
       host: SMTP_HOST,
       port: Number(SMTP_PORT),
       secure: SMTP_SECURE === 'true',
+      connectionTimeout: Number(SMTP_TIMEOUT_MS) || 10000,
+      greetingTimeout: Number(SMTP_TIMEOUT_MS) || 10000,
+      socketTimeout: Number(SMTP_TIMEOUT_MS) || 12000,
       // Force IPv4 to avoid ENETUNREACH on hosts that block IPv6 (common on cloud PaaS)
       family: 4,
       tls: { family: 4 },
@@ -617,7 +664,10 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
   console.log('Sending invite for user:', inviteInput.email, 'Options:', options);
 
   const normalizedInvite = normalizeInviteInput(inviteInput || {});
-  const queryExecutor = options.queryExecutor || db;
+  // Use a dedicated transaction when none is provided so we can roll back the insert if email sending fails.
+  const managedConnection = !options.queryExecutor ? await db.getConnection() : null;
+  const queryExecutor = options.queryExecutor || managedConnection;
+
   const [existingUsers] = await queryExecutor.query("SELECT * FROM users WHERE email = ? LIMIT 1", [normalizedInvite.email]);
   if (existingUsers.length > 0) {
     const existingName = getDisplayNameFromUserRow(existingUsers[0] || {})
@@ -657,30 +707,61 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
   }
   const artifacts = await buildInviteArtifacts(normalizedInvite);
 
-  await insertUserFlexible({
-    fullName: normalizedInvite.name,
-    email: normalizedInvite.email,
-    hashedPassword: artifacts.hashedTempPassword,
-    role: normalizedInvite.role,
-    classValue: artifacts.classForUser,
-    studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
-    gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
-    major: normalizedInvite.role === 'student' ? normalizedInvite.major || null : null,
-    generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
-    isRegistered: false,
-    queryExecutor
-  });
+  let insertedUserId = null;
+  const shouldManageTransaction = Boolean(managedConnection);
+  try {
+    if (shouldManageTransaction) {
+      await managedConnection.beginTransaction();
+    }
 
-  if (isConfigured && transporter && !options.skipSendEmail) {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
-      replyTo: ADMIN_INVITER_EMAIL,
-      to: artifacts.emailMessage.to,
-      subject: artifacts.emailMessage.subject,
-      text: artifacts.emailMessage.text,
-      html: artifacts.emailMessage.html,
-      attachments: artifacts.emailMessage.attachments
+    const insertResult = await insertUserFlexible({
+      fullName: normalizedInvite.name,
+      email: normalizedInvite.email,
+      hashedPassword: artifacts.hashedTempPassword,
+      role: normalizedInvite.role,
+      classValue: artifacts.classForUser,
+      studentIdValue: normalizedInvite.role === 'student' ? normalizedInvite.studentId || null : null,
+      gender: ['male', 'female'].includes(normalizedInvite.gender) ? normalizedInvite.gender : undefined,
+      major: normalizedInvite.role === 'student' ? normalizedInvite.major || null : null,
+      generation: normalizedInvite.role === 'student' ? normalizedInvite.generation || null : null,
+      isRegistered: false,
+      queryExecutor
     });
+    insertedUserId = insertResult?.insertId || null;
+
+    if (isConfigured && transporter && !options.skipSendEmail) {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
+        replyTo: ADMIN_INVITER_EMAIL,
+        to: artifacts.emailMessage.to,
+        subject: artifacts.emailMessage.subject,
+        text: artifacts.emailMessage.text,
+        html: artifacts.emailMessage.html,
+        attachments: artifacts.emailMessage.attachments
+      });
+    }
+
+    if (shouldManageTransaction) {
+      await managedConnection.commit();
+    }
+  } catch (err) {
+    if (shouldManageTransaction) {
+      await managedConnection.rollback().catch((rollbackErr) => {
+        console.warn('Rollback failed after invite error:', rollbackErr?.message || rollbackErr);
+      });
+    } else if (insertedUserId) {
+      // Best-effort cleanup when using caller-provided executor without transaction.
+      queryExecutor.query("DELETE FROM users WHERE id = ?", [insertedUserId]).catch((deleteErr) => {
+        console.warn('Failed to roll back user after email error (no transaction):', deleteErr?.message || deleteErr);
+      });
+    }
+    const emailError = createHttpError(502, err?.message || 'Failed to send invite email.');
+    emailError.cause = err;
+    throw emailError;
+  } finally {
+    if (managedConnection) {
+      managedConnection.release();
+    }
   }
 
   return {
@@ -1396,7 +1477,7 @@ const completeInviteRegistration = async (req, res) => {
         id: user.id,
         name: responseName,
         email: user.email,
-        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        profile_image: columns.has('profile_image') ? ensureHttpsProfileImage(user.profile_image) : null,
         role: normalizedRole,
         class: user.class,
         student_id: user.student_id || null,
@@ -1445,7 +1526,7 @@ const getUserProfile = async (req, res) => {
       first_name: (user.first_name || '').toString().trim() || null,
       last_name: (user.last_name || '').toString().trim() || null,
       email: user.email,
-      profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+      profile_image: columns.has('profile_image') ? ensureHttpsProfileImage(user.profile_image) : null,
       role: normalizeRole(user.role),
       department: (user.department || '').toString().trim(),
       student_id: hasStudentId ? ((user.student_id || user.resolved_student_id || '') || null) : null,
@@ -1477,6 +1558,7 @@ const updateUserProfile = async (req, res) => {
   const profileImageInput = hasProfileImageInput
     ? (req.body.profile_image || '').toString().trim()
     : null;
+  const normalizedProfileImageInput = hasProfileImageInput ? ensureHttpsProfileImage(profileImageInput) : null;
   const department = (req.body.department || '').toString().trim();
 
   if (!fullName) {
@@ -1533,7 +1615,7 @@ const updateUserProfile = async (req, res) => {
 
     if (columns.has('profile_image') && hasProfileImageInput) {
       updates.push('profile_image = ?');
-      values.push(profileImageInput || null);
+      values.push(normalizedProfileImageInput || null);
     }
 
     values.push(userId);
@@ -1571,7 +1653,7 @@ const updateUserProfile = async (req, res) => {
         first_name: (user.first_name || '').toString().trim() || null,
         last_name: (user.last_name || '').toString().trim() || null,
         email: user.email,
-        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        profile_image: columns.has('profile_image') ? ensureHttpsProfileImage(user.profile_image) : null,
         role: normalizeRole(user.role),
         department: (user.department || '').toString().trim(),
         student_id: columns.has('student_id') ? ((user.student_id || user.resolved_student_id || '') || null) : null,
@@ -1619,7 +1701,7 @@ const updateUserProfileImage = async (req, res) => {
     const previousProfileImagePath = resolveProfileImageFilePath(previousProfileImage);
 
     const relativePath = `/uploads/profiles/${req.file.filename}`;
-    const publicUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
+    const publicUrl = ensureHttpsProfileImage(buildPublicUrl(req, relativePath));
 
     await db.query(
       "UPDATE users SET profile_image = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
@@ -1645,7 +1727,7 @@ const updateUserProfileImage = async (req, res) => {
         name: getDisplayNameFromUserRow(user) || user.email,
         email: user.email,
         role: normalizeRole(user.role),
-        profile_image: (user.profile_image || '').toString().trim() || null,
+        profile_image: ensureHttpsProfileImage(user.profile_image),
         student_id: columns.has('student_id') ? (user.student_id || null) : null,
         updated_at: user.updated_at
       }
@@ -1774,7 +1856,7 @@ const loginUser = async (req, res) => {
         id: user.id,
         name: resolvedName,
         email: user.email,
-        profile_image: columns.has('profile_image') ? ((user.profile_image || '').toString().trim() || null) : null,
+        profile_image: columns.has('profile_image') ? ensureHttpsProfileImage(user.profile_image) : null,
         role: normalizedRole,
         class: user.class,
         student_id: user.student_id || null,
