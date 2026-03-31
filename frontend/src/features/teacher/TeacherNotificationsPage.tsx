@@ -22,6 +22,18 @@ import { mapApiNotifications, type MappedNotification } from '../../lib/notifica
 type NotificationType = 'message' | 'system' | 'alert';
 type Notification = MappedNotification;
 
+const cardSpring = { type: 'spring', stiffness: 200, damping: 24, mass: 1 };
+const fadeSlide = { opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } };
+const listVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.05, delayChildren: 0.02 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { ...cardSpring } },
+  exit: { opacity: 0, y: -12, transition: { duration: 0.18, ease: 'easeOut' } },
+};
+
 let cachedNotifications: Notification[] | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -182,7 +194,12 @@ export default function TeacherNotificationsPage() {
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
       <TeacherSidebar />
       
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <motion.main 
+        className="flex-1 flex flex-col overflow-hidden"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      >
         {renderTopBar()}
 
         <div className="flex-1 overflow-y-auto p-8">
@@ -233,36 +250,52 @@ export default function TeacherNotificationsPage() {
 
             {/* Notifications List */}
             <div className="space-y-3">
-              {isLoading && (
-                <div className="space-y-3">
-                  {[1,2,3].map((i) => (
-                    <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200 animate-pulse">
-                      <div className="flex items-center gap-3">
-                        <div className="size-12 rounded-full bg-slate-200" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-3 bg-slate-200 rounded w-1/3" />
-                          <div className="h-3 bg-slate-100 rounded w-2/3" />
+              <AnimatePresence mode="sync">
+                {isLoading && (
+                  <motion.div
+                    key="loading"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={fadeSlide}
+                    exit={{ opacity: 0, y: -12, transition: { duration: 0.2 } }}
+                    className="space-y-3"
+                  >
+                    {[1,2,3].map((i) => (
+                      <div key={i} className="bg-white p-4 rounded-2xl border border-slate-200 animate-pulse">
+                        <div className="flex items-center gap-3">
+                          <div className="size-12 rounded-full bg-slate-200" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-3 bg-slate-200 rounded w-1/3" />
+                            <div className="h-3 bg-slate-100 rounded w-2/3" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              {error && (
-                <div className="bg-rose-50 border border-rose-100 text-rose-700 text-sm font-bold rounded-2xl p-4">
-                  {error}
-                </div>
-              )}
+              <AnimatePresence mode="sync">
+                {error && !isLoading && (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={fadeSlide}
+                    exit={{ opacity: 0, y: -12, transition: { duration: 0.2 } }}
+                    className="bg-rose-50 border border-rose-100 text-rose-700 text-sm font-bold rounded-2xl p-4"
+                  >
+                    {error}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="sync">
                 {filteredNotifications.map((notification) => (
                   <motion.div
                     key={notification.id}
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
+                    variants={itemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
                     className={cn(
                       "bg-white p-4 rounded-2xl border transition-all group relative",
                       notification.isRead ? "border-slate-200 opacity-75" : "border-primary/20 shadow-sm ring-1 ring-primary/5"
@@ -359,19 +392,27 @@ export default function TeacherNotificationsPage() {
                 ))}
               </AnimatePresence>
 
-              {filteredNotifications.length === 0 && (
-                <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-                  <div className="size-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Bell className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900">No notifications</h3>
-                  <p className="text-slate-500 text-sm mt-1">You're all caught up! Check back later for updates.</p>
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {filteredNotifications.length === 0 && !isLoading && !error && (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={fadeSlide}
+                    exit={{ opacity: 0, y: -12, transition: { duration: 0.2 } }}
+                    className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center"
+                  >
+                    <div className="size-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Bell className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900">No notifications</h3>
+                    <p className="text-slate-500 text-sm mt-1">You're all caught up! Check back later for updates.</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
-      </main>
+      </motion.main>
     </div>
   );
 }

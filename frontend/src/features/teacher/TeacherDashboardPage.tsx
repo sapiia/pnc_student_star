@@ -461,7 +461,13 @@ export default function TeacherDashboardPage() {
                                 Profile
                               </button>
                               <button 
-                                onClick={() => navigate(`/teacher/messages?contactId=${student.id}`)}
+                                onClick={() => {
+                                  const params = new URLSearchParams({ contactId: String(student.id) });
+                                  navigate(
+                                    { pathname: '/teacher/messages', search: `?${params.toString()}` },
+                                    { state: { selectedContactId: student.id, selectedContactName: student.name, isMobileChatOpen: true } }
+                                  );
+                                }}
                                 className={cn(
                                   "inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white rounded-lg shadow-sm transition-all active:scale-95",
                                   student.status === 'Action Needed' ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-800 hover:bg-slate-900"

@@ -395,7 +395,14 @@ export default function TeacherStudentListPage() {
                     setIsPerformanceOpen(true);
                   }}
                   onViewProfile={(studentId) => navigate(`/teacher/students/${studentId}`)}
-                  onMessageStudent={(studentId) => navigate('/teacher/messages', { state: { selectedContactId: studentId } })}
+                  onMessageStudent={(studentId) => {
+                    const params = new URLSearchParams({ contactId: String(studentId) });
+                    const selectedStudent = students.find((s) => s.id === studentId);
+                    navigate(
+                      { pathname: '/teacher/messages', search: `?${params.toString()}` },
+                      { state: { selectedContactId: studentId, selectedContactName: selectedStudent?.name, isMobileChatOpen: true } }
+                    );
+                  }}
                 />
               </div>
 
