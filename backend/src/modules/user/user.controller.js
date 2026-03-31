@@ -652,6 +652,9 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
 
   const transportInfo = options.transportInfo || createEmailTransporter();
   const { transporter, isConfigured } = transportInfo;
+  if (!isConfigured && !options.skipSendEmail) {
+    throw createHttpError(503, 'Email delivery is not configured on the server. Please set SMTP_USER and SMTP_PASS (and related SMTP_*) environment variables.');
+  }
   const artifacts = await buildInviteArtifacts(normalizedInvite);
 
   await insertUserFlexible({
@@ -1033,6 +1036,10 @@ const commitBulkInviteRows = async (rows) => {
 
   const connection = await db.getConnection();
   const transportInfo = createEmailTransporter();
+  if (!transportInfo.isConfigured) {
+    connection.release();
+    throw createHttpError(503, 'Email delivery is not configured on the server. Please set SMTP_USER and SMTP_PASS (and related SMTP_*) environment variables before sending invites.');
+  }
   const invited = [];
   const errors = [];
   const skippedExistingUsers = [];
@@ -2157,34 +2164,168 @@ const hardDeleteAllUsers = async (req, res) => {
   }
 };
 
+// Normalize class strings (mirrors frontend cleanClassInput)
+const normalizeClassForComparison = (value = '', generationHint = '') => {
+  const raw = (value ?? '').toString();
+  let result = raw.trim();
+  const gen = generationHint.toString().trim();
+  if (gen) {
+    const genToken = new RegExp(`\\b(gen\\s*)?${gen}\\b`, 'gi');
+    result = result.replace(genToken, '');
+  }
+  result = result
+    .replace(/\s*-\s*/g, ' - ')
+    .replace(/(^\s*-\s*|\s*-\s*$)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return result.toUpperCase();
+};
+
+const extractGenerationFromClass = (classValue = '') => {
+  const normalized = (classValue ?? '').toString();
+  const match = normalized.match(/20\d{2}/);
+  return match ? match[0] : '';
+};
+
+const buildCanonicalClassName = (generation = '', normalizedClass = '') => {
+  const tokens = normalizedClass
+    .split('-')
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const major = tokens[0] ? tokens[0].replace(/^CLASS\s*/i, '') : '';
+  const section = tokens.length > 1
+    ? tokens[tokens.length - 1].replace(/^CLASS\s*/i, '')
+    : '';
+
+  if (!generation) {
+    return normalizedClass || null;
+  }
+
+  const parts = [`Gen ${generation}`];
+  if (major) parts.push(major);
+  if (section) parts.push(`Class ${section}`);
+  return parts.join(' - ');
+};
+
 // Update class name for all students in a class
 const updateClassNameForStudents = async (req, res) => {
   try {
-    const { oldClassName, newClassName } = req.body;
+    const { oldClassName, newClassName } = req.body || {};
 
     if (!oldClassName || !newClassName) {
       return res.status(400).json({ error: "Both oldClassName and newClassName are required." });
     }
 
-    if (oldClassName === newClassName) {
+    const generationFromNew = extractGenerationFromClass(newClassName);
+    const normalizedOld = normalizeClassForComparison(oldClassName, generationFromNew);
+    const normalizedNew = normalizeClassForComparison(newClassName, generationFromNew);
+
+    if (!normalizedNew) {
+      return res.status(400).json({ error: "New class name cannot be empty." });
+    }
+    if (normalizedOld === normalizedNew) {
       return res.status(400).json({ error: "New class name must be different from the old class name." });
     }
 
-    // Update all users with the old class name
+    const columns = await getUsersTableColumns();
+    const hasIsDeleted = columns.has('is_deleted');
+
+    // Fetch candidate students and match by normalized value to avoid format mismatch between UI and DB
+    const whereClauses = ["role = 'student'"];
+    const whereParams = [];
+    if (hasIsDeleted) {
+      whereClauses.push("(is_deleted IS NULL OR is_deleted = 0)");
+    }
+    const [rows] = await db.query(
+      `SELECT id, class FROM users WHERE ${whereClauses.join(' AND ')}`,
+      whereParams
+    );
+
+    const matchedIds = [];
+    let generationResolved = generationFromNew;
+
+    rows.forEach((row) => {
+      const rowGeneration = extractGenerationFromClass(row.class);
+      const normalizedRowClass = normalizeClassForComparison(row.class, generationFromNew || rowGeneration);
+      if (normalizedRowClass === normalizedOld) {
+        matchedIds.push(row.id);
+        if (!generationResolved && rowGeneration) {
+          generationResolved = rowGeneration;
+        }
+      }
+    });
+
+    if (matchedIds.length === 0) {
+      return res.status(404).json({ error: "No students found matching the current class name." });
+    }
+
+    const canonicalNewClass = buildCanonicalClassName(generationResolved, normalizedNew);
+    if (!canonicalNewClass) {
+      return res.status(400).json({ error: "Unable to build a valid class name from the provided value." });
+    }
+
+    const placeholders = matchedIds.map(() => '?').join(', ');
     const [result] = await db.query(
-      "UPDATE users SET class = ?, updated_at = CURRENT_TIMESTAMP() WHERE class = ? AND role = 'student'",
-      [newClassName, oldClassName]
+      `UPDATE users SET class = ?, updated_at = CURRENT_TIMESTAMP() WHERE id IN (${placeholders})`,
+      [canonicalNewClass, ...matchedIds]
     );
 
     return res.json({
-      message: `Class name updated successfully.`,
+      message: "Class name updated successfully.",
       affectedRows: result.affectedRows,
       oldClassName,
-      newClassName
+      newClassName: canonicalNewClass
     });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message || "Failed to update class name." });
+  }
+};
+
+// Update a single student's class
+const updateStudentClass = async (req, res) => {
+  try {
+    const studentId = Number(req.params.id);
+    const { newClassName, generation } = req.body || {};
+
+    if (!Number.isInteger(studentId) || studentId <= 0) {
+      return res.status(400).json({ error: "Invalid student id." });
+    }
+    if (!newClassName) {
+      return res.status(400).json({ error: "newClassName is required." });
+    }
+
+    const [rows] = await db.query("SELECT id, role, class FROM users WHERE id = ? LIMIT 1", [studentId]);
+    if (!rows.length) {
+      return res.status(404).json({ error: "User not found." });
+    }
+    if (normalizeRole(rows[0].role) !== 'student') {
+      return res.status(400).json({ error: "Only students can be reassigned to a class." });
+    }
+
+    const generationHint = generation || extractGenerationFromClass(newClassName) || extractGenerationFromClass(rows[0].class);
+    const normalizedNew = normalizeClassForComparison(newClassName, generationHint);
+    if (!normalizedNew) {
+      return res.status(400).json({ error: "newClassName cannot be empty after normalization." });
+    }
+
+    const canonicalNewClass = buildCanonicalClassName(generationHint, normalizedNew) || normalizedNew;
+
+    const [result] = await db.query(
+      "UPDATE users SET class = ?, updated_at = CURRENT_TIMESTAMP() WHERE id = ?",
+      [canonicalNewClass, studentId]
+    );
+
+    return res.json({
+      message: "Student class updated successfully.",
+      affectedRows: result.affectedRows,
+      studentId,
+      newClassName: canonicalNewClass
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || "Failed to update student class." });
   }
 };
 
@@ -2214,5 +2355,6 @@ module.exports = {
   getTeacherClasses,
   getStudentsByClass,
   getTeacherStudents,
-  updateClassNameForStudents
+  updateClassNameForStudents,
+  updateStudentClass
 };

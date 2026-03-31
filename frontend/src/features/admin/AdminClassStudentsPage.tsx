@@ -114,6 +114,10 @@ export default function AdminClassStudentsPage() {
   const [isEditClassModalOpen, setIsEditClassModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+  const [classNavigation, setClassNavigation] = useState<{ generation: string; classes: string[] }[]>([]);
+  const [draggingStudentId, setDraggingStudentId] = useState<number | null>(null);
+  const [draggingStudentName, setDraggingStudentName] = useState<string>('');
+  const [hoverClassLabel, setHoverClassLabel] = useState<string>('');
 
   useEffect(() => {
     const loadCriteriaConfig = async () => {
@@ -129,6 +133,25 @@ export default function AdminClassStudentsPage() {
       }
     };
     loadCriteriaConfig();
+  }, []);
+
+  useEffect(() => {
+    const loadClassNavigation = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/reports/filters`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const classesByGeneration = data?.classesByGeneration || {};
+        const navItems = Object.entries(classesByGeneration).map(([genLabel, classList]: [string, any]) => ({
+          generation: genLabel,
+          classes: Array.isArray(classList) ? classList : []
+        }));
+        setClassNavigation(navItems);
+      } catch (err) {
+        console.error('Failed to load class navigation', err);
+      }
+    };
+    loadClassNavigation();
   }, []);
 
   useEffect(() => {
@@ -306,8 +329,8 @@ export default function AdminClassStudentsPage() {
         }
       }
 
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2500);
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 2500);
       setConfirmAction(null);
     } catch (err) {
       console.error(err);
@@ -404,6 +427,76 @@ export default function AdminClassStudentsPage() {
     s.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const buildRouteForClass = (genLabel: string, classLabel: string) => {
+    const genDigits = (genLabel.match(/\d{4}/) || [''])[0];
+    const normalized = cleanClassInput(classLabel, genDigits);
+    return {
+      generation: genDigits || genLabel.replace(/[^0-9]/g, '') || genLabel,
+      classPath: normalized
+    };
+  };
+
+  const handleStudentDragStart = (student: UserRecord) => {
+    setDraggingStudentId(student.id);
+    setDraggingStudentName(student.name);
+  };
+
+  const handleStudentDragEnd = () => {
+    setDraggingStudentId(null);
+    setDraggingStudentName('');
+  };
+
+  const handleDropOnClass = async (targetClassLabel: string) => {
+    if (!draggingStudentId) return;
+    const target = currentGenerationNav?.classes.find((c) => c === targetClassLabel);
+    if (!target) return;
+
+    const targetRoute = buildRouteForClass(decodedGeneration, targetClassLabel);
+    const isSameClass = targetRoute.classPath === normalizedClassParam && targetRoute.generation === decodedGeneration;
+    if (isSameClass) {
+      setDraggingStudentId(null);
+      return;
+    }
+
+    setIsActionSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${draggingStudentId}/class`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newClassName: targetClassLabel,
+          generation: decodedGeneration
+        })
+      });
+      if (res.ok) {
+        setStudents((prev) => prev.filter((s) => s.id !== draggingStudentId));
+        setSuccessMessage(`Moved ${draggingStudentName || 'student'} to ${targetClassLabel}`);
+        setToastType('success');
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 2500);
+      } else {
+        const error = await res.json();
+        alert(error.error || 'Failed to move student.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Communication error while moving student.');
+    } finally {
+      setIsActionSubmitting(false);
+      handleStudentDragEnd();
+      setHoverClassLabel('');
+    }
+  };
+
+  const currentGenerationNav = useMemo(() => {
+    if (!decodedGeneration) return null;
+    const target = classNavigation.find((item) => {
+      const genDigits = (item.generation.match(/\d{4}/) || [''])[0];
+      return genDigits === decodedGeneration;
+    });
+    return target || null;
+  }, [classNavigation, decodedGeneration]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <AdminSidebar />
@@ -453,6 +546,41 @@ export default function AdminClassStudentsPage() {
             </div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Class Student Performance</p>
           </div>
+
+          {currentGenerationNav && (
+            <div className="hidden md:flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {decodedGeneration}
+              </span>
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[520px]">
+                {currentGenerationNav.classes.map((cls) => {
+                  const { generation, classPath } = buildRouteForClass(decodedGeneration, cls);
+                  const isActive = generation === decodedGeneration && classPath === normalizedClassParam;
+                  return (
+                    <button
+                      key={`${currentGenerationNav.generation}-${cls}`}
+                      onClick={() => navigate(`/admin/students/${generation}/${encodeURIComponent(classPath)}`)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDragEnter={(e) => { e.preventDefault(); if (draggingStudentId) setHoverClassLabel(cls); }}
+                      onDragLeave={() => setHoverClassLabel('')}
+                      onDrop={(e) => { e.preventDefault(); handleDropOnClass(cls); }}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-bold border transition-colors whitespace-nowrap",
+                        isActive
+                          ? "bg-primary text-white border-primary"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-primary/40 hover:text-primary",
+                        draggingStudentId ? "outline outline-1 outline-dashed outline-primary/40" : "",
+                        hoverClassLabel === cls ? "bg-primary/10 border-primary text-primary" : ""
+                      )}
+                      title={`${currentGenerationNav.generation} - ${cls}`}
+                    >
+                      {cls}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <button className="p-2 text-slate-400 hover:text-primary transition-colors">
@@ -526,12 +654,16 @@ export default function AdminClassStudentsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredStudents.map((student) => (
-                        <tr 
-                          key={student.id} 
+                      <tr 
+                          key={student.id}
+                          draggable
+                          onDragStart={() => handleStudentDragStart(student)}
+                          onDragEnd={handleStudentDragEnd}
                           onClick={() => setSelectedStudent(student)}
                           className={cn(
                             "hover:bg-slate-50 transition-colors group cursor-pointer",
-                            selectedStudent?.id === student.id ? "bg-primary/5" : ""
+                            selectedStudent?.id === student.id ? "bg-primary/5" : "",
+                            draggingStudentId === student.id ? "opacity-60" : ""
                           )}
                         >
                           <td className="px-6 py-4">

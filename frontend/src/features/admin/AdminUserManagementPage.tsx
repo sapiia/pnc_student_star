@@ -195,6 +195,12 @@ const normalizeSelectedClass = (value: string, generation: string) => {
   return result || value.trim();
 };
 
+const extractSectionLetter = (value: string, generation: string) => {
+  const normalized = normalizeSelectedClass(value.toUpperCase(), generation);
+  const match = normalized.match(/([A-Z])$/);
+  return match ? match[1] : normalized;
+};
+
 const formatClassTemplate = (generation: string, major: string, className: string) => {
   const gen = String(generation || '').trim();
   const maj = String(major || '').trim().toUpperCase().replace(/\s+/g, ' ');
@@ -347,11 +353,11 @@ export default function AdminUserManagementPage() {
     const existing = filteredByGen
       .map(extractClassLabel)
       .filter(Boolean)
-      .map(normalizeClassLabel);
+      .map((value) => extractSectionLetter(value, newUser.generation));
     const custom = customClassOptions
       .map((value) => value.trim())
       .filter(Boolean)
-      .map(normalizeClassLabel);
+      .map((value) => extractSectionLetter(value, newUser.generation));
     const merged = Array.from(new Set([...existing, ...custom]));
     return merged.sort();
   }, [users, newUser.generation, customClassOptions]);

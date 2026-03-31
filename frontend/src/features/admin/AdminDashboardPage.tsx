@@ -489,6 +489,7 @@ export default function AdminDashboardPage() {
                   {studentStats && Object.keys(studentStats)
                     .filter(k => k !== 'total')
                     .map((key) => studentStats[key])
+                    .filter((gen: any) => gen.title !== 'Unknown Gen')
                     .filter((gen: any) => Number(gen.activeCount || 0) > 0)
                     .map((gen: any) => {
                     return (

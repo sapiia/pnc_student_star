@@ -30,7 +30,8 @@ const {
   getTeacherClasses,
   getStudentsByClass,
   getTeacherStudents,
-  updateClassNameForStudents
+  updateClassNameForStudents,
+  updateStudentClass
 } = require('./user.controller');
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -97,6 +98,9 @@ router.post('/invite/complete', completeInviteRegistration);
 
 // PUT /api/users/:id - Update user
 router.put('/:id', updateUser);
+
+// PATCH /api/users/:id/class - Update a single student's class
+router.patch('/:id/class', updateStudentClass);
 
 // PUT /api/users/:id/profile - Update profile for user
 router.put('/:id/profile', updateUserProfile);
