@@ -2010,6 +2010,23 @@ const hardDeleteUser = async (req, res) => {
     // Remove feedbacks where this user is teacher or student
     await db.query("DELETE FROM feedbacks WHERE teacher_id = ? OR student_id = ?", [userId, userId]);
 
+    // Remove any meeting schedules referencing this user (as student or staff)
+    try {
+      await db.query(
+        "DELETE FROM meeting_schedule WHERE student_id = ? OR education_officer_id = ? OR manager_id = ?",
+        [userId, userId, userId]
+      );
+    } catch (err) {
+      console.warn('Skipping meeting_schedule cleanup on hard delete:', err.message || err);
+    }
+
+    // Remove student profile rows linked to this user (if students table exists)
+    try {
+      await db.query("DELETE FROM students WHERE user_id = ?", [userId]);
+    } catch (err) {
+      console.warn('Skipping students cleanup on hard delete:', err.message || err);
+    }
+
     // Remove notifications for this user (best-effort; table may not exist in older schemas)
     try {
       await db.query("DELETE FROM notifications WHERE user_id = ?", [userId]);

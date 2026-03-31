@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Bell, 
   MessageSquare, 
@@ -40,6 +40,7 @@ const CACHE_TTL_MS = 2 * 60 * 1000;
 
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | 'any'>('any');
@@ -191,7 +192,13 @@ export default function TeacherNotificationsPage() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
+    <motion.div 
+      key={location.pathname}
+      className="flex h-screen overflow-hidden bg-slate-50 font-sans"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } }}
+      exit={{ opacity: 0, y: -12, transition: { duration: 0.25, ease: 'easeOut' } }}
+    >
       <TeacherSidebar />
       
       <motion.main 
@@ -413,6 +420,6 @@ export default function TeacherNotificationsPage() {
           </div>
         </div>
       </motion.main>
-    </div>
+    </motion.div>
   );
 }

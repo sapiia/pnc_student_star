@@ -735,31 +735,24 @@ export default function AdminReportsPage() {
             
 
             <nav className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto w-full md:w-auto">
-
-              {(['overview', 'students', 'teachers'] as const).map((tab) => (
-
+              {([
+                { key: 'overview', label: 'Overview' },
+                { key: 'students', label: 'Students' },
+                { key: 'teachers', label: 'Teachers' },
+              ] as const).map((tab) => (
                 <button
-
-                  key={tab}
-
-                  onClick={() => setActiveTab(tab)}
-
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
                   className={cn(
-
-                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-
-                    activeTab === tab ? "bg-white text-primary shadow-sm" : "text-slate-400 hover:text-slate-600"
-
+                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-[0.15em] transition-all whitespace-nowrap",
+                    activeTab === tab.key
+                      ? "bg-white text-primary shadow-md shadow-primary/15"
+                      : "text-slate-400 hover:text-slate-600"
                   )}
-
                 >
-
-                  {tab}
-
+                  {tab.label}
                 </button>
-
               ))}
-
             </nav>
 
           </div>
@@ -952,13 +945,11 @@ export default function AdminReportsPage() {
                       <div>
 
                         <h3 className="text-lg font-black text-slate-900">
-
-                          {selectedStudentId !== 'All' ? 'Individual Performance' : 
-
-                           selectedClass !== 'All' ? `Class ${selectedClass} Performance` :
-
-                           selectedGen !== 'All' ? `${selectedGen} Performance` : 'Overall Student Performance'}
-
+                          {selectedClass !== 'All'
+                            ? `Class ${selectedClass} Performance`
+                            : selectedGen !== 'All'
+                              ? `${selectedGen} Performance`
+                              : 'Overall Student Performance'}
                         </h3>
 
                         <p className="text-xs text-slate-500 font-bold">Detailed breakdown by criteria</p>
@@ -977,7 +968,7 @@ export default function AdminReportsPage() {
 
                     <div className="h-[400px] w-full">
 
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" style={{ minWidth: 0 }}>
 
                         <BarChart data={currentReportData}>
 
@@ -1088,7 +1079,7 @@ export default function AdminReportsPage() {
                     </div>
                     <div className="h-[250px] w-full">
 
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" style={{ minWidth: 0 }}>
 
                         <PieChart>
 
@@ -1363,7 +1354,7 @@ export default function AdminReportsPage() {
 
                   <div className="h-[400px] w-full">
 
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" style={{ minWidth: 0 }}>
                       <LineChart data={performanceTrendData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />

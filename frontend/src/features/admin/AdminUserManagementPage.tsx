@@ -183,6 +183,28 @@ const buildStudentClassLabel = (generation: string, major: string, className: st
   return `Gen ${gen}${majorValue ? ` - ${majorValue}` : ''}${classValue ? ` - Class ${classValue}` : ''}`;
 };
 
+const normalizeSelectedClass = (value: string, generation: string) => {
+  let result = value.trim();
+  const genYear = String(generation || '').trim();
+  if (genYear) {
+    const genToken = new RegExp(`\\bGEN\\s*${genYear}\\b`, 'gi');
+    const yearToken = new RegExp(`\\b${genYear}\\b`, 'g');
+    result = result.replace(genToken, '').replace(yearToken, '');
+  }
+  result = result.replace(/\s*-\s*/g, ' - ').replace(/(^\s*-\s*|\s*-\s*$)/g, '').replace(/\s{2,}/g, ' ').trim();
+  return result || value.trim();
+};
+
+const formatClassTemplate = (generation: string, major: string, className: string) => {
+  const gen = String(generation || '').trim();
+  const maj = String(major || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const cls = String(className || '').trim().toUpperCase();
+  if (!gen || !cls) return cls;
+  const sectionMatch = cls.match(/[A-Z]$/);
+  const section = sectionMatch ? sectionMatch[0] : cls;
+  return maj ? `${gen}-${maj}-${section}` : `${gen}-${section}`;
+};
+
 const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
   const roleLower = (apiUser.role || '').toString().toLowerCase();
   const role: UserRole = roleLower === 'teacher' ? 'Teacher' : roleLower === 'admin' ? 'Admin' : 'Student';
@@ -211,9 +233,14 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     : (apiUser.registration_status || '').toString().toLowerCase() === 'pending'
       || (apiUser.account_status || '').toString().toLowerCase() === 'pending';
   const status: UserStatus = isDeleted ? 'Deleted' : isDisabled ? 'Inactive' : isPending ? 'Pending' : 'Active';
-  const classText = (apiUser.class || '').toString().trim();
+  const classTextRaw = (apiUser.class || apiUser.className || '').toString().trim().toUpperCase();
+  const normalizedClassText = formatClassTemplate(
+    apiUser.generation || '',
+    apiUser.major || '',
+    normalizeSelectedClass(classTextRaw, apiUser.generation || '')
+  );
   const group = role === 'Student'
-    ? (classText || 'Pending Class Assignment')
+    ? (normalizedClassText || 'Pending Class Assignment')
     : role === 'Teacher'
       ? 'Teaching Staff'
       : 'Administration';
@@ -232,7 +259,7 @@ const mapApiUserToRecord = (apiUser: ApiUser): UserRecord => {
     studentId,
     gender: apiUser.gender === 'male' || apiUser.gender === 'female' ? apiUser.gender as Gender : undefined,
     generation: apiUser.generation || undefined,
-    className: apiUser.class || apiUser.className || undefined,
+    className: normalizedClassText || undefined,
     major: apiUser.major || undefined
   };
 };
@@ -295,7 +322,8 @@ export default function AdminUserManagementPage() {
     if (user.className) return user.className.trim();
     if (!user.group) return '';
     const match = user.group.match(/Class\s+(.+)$/i);
-    return match ? match[1].trim() : '';
+    if (match) return match[1].trim();
+    return user.group.trim();
   };
 
   // Extract unique class options for filters based on selected generation
@@ -334,6 +362,10 @@ export default function AdminUserManagementPage() {
   const [globalCriteria, setGlobalCriteria] = useState<any[]>([]);
   const [globalRatingScale, setGlobalRatingScale] = useState<number>(5);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const buildAuthHeaders = () => {
+    const authToken = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  };
 
   useEffect(() => {
     try {
@@ -354,22 +386,31 @@ export default function AdminUserManagementPage() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/users`);
-        const data = await response.json();
+        const response = await fetch(`${API_BASE_URL}/users`, { credentials: 'include', headers: { ...buildAuthHeaders(), Accept: 'application/json' } });
+        const raw = await response.json().catch(() => []);
         if (!response.ok) {
-          setFormError(data.error || 'Failed to load users.');
+          setFormError(raw?.error || 'Failed to load users.');
+          setUsers([]);
           return;
         }
-        const mapped = Array.isArray(data) ? data.map((item: ApiUser) => mapApiUserToRecord(item)) : [];
+        const payload =
+          Array.isArray(raw) ? raw :
+          Array.isArray(raw?.data) ? raw.data :
+          Array.isArray(raw?.users) ? raw.users :
+          Array.isArray(raw?.payload) ? raw.payload :
+          [];
+        const mapped = payload.map((item: ApiUser) => mapApiUserToRecord(item));
         setUsers(mapped);
-      } catch {
+      } catch (err) {
+        console.error('loadUsers error', err);
         setFormError('Failed to load users.');
+        setUsers([]);
       }
     };
     
     const loadCriteriaConfig = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/settings/evaluation-criteria`);
+        const response = await fetch(`${API_BASE_URL}/settings/evaluation-criteria`, { headers: { ...buildAuthHeaders(), Accept: 'application/json' } });
         if (response.ok) {
           const data = await response.json();
           setGlobalRatingScale(Math.max(1, Number(data?.ratingScale || 5)));
@@ -452,15 +493,20 @@ export default function AdminUserManagementPage() {
       user.name.toLowerCase().includes(normalizedQuery) ||
       user.email.toLowerCase().includes(normalizedQuery) ||
       (user.studentId?.toLowerCase().includes(normalizedQuery) ?? false);
-    const shouldHideDisabledStudent = user.role === 'Student' && user.status === 'Inactive';
+    const shouldHideDisabledStudent = false; // show all students regardless of status
     const matchesRole = roleFilter === 'All Roles' || `${user.role}s` === roleFilter;
     const matchesGender = genderFilter === 'All Genders' || 
       (genderFilter === 'Male' && user.gender === 'male') ||
       (genderFilter === 'Female' && user.gender === 'female');
     const matchesGeneration = generationFilter === 'All Generations' || 
       (user.role === 'Student' && user.generation === generationFilter);
-    const matchesClass = classFilter === 'All Classes' || 
-      (user.role === 'Student' && user.group?.toLowerCase().includes(`class ${classFilter}`.toLowerCase()));
+    const matchesClass = (() => {
+      if (classFilter === 'All Classes') return true;
+      if (user.role !== 'Student') return true;
+      const studentClass = normalizeClassLabel(extractClassLabel(user));
+      const filterClass = normalizeClassLabel(classFilter);
+      return studentClass === filterClass;
+    })();
     return !shouldHideDisabledStudent && matchesSearch && matchesRole && matchesGender && matchesGeneration && matchesClass;
   });
 
@@ -488,9 +534,14 @@ export default function AdminUserManagementPage() {
     const trimmedEmail = newUser.email.trim().toLowerCase();
     const trimmedFirstName = newUser.firstName.trim();
     const trimmedLastName = newUser.lastName.trim();
-    const trimmedClass = newUser.className.trim().toUpperCase();
     const trimmedGeneration = newUser.generation.trim();
     const trimmedMajor = newUser.major.trim();
+    const trimmedClass = newUser.className.trim().toUpperCase();
+    const normalizedClass = formatClassTemplate(
+      trimmedGeneration,
+      trimmedMajor,
+      normalizeSelectedClass(trimmedClass, trimmedGeneration)
+    );
     const trimmedStudentId = newUser.studentId.trim();
 
     if (!trimmedEmail) {
@@ -527,6 +578,15 @@ export default function AdminUserManagementPage() {
       return;
     }
     setIsSubmitting(true);
+    const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 12000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     const resolvedName = `${trimmedFirstName} ${trimmedLastName}`.trim() || toDisplayNameFromEmail(trimmedEmail);
     const initials = resolvedName
@@ -545,7 +605,7 @@ export default function AdminUserManagementPage() {
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const group =
       newUser.role === 'Student'
-        ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
+        ? normalizedClass || 'Unassigned Class'
         : newUser.role === 'Teacher'
           ? 'Teaching Staff'
           : 'Administration';
@@ -562,12 +622,12 @@ export default function AdminUserManagementPage() {
             gender: newUser.gender,
             role: roleValue,
             class_name: roleValue === 'student'
-              ? buildStudentClassLabel(trimmedGeneration, trimmedMajor, trimmedClass)
+              ? (normalizedClass || null)
               : (newUser.className || null),
             student_id: roleValue === 'student' ? trimmedStudentId : null,
             generation: roleValue === 'student' ? trimmedGeneration : null,
             major: roleValue === 'student' ? trimmedMajor : null,
-            className: roleValue === 'student' ? trimmedClass : (newUser.className || null)
+            className: roleValue === 'student' ? normalizedClass : (newUser.className || null)
           })
         });
 
@@ -587,7 +647,7 @@ export default function AdminUserManagementPage() {
                 gender: newUser.gender,
                 generation: roleValue === 'student' ? trimmedGeneration : undefined,
                 major: roleValue === 'student' ? trimmedMajor : undefined,
-                className: roleValue === 'student' ? trimmedClass : undefined,
+                className: roleValue === 'student' ? normalizedClass : undefined,
                 studentId: roleValue === 'student' ? trimmedStudentId : undefined,
                 group
               }
@@ -603,7 +663,7 @@ export default function AdminUserManagementPage() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/users/invite`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/users/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -618,6 +678,11 @@ export default function AdminUserManagementPage() {
           className: roleValue === 'student' && trimmedClass ? trimmedClass : undefined,
           studentId: roleValue === 'student' && trimmedStudentId ? trimmedStudentId : undefined
         })
+      }).catch((err: any) => {
+        if (err?.name === 'AbortError') {
+          return { ok: true, json: async () => ({ message: 'Invite is being processed. Email should arrive shortly.' }) } as Response;
+        }
+        throw err;
       });
 
       const data = await response.json();
@@ -637,7 +702,7 @@ export default function AdminUserManagementPage() {
         color: randomColor,
         generation: newUser.role === 'Student' ? trimmedGeneration : undefined,
         major: newUser.role === 'Student' ? trimmedMajor : undefined,
-        className: newUser.role === 'Student' && trimmedClass ? trimmedClass : undefined,
+        className: newUser.role === 'Student' && normalizedClass ? normalizedClass : undefined,
         studentId: newUser.role === 'Student' && trimmedStudentId ? trimmedStudentId : undefined
       };
 
@@ -889,7 +954,8 @@ export default function AdminUserManagementPage() {
         }
         const response = await fetch(`${API_BASE_URL}/users/${user.id}/active`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
           body: JSON.stringify({ is_active: shouldEnable })
         });
         const data = await getResponseData(response);
@@ -907,7 +973,11 @@ export default function AdminUserManagementPage() {
           setConfirmAction(null);
           return;
         }
-        const response = await fetch(`${API_BASE_URL}/users/${user.id}/hard`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE_URL}/users/${user.id}/hard`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { ...buildAuthHeaders() }
+        });
         const data = await getResponseData(response);
         if (!response.ok) {
           setFormError(data.error || 'Failed to permanently delete user.');
@@ -917,7 +987,11 @@ export default function AdminUserManagementPage() {
         setSuccessMessage(data.message || 'User permanently removed.');
         setToastType('warning');
       } else if (confirmAction.kind === 'disable-all') {
-        const response = await fetch(`${API_BASE_URL}/users/active`, { method: 'PATCH' });
+        const response = await fetch(`${API_BASE_URL}/users/active`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { ...buildAuthHeaders() }
+        });
         const data = await getResponseData(response);
         if (!response.ok) {
           setFormError(data.error || 'Failed to disable users.');
@@ -927,7 +1001,11 @@ export default function AdminUserManagementPage() {
         setSuccessMessage(data.message || 'All users disabled.');
         setToastType('warning');
       } else if (confirmAction.kind === 'hard-delete-all') {
-        const response = await fetch(`${API_BASE_URL}/users/hard-delete`, { method: 'DELETE' });
+        const response = await fetch(`${API_BASE_URL}/users/hard-delete`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { ...buildAuthHeaders() }
+        });
         const data = await getResponseData(response);
         if (!response.ok) {
           setFormError(data.error || 'Failed to permanently delete users.');
@@ -1202,6 +1280,12 @@ export default function AdminUserManagementPage() {
               />
             </div>
             
+            {formError && (
+              <div className="w-full md:w-auto px-4 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-semibold rounded-xl shadow-sm">
+                {formError}
+              </div>
+            )}
+
             <div className="flex gap-2 w-full md:w-auto items-center flex-nowrap overflow-x-auto">
               <button className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
                 <Filter className="w-4 h-4" />

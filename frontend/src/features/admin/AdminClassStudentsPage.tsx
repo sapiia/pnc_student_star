@@ -51,6 +51,28 @@ const normalizeClassName = (value: string) =>
     .replace(/\s*-\s*/g, ' - ')
     .trim();
 
+const cleanClassInput = (value: string, generation: string) => {
+  let result = String(value || '').trim();
+  const gen = String(generation || '').trim();
+  if (gen) {
+    const genToken = new RegExp(`\\b(gen\\s*)?${gen}\\b`, 'gi');
+    result = result.replace(genToken, '');
+  }
+  result = result.replace(/\s*-\s*/g, ' - ').replace(/(^\s*-\s*|\s*-\s*$)/g, '').replace(/\s{2,}/g, ' ').trim();
+  return result.toUpperCase();
+};
+
+const buildTemplateFromInputs = (generation: string, baseMajor: string, rawClassInput: string) => {
+  const gen = String(generation || '').trim();
+  const cleaned = cleanClassInput(rawClassInput, generation);
+  const tokens = cleaned.split('-').map((t) => t.trim()).filter(Boolean);
+  const inferredMajor = String(baseMajor || tokens[0] || '').replace(/^CLASS\s*/i, '').trim();
+  const section = (tokens[tokens.length - 1] || '').replace(/^CLASS\s*/i, '') || cleaned.replace(/^CLASS\s*/i, '');
+  const resolvedSection = section || 'A';
+  const resolvedMajor = inferredMajor.toUpperCase();
+  return [gen, resolvedMajor, resolvedSection].filter(Boolean).join('-');
+};
+
 interface UserRecord {
   id: number;
   name: string;
@@ -68,6 +90,7 @@ export default function AdminClassStudentsPage() {
   const { generation, className } = useParams();
   const decodedGeneration = decodeURIComponent(String(generation || '').trim());
   const decodedClassName = decodeURIComponent(String(className || '').trim());
+  const normalizedClassParam = cleanClassInput(decodedClassName, decodedGeneration);
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<UserRecord | null>(null);
@@ -193,7 +216,7 @@ export default function AdminClassStudentsPage() {
             const gen = extractGeneration(u);
             const cls = u.class || u.major || 'Unknown Class';
             
-            return gen === decodedGeneration && normalizeClassName(cls) === normalizeClassName(decodedClassName);
+            return gen === decodedGeneration && cleanClassInput(cls, decodedGeneration) === normalizedClassParam;
           }).map(u => {
             const genderLower = String(u.gender || '').toLowerCase();
             return {
@@ -295,10 +318,15 @@ export default function AdminClassStudentsPage() {
   };
 
   const handleUpdateClassName = async () => {
-    if (!newClassName.trim() || newClassName.trim() === decodedClassName) {
+    const normalizedNew = cleanClassInput(newClassName, decodedGeneration);
+    const normalizedCurrent = cleanClassInput(decodedClassName, decodedGeneration);
+    if (!normalizedNew || normalizedNew === normalizedCurrent) {
       alert('Please enter a different class name.');
       return;
     }
+
+    const baseMajor = normalizedClassParam.split('-').map((t) => t.trim()).filter(Boolean)[0] || '';
+    const templateNew = buildTemplateFromInputs(decodedGeneration, baseMajor, normalizedNew);
 
     setIsUpdatingClass(true);
     try {
@@ -306,21 +334,21 @@ export default function AdminClassStudentsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          oldClassName: decodedClassName,
-          newClassName: newClassName.trim()
+          oldClassName: normalizedClassParam,
+          newClassName: templateNew
         })
       });
 
       if (response.ok) {
         const data = await response.json();
-        setSuccessMessage(`Class name updated to "${newClassName.trim()}" for ${data.affectedRows} students.`);
+        setSuccessMessage(`Class name updated to "${templateNew}" for ${data.affectedRows} students.`);
         setToastType('success');
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 2500);
         setIsEditClassModalOpen(false);
         
         // Update URL without navigation using History API
-        const newUrl = `/admin/students/${decodedGeneration}/${encodeURIComponent(newClassName.trim())}`;
+        const newUrl = `/admin/students/${decodedGeneration}/${encodeURIComponent(templateNew)}`;
         window.history.replaceState(null, '', newUrl);
         
         // Manually trigger a refetch by resetting state
@@ -332,12 +360,12 @@ export default function AdminClassStudentsPage() {
           const fetchResponse = await fetch(`${API_BASE_URL}/users`);
           const fetchData = await fetchResponse.json();
           if (Array.isArray(fetchData)) {
-            const filtered = fetchData.filter((u: any) => {
-              if (u.role.toLowerCase() !== 'student') return false;
-              const gen = extractGeneration(u);
-              const cls = u.class || u.major || 'Unknown Class';
-              return gen === decodedGeneration && normalizeClassName(cls) === normalizeClassName(newClassName.trim());
-            }).map(u => {
+          const filtered = fetchData.filter((u: any) => {
+            if (u.role.toLowerCase() !== 'student') return false;
+            const gen = extractGeneration(u);
+            const cls = u.class || u.major || 'Unknown Class';
+            return gen === decodedGeneration && cleanClassInput(cls, decodedGeneration) === templateNew;
+          }).map(u => {
               const genderLower = String(u.gender || '').toLowerCase();
               return {
                 id: u.id,
@@ -411,10 +439,10 @@ export default function AdminClassStudentsPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg md:text-xl font-black text-slate-900">{decodedGeneration} - {decodedClassName}</h1>
+              <h1 className="text-lg md:text-xl font-black text-slate-900">{decodedGeneration} - {normalizedClassParam}</h1>
               <button
                 onClick={() => {
-                  setNewClassName(decodedClassName || '');
+                  setNewClassName(normalizedClassParam || '');
                   setIsEditClassModalOpen(true);
                 }}
                 className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
@@ -797,7 +825,7 @@ export default function AdminClassStudentsPage() {
                   </button>
                   <button
                     onClick={handleUpdateClassName}
-                    disabled={isUpdatingClass || !newClassName.trim() || newClassName.trim() === decodedClassName}
+                    disabled={isUpdatingClass || !cleanClassInput(newClassName, decodedGeneration) || cleanClassInput(newClassName, decodedGeneration) === cleanClassInput(decodedClassName, decodedGeneration)}
                     className="flex-1 py-3 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all shadow-lg bg-primary hover:bg-primary/90 shadow-primary/20 disabled:opacity-60"
                   >
                     {isUpdatingClass ? 'Updating...' : 'Save Changes'}
