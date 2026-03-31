@@ -686,7 +686,11 @@ export default function AdminUserManagementPage() {
         })
       }).catch((err: any) => {
         if (err?.name === 'AbortError') {
-          return { ok: true, json: async () => ({ message: 'Invite is being processed. Email should arrive shortly.' }) } as Response;
+          // Treat timeouts as failures so we don't show a false success when the email wasn't sent.
+          return {
+            ok: false,
+            json: async () => ({ error: 'Invitation request timed out. Please try again.' })
+          } as Response;
         }
         throw err;
       });

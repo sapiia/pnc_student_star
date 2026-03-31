@@ -1167,6 +1167,10 @@ const commitBulkInviteRows = async (rows) => {
     delete clean.emailEnvelope;
     return clean;
   });
+
+  // Count email delivery failures as part of the failed total so callers can treat them as errors.
+  const totalFailedCount = errors.length + emailErrors.length;
+  const emailFailedCount = emailErrors.length;
   const existingUsers = Array.from(
     skippedExistingUsers.reduce((map, row) => {
       const key = (row.email || '').toString().trim().toLowerCase();
@@ -1187,10 +1191,10 @@ const commitBulkInviteRows = async (rows) => {
     summary: {
       totalRows: rows.length,
       invitedCount: invitedUsers.length,
-      failedCount: errors.length,
+      failedCount: totalFailedCount,
       skippedExistingCount: existingUsers.length,
       smtpConfigured: transportInfo.isConfigured,
-      emailFailedCount: emailErrors.length
+      emailFailedCount
     },
     invited: invitedUsers,
     existingUsers,
@@ -1250,7 +1254,10 @@ const commitUsersBulkInvite = async (req, res) => {
 
   try {
     const result = await commitBulkInviteRows(rows);
-    const statusCode = result.summary.failedCount > 0 ? 400 : 200;
+    // If any email fails to send, surface an error so the UI does not show a false success.
+    const statusCode = (result.summary.failedCount > 0 || (result.summary.emailFailedCount || 0) > 0)
+      ? 400
+      : 200;
     return res.status(statusCode).json(result);
   } catch (err) {
     console.error(err);
@@ -1280,7 +1287,9 @@ const inviteUsersBulk = async (req, res) => {
 
   try {
     const result = await commitBulkInviteRows(rows);
-    const statusCode = result.summary.failedCount > 0 ? 400 : 200;
+    const statusCode = (result.summary.failedCount > 0 || (result.summary.emailFailedCount || 0) > 0)
+      ? 400
+      : 200;
     return res.status(statusCode).json(result);
   } catch (err) {
     console.error(err);
