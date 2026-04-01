@@ -1142,6 +1142,14 @@ export default function AdminMessagesPage() {
                       value={messageDraft}
                       onChange={(e) => handleDraftChange(e.target.value)}
                       onBlur={stopTyping}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (messageDraft.trim() && !isSending) {
+                            void handleSendMessage();
+                          }
+                        }
+                      }}
                       placeholder={
                         editingTarget
                           ? "Edit your message..."

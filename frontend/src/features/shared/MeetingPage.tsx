@@ -854,6 +854,14 @@ export default function MeetingPage() {
                       value={messageDraft}
                       onChange={(e) => handleDraftChange(e.target.value)}
                       onBlur={stopTyping}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          if (messageDraft.trim() && !isSending) {
+                            void handleSendMessage();
+                          }
+                        }
+                      }}
                       placeholder={editingMessage ? 'Update message...' : `Message ${selectedContact.name.split(' ')[0]}...`}
                       className="flex-1 pl-4 md:pl-6 pr-12 py-3 md:py-4 bg-slate-50 border border-slate-200 rounded-2xl md:rounded-3xl text-sm focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none transition-all resize-none font-medium min-h-[48px] max-h-[120px]"
                       rows={1}

@@ -62,6 +62,14 @@ export default function MessageComposer({
           value={messageDraft}
           onChange={(e) => onDraftChange(e.target.value)}
           onBlur={onStopTyping}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (messageDraft.trim() && !isSending) {
+                onSendMessage();
+              }
+            }
+          }}
           placeholder={editingTarget ? 'Edit your message...' : `Type your message to ${selectedContact?.name}...`}
           className="w-full pl-6 pr-16 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all resize-none"
           rows={2}
