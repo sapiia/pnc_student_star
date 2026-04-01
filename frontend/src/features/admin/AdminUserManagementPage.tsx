@@ -700,6 +700,18 @@ export default function AdminUserManagementPage() {
         setFormError(data.error || 'Failed to send invitation email.');
         return;
       }
+
+      // If the server reports that email delivery failed or SMTP is disabled, treat as error (no success UI).
+      if (data.emailSendFailed || data.smtpConfigured === false) {
+        setFormError(
+          data.emailError ||
+            data.error ||
+            data.message ||
+            'Invitation email could not be sent. No email was delivered.'
+        );
+        return;
+      }
+
       const invitedUser: UserRecord = {
         id: Date.now(),
         name: resolvedName,
@@ -720,11 +732,15 @@ export default function AdminUserManagementPage() {
       setIsInviteFinished(true);
       setNewUser(defaultNewUser);
       setSuccessMessage(data.message || 'Invitation email sent successfully.');
-      setToastType(data.smtpConfigured === false ? 'warning' : 'success');
+      setToastType('success');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      setFormError(editingUserId ? 'Failed to update user.' : 'Failed to send invitation email.');
+      setFormError(
+        editingUserId
+          ? 'Failed to update user.'
+          : 'Failed to send invitation email. Please try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
