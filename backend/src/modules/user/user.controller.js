@@ -729,9 +729,6 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
 
   let insertedUserId = null;
   const shouldManageTransaction = Boolean(managedConnection);
-  let emailSendFailed = false;
-  let emailErrorMessage = '';
-
   try {
     if (shouldManageTransaction) {
       await managedConnection.beginTransaction();
@@ -751,6 +748,18 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
       queryExecutor
     });
     insertedUserId = insertResult?.insertId || null;
+
+    if (isConfigured && transporter && !options.skipSendEmail) {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
+        replyTo: ADMIN_INVITER_EMAIL,
+        to: artifacts.emailMessage.to,
+        subject: artifacts.emailMessage.subject,
+        text: artifacts.emailMessage.text,
+        html: artifacts.emailMessage.html,
+        attachments: artifacts.emailMessage.attachments
+      });
+    }
 
     if (shouldManageTransaction) {
       await managedConnection.commit();
@@ -775,38 +784,15 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
     }
   }
 
-  // Send email after DB commit; if it fails, keep the user and report the issue without throwing.
-  if (isConfigured && transporter && !options.skipSendEmail) {
-    try {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"PNC Student Star" <${ADMIN_INVITER_EMAIL}>`,
-        replyTo: ADMIN_INVITER_EMAIL,
-        to: artifacts.emailMessage.to,
-        subject: artifacts.emailMessage.subject,
-        text: artifacts.emailMessage.text,
-        html: artifacts.emailMessage.html,
-        attachments: artifacts.emailMessage.attachments
-      });
-    } catch (err) {
-      emailSendFailed = true;
-      emailErrorMessage = err?.message || 'Invite email failed to send.';
-      console.error('Invite email send failed (user retained):', emailErrorMessage);
-    }
-  }
-
   return {
-    message: !isConfigured
-      ? 'SMTP is not configured. Invitation preview generated; no email was sent.'
-      : emailSendFailed
-        ? 'User invited, but the email could not be sent. Please retry or send manually.'
-        : 'Invitation email sent successfully.',
+    message: isConfigured
+      ? 'Invitation email sent successfully.'
+      : 'SMTP is not configured. Invitation preview generated; no email was sent.',
     preview: {
       ...artifacts.preview,
       smtpConfigured: isConfigured
     },
     smtpConfigured: isConfigured,
-    emailSendFailed,
-    emailError: emailErrorMessage || undefined,
     invitedUser: artifacts.invitedUser
   };
 };
