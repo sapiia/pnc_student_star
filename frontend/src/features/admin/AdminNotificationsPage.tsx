@@ -56,24 +56,32 @@ export default function AdminNotificationsPage() {
       if (!response.ok) throw new Error(data?.error || 'Failed to load notifications.');
 
       const mapped: Notification[] = Array.isArray(data)
-        ? data.map((n: any) => ({
-            id: String(n.id),
-            type: String(n.type || 'message').toLowerCase() as NotificationType,
-            sender: {
-              id: Number(n.from_id) || undefined,
-              name: String(n.from_name || n.sender_name || 'Unknown'),
-              role:
-                String(n.from_role || n.sender_role || 'Student').toLowerCase() === 'admin'
-                  ? 'Admin'
-                  : String(n.from_role || n.sender_role || 'Teacher').toLowerCase() === 'teacher'
-                  ? 'Teacher'
-                  : 'Student',
-              avatar: String(n.from_avatar || n.sender_avatar || FALLBACK_AVATAR),
-            },
-            content: String(n.message || n.content || '').trim() || 'No content',
-            time: String(n.created_at || ''),
-            isRead: Number(n.is_read) === 1,
-          }))
+        ? data
+            // Admin should not see 1:1 message notifications
+            .filter((n: any) => String(n.type || '').toLowerCase() !== 'message')
+            .map((n: any) => {
+              const rawType = String(n.type || 'system').toLowerCase();
+              const safeContent = String(n.message || n.content || '').trim() || 'No content';
+
+              return {
+                id: String(n.id),
+                type: rawType as NotificationType,
+                sender: {
+                  id: Number(n.from_id) || undefined,
+                  name: String(n.from_name || n.sender_name || 'System'),
+                  role:
+                    String(n.from_role || n.sender_role || 'System').toLowerCase() === 'admin'
+                      ? 'Admin'
+                      : String(n.from_role || n.sender_role || 'Teacher').toLowerCase() === 'teacher'
+                      ? 'Teacher'
+                      : 'Student',
+                  avatar: String(n.from_avatar || n.sender_avatar || FALLBACK_AVATAR),
+                },
+                content: safeContent,
+                time: String(n.created_at || ''),
+                isRead: Number(n.is_read) === 1,
+              };
+            })
         : [];
 
       setNotifications(mapped.slice(0, MAX_NOTIFICATIONS));

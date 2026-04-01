@@ -634,8 +634,8 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
   `;
 
   const logoAttachment = {
-    filename: 'star_gmail_logo.jpg',
-    path: path.join(uploadsDir, 'logo', 'star_gmail_logo.jpg'),
+    filename: '',
+    path: path.join(uploadsDir, 'logo', ''),
     cid: 'star_gmail_logo'
   };
 

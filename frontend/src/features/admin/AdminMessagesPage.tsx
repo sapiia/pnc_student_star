@@ -154,8 +154,10 @@ export default function AdminMessagesPage() {
   const [replyToMessageId, setReplyToMessageId] = useState<number | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<number[]>([]);
+  const [incomingAlert, setIncomingAlert] = useState<{ from: string; text: string } | null>(null);
   const typingStopTimerRef = useRef<number | null>(null);
   const hasSentTypingRef = useRef(false);
+  const alertTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -221,6 +223,51 @@ export default function AdminMessagesPage() {
     );
   }, [hiddenMessageIds, adminId]);
 
+  const upsertNotification = useCallback((incoming: NotificationRecord) => {
+    setNotifications((current) => {
+      if (!incoming?.id) return current;
+      const next = [...current];
+      const idx = next.findIndex((item) => Number(item.id) === Number(incoming.id));
+      if (idx >= 0) {
+        next[idx] = { ...next[idx], ...incoming };
+      } else {
+        next.unshift(incoming);
+      }
+      return next.sort(
+        (a, b) =>
+          new Date(String(b.created_at || '')).getTime() -
+          new Date(String(a.created_at || '')).getTime(),
+      );
+    });
+  }, []);
+
+  const removeNotificationById = useCallback((id: number) => {
+    if (!id) return;
+    setNotifications((current) =>
+      current.filter((item) => Number(item.id) !== Number(id)),
+    );
+  }, []);
+
+  const showIncomingAlert = useCallback((from: string, text: string) => {
+    setIncomingAlert({ from, text });
+    if (alertTimerRef.current) {
+      window.clearTimeout(alertTimerRef.current);
+    }
+    alertTimerRef.current = window.setTimeout(() => {
+      setIncomingAlert(null);
+      alertTimerRef.current = null;
+    }, 3800);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (alertTimerRef.current) {
+        window.clearTimeout(alertTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const loadData = useCallback(async () => {
     if (!adminId) {
       setIsLoading(false);
@@ -279,7 +326,21 @@ export default function AdminMessagesPage() {
       payload: NotificationRealtimePayload = {},
     ) => {
       if (Number(payload.userId) !== adminId) return;
-      void loadData();
+      const incoming = payload.notification;
+      if (incoming) {
+        upsertNotification(incoming);
+        const parsed = parseDirectMessage(String(incoming.message || ""));
+        const isIncoming =
+          parsed && parsed.toId === adminId && parsed.fromId !== adminId;
+        if (payload.action === "created" && isIncoming) {
+          showIncomingAlert(
+            parsed?.senderName || "New message",
+            parsed?.text || "New message received",
+          );
+        }
+      } else if (payload.notificationId) {
+        removeNotificationById(Number(payload.notificationId));
+      }
     };
     const handleTypingEvent = (payload: TypingRealtimePayload = {}) => {
       const fromId = Number(payload.fromId);
@@ -304,7 +365,7 @@ export default function AdminMessagesPage() {
       socket.off("notification:deleted", handleNotificationEvent);
       socket.off("message:typing", handleTypingEvent);
     };
-  }, [loadData, adminId]);
+  }, [adminId, removeNotificationById, showIncomingAlert, upsertNotification]);
 
   useEffect(() => {
     setTypingByContactId({});
@@ -483,12 +544,19 @@ export default function AdminMessagesPage() {
           ).catch(() => null),
         ),
       );
-      void loadData();
+      const unreadIds = new Set(
+        unreadIncoming.map((message) => message.notificationId),
+      );
+      setNotifications((current) =>
+        current.map((item) =>
+          unreadIds.has(Number(item.id)) ? { ...item, is_read: 1 } : item,
+        ),
+      );
       window.dispatchEvent(new CustomEvent("admin-notifications-updated"));
     };
 
     void markRead();
-  }, [currentMessages, loadData, selectedContactId, adminId]);
+  }, [adminId, currentMessages, selectedContactId]);
 
   const unreadTotal = useMemo(
     () => contacts.reduce((sum, contact) => sum + contact.unreadCount, 0),
@@ -609,7 +677,7 @@ export default function AdminMessagesPage() {
       }
       setConfirmDeleteMessageId(null);
       setOpenedActionMessageId(null);
-      void loadData();
+      removeNotificationById(message.notificationId);
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -658,7 +726,13 @@ export default function AdminMessagesPage() {
         setMessageDraft("");
         setEditingMessageId(null);
         stopTyping();
-        void loadData();
+        upsertNotification({
+          id: editingTarget.notificationId,
+          user_id: selectedContactId,
+          message: updatedMessage,
+          is_read: editingTarget.rawIsRead,
+          created_at: editingTarget.createdAt,
+        });
         window.dispatchEvent(new CustomEvent("admin-notifications-updated"));
         return;
       }
@@ -690,7 +764,19 @@ export default function AdminMessagesPage() {
       setMessageDraft("");
       setReplyToMessageId(null);
       stopTyping();
-      void loadData();
+      const newNotification = data?.notification || {
+        id: data?.notificationId,
+        user_id: selectedContactId,
+        message: composeDirectMessage({
+          fromId: adminId,
+          toId: selectedContactId,
+          senderName: adminName,
+          text: outgoingText,
+        }),
+        is_read: 0,
+        created_at: new Date().toISOString(),
+      };
+      upsertNotification(newNotification);
       window.dispatchEvent(new CustomEvent("admin-notifications-updated"));
     } catch (sendError) {
       setError(
@@ -709,6 +795,19 @@ export default function AdminMessagesPage() {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <AdminMobileNav />
+        {incomingAlert ? (
+          <div className="pointer-events-none fixed right-4 bottom-20 z-50">
+            <div className="bg-primary text-white px-4 py-3 rounded-2xl shadow-xl max-w-xs border border-white/20">
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                New message
+              </p>
+              <p className="text-sm font-bold">{incomingAlert.from}</p>
+              <p className="text-sm font-medium leading-snug max-h-24 overflow-hidden">
+                {incomingAlert.text}
+              </p>
+            </div>
+          </div>
+        ) : null}
         <header className="h-auto min-h-14 bg-white border-b border-slate-200 px-4 md:px-8 py-2 md:py-0 flex items-center justify-between shrink-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-tight">
