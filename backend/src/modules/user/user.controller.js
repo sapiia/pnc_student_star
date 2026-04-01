@@ -29,6 +29,23 @@ const FORCE_HTTPS_HOSTS = ['pnc-student-star.onrender.com'];
 
 const normalizeRole = (role = '') => role.toString().trim().toLowerCase();
 
+// Keep users.id sequence in sync to avoid duplicate key errors after imports/restores
+let usersSequenceSynced = false;
+const ensureUsersSequenceSynced = async (queryExecutor = db) => {
+  if (usersSequenceSynced) return;
+  try {
+    await queryExecutor.query(`
+      SELECT setval(
+        pg_get_serial_sequence('users','id'),
+        COALESCE((SELECT MAX(id) FROM users), 0)
+      )
+    `);
+    usersSequenceSynced = true;
+  } catch (err) {
+    console.warn('Could not sync users.id sequence:', err?.message || err);
+  }
+};
+
 const getRequestProtocol = (req) => {
   const forwardedProto = (req?.headers?.['x-forwarded-proto'] || '').toString().split(',')[0].trim();
   if (forwardedProto) return forwardedProto;
@@ -730,6 +747,8 @@ const sendInviteForUser = async (inviteInput, options = {}) => {
   let insertedUserId = null;
   const shouldManageTransaction = Boolean(managedConnection);
   try {
+    await ensureUsersSequenceSynced(queryExecutor);
+
     if (shouldManageTransaction) {
       await managedConnection.beginTransaction();
     }
