@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useScrollReveal from '../hooks/useScrollReveal';
 import LandingPage from '../features/shared/LandingPage';
