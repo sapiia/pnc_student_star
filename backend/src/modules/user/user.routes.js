@@ -60,24 +60,6 @@ const profileImageUpload = multer({
   }
 });
 
-// GET /api/users - Get all users
-router.get('/', getAllUsers);
-
-// PATCH /api/users/generation/:generation/active - Enable/disable all students in a generation
-router.patch('/generation/:generation/active', setGenerationActive);
-
-// GET /api/users/:id - Get user by ID
-router.get('/:id', getUserById);
-
-// GET /api/users/:id/profile - Get profile for user
-router.get('/:id/profile', getUserProfile);
-
-// POST /api/users - Create new user
-router.post('/', createUser);
-
-// POST /api/users/login - Login user
-router.post('/login', loginUser);
-
 // POST /api/users/invite - Send user invite email
 router.post('/invite', inviteUser);
 
@@ -95,6 +77,24 @@ router.get('/invite/validate', validateInvite);
 
 // POST /api/users/invite/complete - Complete registration from invite
 router.post('/invite/complete', completeInviteRegistration);
+
+// GET /api/users - Get all users
+router.get('/', getAllUsers);
+
+// PATCH /api/users/generation/:generation/active - Enable/disable all students in a generation
+router.patch('/generation/:generation/active', setGenerationActive);
+
+// GET /api/users/:id - Get user by ID
+router.get('/:id', getUserById);
+
+// GET /api/users/:id/profile - Get profile for user
+router.get('/:id/profile', getUserProfile);
+
+// POST /api/users - Create new user
+router.post('/', createUser);
+
+// POST /api/users/login - Login user
+router.post('/login', loginUser);
 
 // PUT /api/users/:id - Update user
 router.put('/:id', updateUser);
