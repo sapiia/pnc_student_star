@@ -2,6 +2,7 @@ const db = require('../../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -386,7 +387,8 @@ const createEmailTransporter = () => {
       connectionTimeout: Number(SMTP_TIMEOUT_MS) || 10000,
       greetingTimeout: Number(SMTP_TIMEOUT_MS) || 10000,
       socketTimeout: Number(SMTP_TIMEOUT_MS) || 12000,
-      // Force IPv4 to avoid ENETUNREACH on hosts that block IPv6 (common on cloud PaaS)
+      // Force IPv4 resolution to avoid ENETUNREACH on hosts without IPv6
+      dnsLookup: (hostname, opts, cb) => dns.lookup(hostname, { family: 4, hints: dns.ADDRCONFIG }, cb),
       family: 4,
       tls: { family: 4 },
       auth: {
