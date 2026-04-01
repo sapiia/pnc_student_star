@@ -607,7 +607,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; color: #1e293b;">
       <div style="text-align: center; margin-bottom: 25px;">
-        <img src="cid:star_gmail_logo" style="width: 84px; height: 84px; border-radius: 50%; border: 4px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="PNC Student Star Profile" />
+        <img src="cid:star_gmail_logo" style="width: 64px; height: 64px; border-radius: 50%; border: 3px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);" alt="PNC Student Star Profile" />
       </div>
       <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Welcome to PNC Student Star!</h2>
       <p>Hello,</p>
@@ -633,11 +633,20 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
     </div>
   `;
 
-  const logoAttachment = {
-    filename: '',
-    path: path.join(uploadsDir, 'logo', ''),
-    cid: 'star_gmail_logo'
-  };
+  let logoAttachment = null;
+  const logoPath = path.join(uploadsDir, 'logo', 'logo.png');
+  try {
+    const stats = fs.statSync(logoPath);
+    if (stats.isFile()) {
+      logoAttachment = {
+        filename: 'logo.png',
+        path: logoPath,
+        cid: 'star_gmail_logo'
+      };
+    }
+  } catch (_err) {
+    logoAttachment = null;
+  }
 
   return {
     classForUser,
@@ -647,7 +656,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       subject: 'PNC Student Star Invitation',
       text,
       html,
-      attachments: [logoAttachment]
+      attachments: logoAttachment ? [logoAttachment] : []
     },
     roleDashboardPath,
     temporaryPassword: tempPassword,
@@ -662,7 +671,7 @@ const buildInviteArtifacts = async (normalizedInvite, options = {}) => {
       temporaryPassword: tempPassword,
       invitedBy: inviterIdentity,
       roleDashboardPath,
-      attachments: [logoAttachment],
+      attachments: logoAttachment ? [logoAttachment] : [],
       smtpConfigured: false
     },
     invitedUser: buildInvitedUserSummary(normalizedInvite)
