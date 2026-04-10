@@ -2059,22 +2059,29 @@ export default function AdminUserManagementPage() {
                              {profileEvaluations.map((evaluation) => {
                                const isActive = selectedEvaluationId === evaluation.id;
                                return (
-                                 <button
-                                   key={evaluation.id}
-                                   type="button"
-                                   onClick={() => setSelectedEvaluationId(evaluation.id)}
-                                   className={cn(
-                                     "w-full text-left px-4 py-3 rounded-xl border transition-all",
-                                     isActive
-                                       ? "border-primary bg-white shadow-sm"
-                                       : "border-slate-200 bg-white hover:border-slate-300"
-                                   )}
-                                 >
-                                   <div className="flex items-center justify-between gap-3">
-                                     <div>
-                                       <p className="text-sm font-black text-slate-900">
-                                         {formatPeriodLabel(evaluation.period)} Evaluation
-                                       </p>
+                                <div
+                                  key={evaluation.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => setSelectedEvaluationId(evaluation.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      setSelectedEvaluationId(evaluation.id);
+                                    }
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-4 py-3 rounded-xl border transition-all",
+                                    isActive
+                                      ? "border-primary bg-white shadow-sm"
+                                      : "border-slate-200 bg-white hover:border-slate-300"
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-black text-slate-900">
+                                        {formatPeriodLabel(evaluation.period)} Evaluation
+                                      </p>
                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
                                          Finished: {formatEvalDate(evaluation.submitted_at || evaluation.created_at)}
                                        </p>
@@ -2096,13 +2103,13 @@ export default function AdminUserManagementPage() {
                                              ? "border-rose-200 bg-rose-50 text-rose-400"
                                              : "border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
                                          )}
-                                         title="Delete evaluation"
-                                       >
-                                         <Trash2 className="w-4 h-4" />
-                                       </button>
-                                     </div>
-                                   </div>
-                                 </button>
+                                        title="Delete evaluation"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
                                );
                              })}
                            </div>

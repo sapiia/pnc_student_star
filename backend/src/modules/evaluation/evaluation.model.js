@@ -525,8 +525,23 @@ class Evaluation {
 
   static async delete(id) {
     await this.ensureSchema();
-    const [result] = await db.query('DELETE FROM evaluations WHERE id = ?', [id]);
-    return result.affectedRows > 0;
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Remove dependent rows first to avoid FK violations on stricter schemas
+      await connection.query('DELETE FROM feedbacks WHERE evaluation_id = ?', [id]);
+      await connection.query('DELETE FROM evaluation_responses WHERE evaluation_id = ?', [id]);
+
+      const [result] = await connection.query('DELETE FROM evaluations WHERE id = ?', [id]);
+      await connection.commit();
+      return result.affectedRows > 0;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   static async findByUserIds(userIds) {
